@@ -1,0 +1,262 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/job_data.proto";
+import "buildozer/proto/v1/runtime.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+
+// NetworkMessage is the top-level envelope for all P2P communication.
+// Each message includes metadata (ID, sender, timestamp) and a payload.
+message NetworkMessage {
+  // Unique message ID (UUID4)
+  string message_id = 1;
+
+  // Sender peer ID
+  string sender_peer_id = 2;
+
+  // Sender's gRPC server endpoint
+  ApiUri sender_uri = 3;
+
+  // Timestamp when message was sent (unix milliseconds)
+  TimeStamp sent_at = 4;
+
+  // Protocol version (for backward compatibility)
+  Version protocol_version = 5;
+
+  // Payload (oneof based on message type - discriminated by which field is set)
+  oneof payload {
+    PeerAnnouncement peer_announcement = 20;
+    PeerGoodbye peer_goodbye = 32;
+    JobSubmissionMessage job_submission = 21;
+    JobProgress job_progress = 22;
+    JobResult job_result = 23;
+    JobErrorMessage job_error = 24;
+    JobCancellationMessage job_cancellation = 25;
+    ScheduleDecisionMessage schedule_decision = 26;
+    CacheQueryMessage cache_query = 27;
+    CacheQueryResponseMessage cache_query_response = 28;
+    CacheAnnouncementMessage cache_announcement = 29;
+    ArtifactFetchRequestMessage artifact_fetch_request = 30;
+    ArtifactFetchResponseMessage artifact_fetch_response = 31;
+  }
+
+  // Optional: Correlation ID for request-response matching
+  string correlation_id = 40;
+
+  // Optional: Reply-to endpoint for async responses
+  ApiUri reply_to_uri = 41;
+}
+
+// PeerAnnouncement is sent by a peer when joining or announcing itself (mDNS discovery)
+message PeerAnnouncement {
+  // Peer ID (unique identifier)
+  string peer_id = 1;
+
+  // Peer's gRPC server endpoint
+  ApiUri grpc_uri = 2;
+
+  // Peer's REST API endpoint (if available)
+  ApiUri rest_api_uri = 3;
+
+  // Current capabilities
+  PeerCapabilities capabilities = 4;
+
+  // When this peer joined the network (unix milliseconds)
+  TimeStamp joined_at = 5;
+
+  // Protocol version supported
+  Version protocol_version = 6;
+}
+
+// PeerGoodbye is sent by a peer when leaving the network
+message PeerGoodbye {
+  // Peer ID leaving
+  string peer_id = 1;
+
+  // When this peer is leaving (unix milliseconds)
+  TimeStamp left_at = 2;
+
+  // Optional reason for departure
+  string reason = 3;
+}
+
+// PeerCapabilities describes what a peer can do
+message PeerCapabilities {
+  // Available runtimes (toolchains)
+  repeated Runtime available_runtimes = 1;
+
+  // Resource constraints
+  ResourceLimit resources = 2;
+
+  // Cache size used (bytes)
+  Size cache_size = 6;
+
+  // Software version
+  Version buildozer_version = 7;
+}
+
+// JobSubmissionMessage submits a job for execution
+message JobSubmissionMessage {
+  // The job to execute (includes all inputs)
+  Job job = 1;
+
+  // Timestamp
+  TimeStamp submitted_at = 2;
+}
+
+// JobErrorMessage broadcasts job failure
+message JobErrorMessage {
+  // Job ID
+  string job_id = 1;
+
+  // Error message
+  string error_message = 2;
+
+  // Failed peer ID (if executed remotely)
+  string failed_peer_id = 3;
+
+  // Error type
+  enum ErrorType {
+    ERROR_TYPE_UNSPECIFIED = 0; // No progress for timeout duration
+    ERROR_TYPE_TIMEOUT = 1; // No progress for timeout duration
+    ERROR_TYPE_EXECUTOR_FAILURE = 2; // Subprocess or container failed
+    ERROR_TYPE_NETWORK_FAILURE = 3; // Network communication error
+    ERROR_TYPE_RESOURCE_EXHAUSTION = 4; // Out of memory, CPU, etc.
+    ERROR_TYPE_PEER_CRASHED = 5; // Executing peer disappeared
+    ERROR_TYPE_CANCELLED_BY_USER = 6; // User cancelled job
+    ERROR_TYPE_DEPENDENCY_FAILED = 7; // A dependency job failed
+    ERROR_TYPE_NO_COMPATIBLE_RUNTIME = 8; // No peer has required runtime
+  }
+  ErrorType error_type = 4;
+
+  // Error timestamp
+  TimeStamp error_time = 5;
+
+  // Should this job be retried?
+  bool should_retry = 6;
+
+  // Number of retries so far
+  uint32 retry_count = 7;
+}
+
+// JobCancellationMessage requests cancellation of a job
+message JobCancellationMessage {
+  // Job ID to cancel
+  string job_id = 1;
+
+  // Who initiated the cancellation?
+  string initiator_peer_id = 2;
+
+  // Cancellation reason
+  string reason = 3;
+
+  // Should dependent jobs also be cancelled?
+  bool cancel_dependents = 4;
+
+  // Timestamp
+  TimeStamp cancelled_at = 5;
+}
+
+// ScheduleDecisionMessage represents a quorum-based scheduling decision
+// Source client broadcasts this, peers vote, and a consensus is reached
+message ScheduleDecisionMessage {
+  // Job ID
+  string job_id = 1;
+
+  // Proposed target peer (which peer should execute?)
+  string target_peer_id = 2;
+
+  // Source client ID
+  string source_client_id = 3;
+
+  // Is this a proposal or final decision?
+  bool is_final = 4;
+
+  // Scheduling reason (why this peer?)
+  string scheduling_reason = 5;
+
+  // Peer votes (key=peer_id, value=vote_for_this_assignment)
+  map<string, bool> peer_votes = 6;
+
+  // Timestamp
+  TimeStamp decided_at = 7;
+}
+
+// CacheQueryMessage asks: "who has this artifact?"
+message CacheQueryMessage {
+  // Data ID to search for
+  string data_id = 1;
+
+  // Optional: Content hash (for verification)
+  Hash content_hash = 2;
+}
+
+// CacheQueryResponseMessage answers: "I have it" or "I don't"
+message CacheQueryResponseMessage {
+  // Data ID
+  string data_id = 1;
+
+  // Do I have it?
+  bool is_available = 2;
+
+  // Size in bytes (if available)
+  Size size = 3;
+
+  // When was it created?
+  TimeStamp created_at = 4;
+
+  // When was it last accessed?
+  TimeStamp last_accessed_at = 5;
+
+  // Responding peer's ID
+  string responding_peer_id = 6;
+}
+
+// CacheAnnouncementMessage announces: "I just cached this artifact"
+message CacheAnnouncementMessage {
+  // Data ID
+  string data_id = 1;
+
+  // Size
+  Size size = 2;
+
+  // Which job produced it?
+  string producer_job_id = 3;
+
+  // Which peer is storing it?
+  string storing_peer_id = 4;
+
+  // Retention policy
+  RetentionPolicy retention_policy = 5;
+
+  // Timestamp
+  TimeStamp cached_at = 6;
+}
+
+// ArtifactFetchRequestMessage requests fetch of an artifact
+message ArtifactFetchRequestMessage {
+  // Data ID to fetch
+  string data_id = 1;
+
+  // Chunk size preference (bytes; 0 = server decides)
+  uint32 preferred_chunk_size = 2;
+
+  // Optional: Expected hash (for verification)
+  Hash expected_hash = 3;
+}
+
+// ArtifactFetchResponseMessage streams artifact data
+message ArtifactFetchResponseMessage {
+  // Data ID
+  string data_id = 1;
+
+  // Chunk (stream)
+  StreamChunk chunk = 2;
+
+  // Total size of artifact (for progress tracking)
+  Size total_size = 3;
+}

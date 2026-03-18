@@ -1,0 +1,178 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+
+// CppLanguage represents C/C++ language variants
+enum CppLanguage {
+  CPP_LANGUAGE_UNSPECIFIED = 0;
+  CPP_LANGUAGE_C = 1;
+  CPP_LANGUAGE_CPP = 2;
+}
+
+// CppCompiler represents C/C++ compiler implementations
+enum CppCompiler {
+  CPP_COMPILER_UNSPECIFIED = 0;
+  CPP_COMPILER_GCC = 1;
+  CPP_COMPILER_CLANG = 2;
+}
+
+// CppArchitecture represents target CPU architectures
+enum CppArchitecture {
+  CPP_ARCHITECTURE_UNSPECIFIED = 0;
+  CPP_ARCHITECTURE_X86_64 = 1;
+  CPP_ARCHITECTURE_AARCH64 = 2;
+  CPP_ARCHITECTURE_ARM = 3;
+}
+
+// CRuntime represents C runtime implementations
+enum CRuntime {
+  C_RUNTIME_UNSPECIFIED = 0;
+  C_RUNTIME_GLIBC = 1;
+  C_RUNTIME_MUSL = 2;
+}
+
+// CppAbi represents C++ ABI (Application Binary Interface) specifications
+enum CppAbi {
+  CPP_ABI_UNSPECIFIED = 0;
+  CPP_ABI_ITANIUM = 1; // Itanium ABI (used by GCC, Clang on Unix-like systems)
+}
+
+// CppStdlib represents C++ standard library implementations
+enum CppStdlib {
+  CPP_STDLIB_UNSPECIFIED = 0;
+  CPP_STDLIB_LIBSTDCXX = 1; // GCC's libstdc++
+  CPP_STDLIB_LIBCXX = 2; // LLVM/Clang's libc++
+}
+
+// CppToolchain describes a C/C++ compilation environment
+message CppToolchain {
+  // Programming language
+  CppLanguage language = 1;
+
+  // Compiler implementation
+  CppCompiler compiler = 2;
+
+  // Compiler version (e.g., "11.2.0")
+  Version compiler_version = 3;
+
+  // Target architecture
+  CppArchitecture architecture = 4;
+
+  // C runtime implementation
+  CRuntime c_runtime = 5;
+
+  // C runtime version (e.g., "2.31")
+  Version c_runtime_version = 6;
+
+  // C++ ABI specification
+  CppAbi cpp_abi = 7;
+
+  // C++ standard library implementation
+  CppStdlib cpp_stdlib = 8;
+
+  // ABI modifiers: compiler-specific flags that change the ABI
+  // For example, gcc C++11 ABI is enabled with -D_GLIBCXX_USE_CXX11_ABI=1
+  repeated string abi_modifiers = 9;
+}
+
+// GoToolchain describes a Go compilation environment
+message GoToolchain {
+  // Go version (e.g., "1.21.0")
+  Version go_version = 1;
+
+  // Target OS (e.g., "linux", "darwin", "windows")
+  string goos = 2;
+
+  // Target architecture (e.g., "amd64", "arm64")
+  string goarch = 3;
+
+  // CGO enabled?
+  bool cgo_enabled = 4;
+}
+
+// RustToolchain describes a Rust compilation environment
+message RustToolchain {
+  // Rust version (e.g., "1.75.0")
+  Version rust_version = 1;
+
+  // Target triple (e.g., "x86_64-unknown-linux-gnu")
+  string target_triple = 2;
+
+  // Edition (e.g., "2021")
+  string edition = 3;
+}
+
+// Runtime recipe as a dockerfile
+message DockerfileRecipe {
+  // Lines of the Dockerfile (including FROM and comments)
+  repeated string dockerfile_lines = 1;
+}
+
+// RuntimeRecipe describes how to build or instantiate a runtime (e.g., Dockerfile).
+message RuntimeRecipe {
+  oneof recipe {
+    DockerfileRecipe dockerfile = 1;
+    // Future: other recipe types (e.g., native setup scripts) can be added here
+  }
+
+  // SHA256 hash of the recipe content (part of cache key)
+  Hash content_hash = 3;
+}
+
+// ResourceLimit defines constraints for a single runtime or client.
+message ResourceLimit {
+  // Max CPU cores (0 = unlimited)
+  double max_cpu_cores = 1;
+
+  // Max RAM in bytes (0 = unlimited)
+  uint64 max_ram_bytes = 2;
+
+  // Max concurrent jobs (0 = unlimited)
+  uint32 max_concurrent_jobs = 3;
+
+  // Optional: Max disk space for cache in bytes (0 = unlimited)
+  uint64 max_cache_disk_bytes = 4;
+}
+
+// RuntimeLoad represents current load and utilization of a runtime
+message RuntimeLoad {
+  ResourceUsage resource_usage = 1;
+  uint32 running_jobs = 2;
+}
+
+// Runtime represents an executable environment where jobs run.
+// Contains the toolchain specification (C++, Go, Rust, etc.) and resource constraints.
+message Runtime {
+  // Unique identifier for this runtime (SHA256 of toolchain || recipe || constraints)
+  string id = 1;
+
+  // Concrete toolchain specification (oneof discriminates the type)
+  oneof toolchain {
+    CppToolchain cpp = 10;
+    GoToolchain go = 11;
+    RustToolchain rust = 12;
+    // Future: JavaToolchain java = 13, PythonToolchain python = 14, etc.
+  }
+
+  // Optional: Runtime recipe (if not native, or if needs per-job customization)
+  optional RuntimeRecipe recipe = 20;
+
+  // Resource constraints for this runtime
+  ResourceLimit resource_limit = 21;
+
+  // Optional: Human-readable description
+  optional string description = 22;
+
+  // Whether this runtime is available natively on the peer (vs. Docker-only)
+  bool is_native = 23;
+
+  // If Docker-based: Docker image digest (sha256:...)
+  string docker_image_digest = 24;
+
+  // Current load and utilization of the runtime
+  RuntimeLoad load = 25;
+}

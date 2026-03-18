@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/runtime.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+
+// JobData is a generic abstraction for both inputs and outputs of jobs.
+// Can be a file, directory, stream, or reference to another artifact.
+// All data is content-addressed (hashed by SHA256).
+message JobData {
+  // Unique data ID (SHA256 hash of content, or assigned ID for streams)
+  string id = 1;
+
+  // Size of data
+  Size size = 2;
+
+  // Data type (determines which oneof is used)
+  enum DataType {
+    DATA_TYPE_UNSPECIFIED = 0;
+    DATA_TYPE_FILE = 1;
+    DATA_TYPE_DIRECTORY = 2;
+    DATA_TYPE_STREAM = 3;
+    DATA_TYPE_REFERENCE = 4; // Pointer to another artifact (e.g., from cache)
+  }
+  DataType type = 3;
+
+  // Concrete data type (oneof based on type)
+  oneof data {
+    FileJobData file = 10;
+    DirectoryJobData directory = 11;
+    StreamChunk stream_chunk = 12;
+    JobDataReference reference = 13;
+  }
+
+  // Optional: Runtime that produced this data (for outputs)
+  // Allows tracking which runtime generated an artifact
+  Runtime produced_by_runtime = 20;
+
+  // Optional: Runtime that consumed this data (for inputs)
+  // Allows filtering compatible inputs
+  Runtime consumed_by_runtime = 21;
+
+  // Retention policy (for cache management)
+  RetentionPolicy retention_policy = 22;
+
+  // Creation timestamp (unix milliseconds)
+  TimeStamp created_at = 23;
+}
+
+// FileJobData represents a single file
+message FileJobData {
+  // File path (relative to build root or absolute)
+  string path = 1;
+
+  // File permissions (unix mode, e.g., 0644)
+  uint32 mode = 2;
+
+  // File content (inline for small files, or reference for large)
+  bytes content = 3;
+
+  // SHA256 hash of file content
+  Hash content_hash = 4;
+
+  // Is this a symlink?
+  bool is_symlink = 5;
+
+  // If symlink, target path
+  string symlink_target = 6;
+}
+
+// DirectoryJobData represents a directory structure (including subdirs and files)
+message DirectoryJobData {
+  // Directory path
+  string path = 1;
+
+  // Nested file paths and hashes (for distributed transfer)
+  // Maps file path → content hash
+  map<string, Hash> file_hashes = 2;
+
+  // Total size of all files in directory
+  Size total_size = 3;
+
+  // Directory permissions (unix mode)
+  uint32 mode = 4;
+}
+
+// StreamChunk represents a chunk of streaming data
+// Used for large artifacts or real-time progress streams
+message StreamChunk {
+  // Stream ID (groups chunks belonging to same artifact)
+  string stream_id = 1;
+
+  // Chunk sequence number (0, 1, 2, ...)
+  uint32 chunk_number = 2;
+
+  // Total chunks in this stream (0 if unknown/streaming)
+  uint32 total_chunks = 3;
+
+  // Chunk content
+  bytes data = 4;
+
+  // Chunk size (bytes)
+  uint32 chunk_size = 5;
+
+  // SHA256 hash of this chunk
+  Hash chunk_hash = 6;
+
+  // Is this the last chunk?
+  bool is_final = 7;
+}
+
+// JobDataReference points to a previously stored artifact in cache
+message JobDataReference {
+  // ID of referenced data (usually content hash)
+  string referenced_data_id = 1;
+
+  // Which peer(s) have this data cached?
+  repeated string peer_ids_with_data = 2;
+
+  // How to retrieve it (e.g., "gRPC", "HTTP", "local")
+  string retrieval_method = 3;
+
+  // Optional: Peer endpoint for direct fetch
+  ApiUri peer_uri = 4;
+}
+
+// RetentionPolicy controls how long data is kept in cache
+message RetentionPolicy {
+  // Keep for this duration (0 = keep forever)
+  TimeDuration keep_for = 1;
+
+  // Keep until this timestamp (0 = no expiry)
+  TimeStamp keep_until = 2;
+
+  // Priority level (1-10; higher = more likely to be kept during eviction)
+  uint32 priority = 3;
+
+  // Is this pinned to cache? (never evict unless explicitly removed)
+  bool is_pinned = 4;
+
+  // Optional: LRU eviction weight (0-100)
+  uint32 lru_weight = 5;
+}
+
+// JobDataIndex provides a searchable index of all data in a peer's cache
+message JobDataIndex {
+  // Map of data_id → JobData metadata (without content)
+  map<string, JobDataMetadata> entries = 1;
+
+  // Total cache size used (bytes)
+  uint64 total_cache_size_bytes = 2;
+
+  // Last index update timestamp (unix milliseconds)
+  TimeStamp updated_at = 3;
+}
+
+// JobDataMetadata is lightweight metadata for searching cache
+message JobDataMetadata {
+  // Data ID (hash)
+  string id = 1;
+
+  // Size in bytes
+  uint64 size_bytes = 2;
+
+  // Data type
+  JobData.DataType type = 3;
+
+  // Runtime that produced this (optional)
+  string produced_by_runtime_id = 4;
+
+  // Creation timestamp
+  TimeStamp created_at = 5;
+
+  // Last access timestamp
+  TimeStamp last_accessed_at = 6;
+
+  // Retention policy
+  RetentionPolicy retention_policy = 7;
+
+  // Is this data available locally?
+  bool is_available = 8;
+}

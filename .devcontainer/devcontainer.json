@@ -1,0 +1,68 @@
+{
+  "name": "buildozer-dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.Go",
+        "llvm-vs-code-extensions.clangd",
+        "ms-vscode.cmake-tools",
+        "ms-vscode-remote.vscode-remote-extensionpack",
+        "GitHub.copilot",
+        "eamodio.gitlens",
+        "bungcip.better-toml",
+        "rust-lang.rust-analyzer",
+        "bufbuild.vscode-buf"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh",
+            "args": ["-l"]
+          }
+        },
+        "terminal.integrated.enableShellIntegration": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "golang.go",
+        "[go]": {
+          "editor.defaultFormatter": "golang.go",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": true
+          }
+        },
+        "[cpp]": {
+          "editor.defaultFormatter": "llvm-vs-code-extensions.clangd"
+        },
+        "[cmake]": {
+          "editor.defaultFormatter": "ms-vscode.cmake-tools"
+        },
+        "[proto]": {
+          "editor.defaultFormatter": "bufbuild.vscode-buf",
+          "editor.formatOnSave": true
+        },
+        "go.lintTool": "golangci-lint",
+        "go.lintOnSave": "package",
+        "files.watcherExclude": {
+          "**/node_modules/**": true,
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true,
+          "**/.*/**": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/bufbuild/buf/cmd/buf@v1.40.1",
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "forwardPorts": []
+}

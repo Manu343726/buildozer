@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+
+// TimeUnit represents units of time
+enum TimeUnit {
+  TIME_UNIT_UNSPECIFIED = 0;
+  TIME_UNIT_MILLISECOND = 1;
+  TIME_UNIT_SECOND = 2;
+  TIME_UNIT_MINUTE = 3;
+  TIME_UNIT_HOUR = 4;
+  TIME_UNIT_DAY = 5;
+}
+
+// TimeDuration represents a duration with explicit unit
+// More readable than raw milliseconds in many contexts
+message TimeDuration {
+  // Count of time units
+  int64 count = 1;
+
+  // Unit of time
+  TimeUnit unit = 2;
+}
+
+// TimeStamp represents an absolute point in time (unix epoch)
+// Stored as milliseconds since epoch for consistency with protocol
+message TimeStamp {
+  // Milliseconds since unix epoch (1970-01-01 00:00:00 UTC)
+  int64 unix_millis = 1;
+}
+
+// TimeRange represents a time interval
+message TimeRange {
+  // Start of range
+  TimeStamp start = 1;
+
+  // End of range
+  TimeStamp end = 2;
+}
+
+// Percentage represents a value 0-100
+message Percentage {
+  // Value from 0 to 100
+  uint32 value = 1;
+}
+
+// HashAlgorithm represents cryptographic hash algorithms
+enum HashAlgorithm {
+  HASH_ALGORITHM_UNSPECIFIED = 0;
+  HASH_ALGORITHM_SHA256 = 1;
+  HASH_ALGORITHM_SHA512 = 2;
+  HASH_ALGORITHM_BLAKE3 = 3;
+}
+
+// Size represents data sizes with explicit unit
+// Supports decimal values for flexible representation (e.g., bandwidth in bytes/sec)
+message Size {
+  // Size count (supports decimal values)
+  double count = 1;
+
+  // Size unit
+  SizeUnit unit = 2;
+}
+
+// SizeUnit represents units of storage
+enum SizeUnit {
+  SIZE_UNIT_UNSPECIFIED = 0;
+  SIZE_UNIT_BYTE = 1; // 1024 bytes
+  SIZE_UNIT_KILOBYTE = 2; // 1024 bytes
+  SIZE_UNIT_MEGABYTE = 3; // 1024 KB
+  SIZE_UNIT_GIGABYTE = 4; // 1024 MB
+  SIZE_UNIT_TERABYTE = 5; // 1024 GB
+}
+
+// Version represents a semantic version
+message Version {
+  // Major version (breaking changes)
+  uint32 major = 1;
+
+  // Minor version (feature additions)
+  uint32 minor = 2;
+
+  // Patch version (bug fixes)
+  uint32 patch = 3;
+
+  // Optional: Pre-release label (e.g., "alpha", "beta", "rc1")
+  string prerelease = 4;
+
+  // Optional: Build metadata
+  string metadata = 5;
+}
+
+// Hash represents a cryptographic hash
+message Hash {
+  // Algorithm used
+  HashAlgorithm algorithm = 1;
+
+  // Hex-encoded hash value
+  string value = 2;
+}
+
+// ApiProtocol represents communication protocols for APIs
+enum ApiProtocol {
+  API_PROTOCOL_UNSPECIFIED = 0; // Unknown/unspecified protocol
+  API_PROTOCOL_GRPC = 1; // gRPC protocol
+  API_PROTOCOL_REST = 2; // REST API
+}
+
+// ApiUri represents a network endpoint with protocol and optional path
+message ApiUri {
+  // Host address (hostname or IP)
+  string host = 1;
+
+  // Port number
+  uint32 port = 2;
+
+  // Communication protocol
+  ApiProtocol protocol = 3;
+
+  // Optional: Subpath (e.g., "/api/v1", "/rpc")
+  string subpath = 4;
+}
+
+// CpuUsage tracks CPU/core utilization percentages
+// Can represent aggregate CPU usage or per-core usage
+message CpuUsage {
+  // Peak CPU/core utilization percentage (0-100)
+  Percentage peak = 1;
+
+  // Minimum CPU/core utilization percentage (0-100)
+  Percentage min = 2;
+
+  // Average CPU/core utilization percentage (0-100)
+  Percentage avg = 3;
+}
+
+// MemoryUsage tracks memory resource consumption
+message MemoryUsage {
+  // Peak memory usage
+  Size peak = 1;
+
+  // Minimum memory usage
+  Size min = 2;
+
+  // Average memory usage
+  Size avg = 3;
+
+  // Optional: Memory I/O metrics (bandwidth and throughput)
+  optional IOUsage memory_io = 4;
+}
+
+// IOUsage tracks I/O and bandwidth metrics for any I/O type (disk, network, etc.)
+// Generic type useful for monitoring read/write performance and throughput
+message IOUsage {
+  // Total data read
+  Size total_read = 1;
+
+  // Total data written
+  Size total_write = 2;
+
+  // Bandwidth statistics
+  Size peak_read_bandwidth = 3; // Peak read bandwidth
+  Size peak_write_bandwidth = 4; // Peak write bandwidth
+  Size avg_read_bandwidth = 5; // Average read bandwidth
+  Size avg_write_bandwidth = 6; // Average write bandwidth
+}
+
+// ResourceUsage tracks comprehensive resource consumption (CPU, memory, disk I/O, network I/O)
+// Generic type useful for job execution, peer monitoring, and performance analysis
+message ResourceUsage {
+  // Average CPU utilization across all cores
+  CpuUsage avg_cpu_usage = 1;
+
+  // Per-core CPU utilization (one entry per CPU core)
+  repeated CpuUsage per_core_usage = 2;
+
+  // Memory usage metrics
+  MemoryUsage memory_usage = 3;
+
+  // Disk I/O metrics (read/write data and bandwidth)
+  IOUsage disk_io = 4;
+
+  // Network I/O metrics (data sent/received and bandwidth)
+  IOUsage network_io = 5;
+}
+
+// CacheQueryStatistics tracks cache lookup and hit information with timing metrics
+// Generic type useful for tracking cache performance of any artifact (job outputs, data, etc.)
+message CacheQueryStatistics {
+  // Whether the item was served from cache
+  bool cache_hit = 1;
+
+  // If cache hit, which peer had the cached item
+  string cache_source_peer_id = 2;
+
+  // Cache operation timings
+  TimeDuration hash_time = 3; // Time spent computing hash of the item
+  TimeDuration query_time = 4; // Time spent querying the cache
+  TimeDuration extraction_time = 5; // Time spent extracting item from cache (if cache_hit=true)
+}
