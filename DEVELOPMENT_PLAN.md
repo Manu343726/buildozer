@@ -98,7 +98,12 @@ Implement a **generic, language-agnostic P2P job distribution system** with:
 - **C/C++ implementation:** gcc, g++, make drivers + compile/link jobs
 - **Resilience:** Timeout-based failure detection, job cancellation with DAG support
 
-**Tech Stack:** Go, gRPC, Protocol Buffers, mDNS (grandcat/zeroconf), Docker API, slog
+**Tech Stack:** Go, Protocol Buffers (via [buf](https://buf.build/)), [Connect](https://connectrpc.com/) (RPC protocol), mDNS (grandcat/zeroconf), Docker API, slog
+
+**Protocol & RPC Tooling:**
+- **[buf](https://buf.build/):** Protocol Buffer linting, code generation, and breaking change detection
+- **[Connect](https://connectrpc.com/):** Protocol for RPC communication (gRPC-compatible but with REST/WebSocket support and simpler streaming)
+- **Protobuf best practices:** enforced via buf lint (STANDARD rule set)
 
 **Timeline:** ~26 weeks (6 months) across 7 phases
 
@@ -110,11 +115,48 @@ Implement a **generic, language-agnostic P2P job distribution system** with:
 
 1. **Generic job abstraction** — Single Job model with oneof for different job types; extensible to any language/domain
 2. **Content-addressed caching** — Jobs hashed by (type + runtime + inputs); outputs tagged with runtime that generated them
-3. **Decentralized** — No central coordinator; peers communicate via gRPC; scheduling uses quorum consensus
+3. **Decentralized** — No central coordinator; peers communicate via [Connect](https://connectrpc.com/) (RPC protocol); scheduling uses quorum consensus
 4. **Real-time progress** — Execution client streams progress back to source; timeout-based failure detection
-5. **Protocol-first** — All communication via gRPC; Protobuf as contract; backward compatible via semver versioning
+5. **Protocol-first** — All communication via [Connect](https://connectrpc.com/); Protobuf as contract; linted via [buf](https://buf.build/) for best practices; backward compatible via semver versioning
 6. **Distributed data transfer** — Inputs/outputs streamed; multiple clients can send input parts in parallel
 7. **Observability first** — Comprehensive slog-based logging (all levels: error/warning/info/debug/trace) with remote queryability
+
+### Protocol Organization
+
+The buildozer protocol is organized into **four logically separate APIs**, all sharing the same protocol version (`buildozer.proto.v1`):
+
+1. **Driver API** (`buildozer/proto/v1/driver/`) - For external tool integration
+   - **Service:** `JobService`
+   - **Used by:** gcc, g++, make wrappers and external job submission tools
+   - **RPCs:** SubmitJob, GetJobStatus, WatchJobStatus, CancelJob
+   - **Purpose:** Submit jobs and track progress from driver CLIs
+
+2. **Introspection API** (`buildozer/proto/v1/introspection/`) - For querying and observability
+   - **Service:** `IntrospectionService`
+   - **Used by:** CLI tools, web dashboards, monitoring systems
+   - **RPCs:** GetClientStatus, ListPeers, GetPeerInfo, QueryLogs, GetCacheStatus, ListCachedArtifacts, GetJobQueue, GetJobHistory
+   - **Purpose:** Query client state, peer info, logs, cache, and job history
+
+3. **Peer APIs** (`buildozer/proto/v1/peer/`) - For peer-to-peer coordination
+   - **ExecutorService:** ExecuteJob, FetchArtifact (job execution and artifact transfer)
+   - **DiscoveryService:** AnnounceSelf, QueryCapabilities (peer discovery and capability advertisement)
+   - **CoordinationService:** QueryCache, BroadcastCacheAnnouncement, BroadcastError, ProposeSchedule, CommitSchedule (distributed scheduling, caching, error sync)
+   - **Used by:** Buildozer client daemons communicating with each other
+   - **Purpose:** Execute jobs remotely, distribute artifacts, discover peers, coordinate scheduling
+
+4. **Common Types** (`buildozer/proto/v1/common/`) - Shared by all APIs
+   - **Files:** vocabulary.proto, auth.proto, job.proto, job_data.proto, runtime.proto, network_messages.proto
+   - **Content:** TimeUnit, Hash, Signature, Size, ApiProtocol, Job, Runtime, JobData, etc.
+   - **Used by:** All three APIs above
+
+**Benefits of this separation:**
+- **Clarity:** Each API's purpose is immediately visible from the directory structure
+- **Scalability:** New APIs can be added (e.g., admin API, metrics API) without mixing concerns
+- **Independent evolution:** Different APIs can be enhanced without entangling logic
+- **Type safety:** Common types are clearly separated from service-specific request/response types
+- **Documentation:** API docs can clearly explain which API is for what purpose
+
+**Shared versioning:** All APIs are versioned together as `buildozer.proto.v1`. Protocol changes are coordinated across all APIs, and they advance versions together (v1 → v2).
 
 ### Layered Architecture (4 Layers)
 
@@ -170,90 +212,456 @@ Implement a **generic, language-agnostic P2P job distribution system** with:
 | **mDNS discovery** | Zero-config networking; works on local networks without DNS setup |
 | **Semver protocol versioning** | Major version compatibility ensures rolling upgrades; Protobuf backward compat handles field additions |
 | **slog logging** | Structured, queryable logs with levels; remote tail via API for debugging multi-node issues |
+| **[buf](https://buf.build/) for proto management** | Unified linting, code generation, and breaking change detection; enforces STANDARD rule set for Protobuf best practices |
+| **[Connect](https://connectrpc.com/) for RPC** | Supports gRPC, REST, and WebSocket with simpler streaming semantics and better web compatibility than gRPC |
+| **Pure oneof pattern** | No redundant type enums; message types discriminated by oneof field alone for cleaner protocol |
+| **Vocabulary layer** | Reusable types (TimeStamp, TimeDuration, Hash, Size, ResourceUsage, etc.) across all protocol messages |
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Core Protocol & Job Model (Weeks 1-4)
+### Phase 1: Core Abstractions & Local Foundation (Weeks 1-5)
 
-**Goal:** Define protocol contracts, job abstractions, and basic P2P communication.
+**Goal:** Build the foundational runtime system, job abstractions, and local persistence layer. Can discover runtimes (native or Docker), execute jobs locally, and cache results.
 
-#### Step 1: Protocol Buffers v1 (Week 1)
+**Deliverable:** A buildozer-client daemon that can:
+- Discover available runtimes (native C/C++ toolchains and Docker-based runtimes)
+- Execute C++ compile jobs on either native or Docker-based runtimes
+- Cache output locally
+- Query cache status
 
-**Affected files:** `pkg/proto/*.proto`
+#### Milestone 1.0: Runtime Foundation Layer (Week 1)
 
-Create:
-- `pkg/proto/runtime.proto` — Runtime model (language, compiler, version, architecture, C runtime) + runtime recipe (Dockerfile)
-- `pkg/proto/job.proto` — Base `Job` message with oneof for job types (CppCompileJob, CppLinkJob, extensible)
-- `pkg/proto/job_data.proto` — `JobData` abstraction with oneof (File, Stream, etc.), hash, runtime tag
-- `pkg/proto/client_capability.proto` — CPU cores, RAM, concurrent job limits, supported runtimes
-- Update `pkg/proto/network_message.proto` — Job submission, status updates, progress events, error reports
-- Create `pkg/proto/auth.proto` — Auth metadata: client_id, token, protocol_version
+**What - Core Runtime Abstractions:**
+- `pkg/runtime/runtime.go` — Runtime interface (abstract)
+  - `Execute(command, args, workdir, env) → (stdout, stderr, exitcode)` — Execute within runtime
+  - `Available() → bool` — Is this runtime available/functional?
+  - `Metadata() → RuntimeMetadata` — Toolchains, versions, architectures, etc.
+  - `RuntimeID() → string` — Unique identifier (e.g., "gcc-11-x86_64-glibc-2.35")
+  
+- `pkg/runtime/discovery.go` — Runtime discovery interface
+  - `DiscoverRuntimes() → []Runtime` — Find all available runtimes
+  - `FindRuntime(spec RuntimeSpec) → Runtime, error` — Match job to compatible runtime
+  
+- `pkg/runtime/registry.go` — Runtime registry
+  - Load discovered runtimes into registry
+  - Query available runtimes
+  - Match job specs to available runtimes
 
-**Key concepts:**
-- Job hash = SHA256(JobType + RuntimeID + InputHashes + RecipeHash)
-- JobData streaming with hash verification
-- RuntimeRecipe embedding (Dockerfile content hasheable)
-- Semantic versioning in metadata
+**What - Docker API Foundation:**
+- `pkg/docker/docker.go` — Docker API abstraction wrapper (using official Docker Go API)
+  - **Dependency:** Use official Docker Go API client: `github.com/docker/docker/client`
+  - **Not custom:** Do NOT implement custom Docker client; use Docker's official SDK
+  - Implement wrapper interface for common operations:
+    - `PullImage(imageName) → imageID, error` — Pull Docker image from registry
+    - `StartContainer(imageName, command, mounts, env) → Container` — Start container (keep running for long operations)
+    - `ExecInContainer(containerID, command, args, workdir, env) → (stdout, stderr, exitcode)` — Execute command in running container
+    - `StopContainer(containerID) → error` — Stop and cleanup container
+    - `BuildImage(dockerfile, buildContext, imageName) → imageID, error` — Build image from Dockerfile (used for on-demand runtime builds)
+    - `ImageExists(imageName) → bool` — Check if image exists locally
+    - Handle Docker API errors: connection failures, missing images, permission issues
+  - **Why wrapper:** Abstract Docker specifics; easier to test and mock
+  
+- `pkg/docker/runtime.go` — Docker-based runtime (implements Runtime interface)
+  - Wraps Docker API client for runtime abstraction
+  - Manages container lifecycle: Start container once, reuse for multiple `Execute()` calls, cleanup on shutdown
+  - Handles volume mounting: Map source/output directories into container
+  - Handles working directory and environment setup
+  - Exposes same `Execute()` interface as native runtimes
+  - Delegates actual Docker operations to `docker.go` client wrapper
 
-**Verification:** Protoc compilation succeeds; all `.pb.go` generated without warnings.
-**Dependencies:** None.
+**Verification:**
+- Test Docker API client integration: Pull image, start container, exec command, stop
+- Test native runtime execution: Execute command, capture output
+- Test Docker container startup, command execution, cleanup
+- Test container reuse: Multiple `Execute()` calls on same running container
+- Test runtime registry: Add N native runtimes, M Docker runtimes, query all
+- Integration: Request "C++/gcc/11" → Registry returns compatible native or Docker runtime
+- Performance: Container startup <2s, command execution similar to native
+- Error handling: Missing toolchain, Docker unavailable, image pull failure → proper errors
 
-#### Step 2: Job & Runtime Abstractions (Week 1-2)
+**Acceptance:** Runtime abstraction works (native + Docker); Docker API client integration solid; discovery and registry functional; container lifecycle management correct.
 
-**Affected files:** `pkg/jobs/`, `pkg/runtime/`
+**Effort:** 1.5 weeks (~60 hours) — Medium-high complexity (Docker API client usage, process management, container lifecycle, image handling)
 
-Create:
-- `pkg/jobs/job.go` — Base Job interface, hash computation, dependency extraction
-- `pkg/jobs/cpp/compile_job.go`, `pkg/jobs/cpp/link_job.go` — C/C++ implementations
-- `pkg/runtime/runtime.go` — Runtime model + matching (does this peer support this job's runtime?)
-- `pkg/runtime/recipe_parser.go` — Parse RuntimeRecipe (Dockerfile → executable runtime)
+---
 
-**Hashing strategy:** `Hash = SHA256(JobType || RuntimeID || InputHashes || RecipeHash)`
+#### Milestone 1.1: Native C/C++ Runtime Implementation (Week 2)
 
-**Verification:** Unit tests for hash computation; different inputs → different hashes; same inputs → same hash.
-**Dependencies:** Depends on Step 1.
+**What - Toolchain Discovery & Execution:**
+- `pkg/runtimes/cpp/native/detector.go` — Detect native C/C++ toolchains
+  - Find gcc, g++, clang, clang++ in PATH
+  - Run version detection: `gcc --version`, `-dumpversion`
+  - Detect C runtimes: glibc, musl (ldd analysis)
+  - Detect architectures: x86_64, aarch64, armv7, etc.
+  - Generate `RuntimeID` for each combination
+  - Return `[]Runtime` to registry
+  
+- `pkg/runtimes/cpp/native/executor.go` — Execute C/C++ on native
+  - Compile: `gcc -c source.cpp -o output.o <flags>`
+  - Link: `gcc -o binary main.o aux.o <flags>`
+  - Subprocess management, environment setup
+  - Implements `Runtime.Execute()` interface
+  
+- `pkg/runtimes/cpp/native/native_runtime.go` — Native C/C++ runtime
+  - Wraps detector + executor
+  - Implements `Runtime` interface
+  - Metadata: gcc version, architecture, C runtime, etc.
 
-#### Step 3: Persistent Metadata Store (Week 2-3)
+**Verification:**
+- Detect gcc, g++, clang on system → Correct versions and architectures
+- Compile simple C++ file → Object file created with correct hash
+- Link objects → Executable created
+- Output matches native compilation (deterministic)
+- Multiple invocations of same command → Same hash (reproducible)
 
-**Affected files:** `pkg/store/`
+**Acceptance:** Native toolchain detection accurate; compilation/linking deterministic; executor reliable.
 
-Create:
-- `pkg/store/store.go` — Interface for local metadata persistence
-- `pkg/store/boltdb/boltdb_store.go` — BoltDB implementation (embedded, single-file)
-- Data models: Client metadata, job metadata, cache index, peer directory
-- Operations: Store/retrieve job by hash, cache lookup, peer discovery record
+**Effort:** 1 week (~40 hours) — Medium complexity (toolchain detection, subprocess management)
 
-**Verification:** CRUD operations tested; persistence across restarts; concurrent access safe.
-**Dependencies:** Depends on Step 2.
+---
 
-#### Step 4: Structured Logging Setup (Week 2)
+#### Milestone 1.2: Docker-Based C/C++ Runtime Implementation (Week 2-3)
 
-**Affected files:** `pkg/logging/`
+**What - Predefined Docker Images with Comprehensive Toolchain Tagging:**
+- `pkg/runtimes/cpp/docker/dockerfiles/` — **Embedded Dockerfile templates** (in codebase via Go `embed` package)
+  - Dockerfile templates for all predefined toolchain combinations
+  - Templates embedded in binary so no external files needed
+  - Examples of predefined templates:
+    - `ubuntu-gcc-11-glibc-2.35.Dockerfile` — ubuntu:22.04 + gcc-11 + g++-11 + glibc-2.35
+    - `ubuntu-gcc-12-glibc-2.36.Dockerfile` — ubuntu:22.04 + gcc-12 + g++-12 + glibc-2.36
+    - `ubuntu-clang-14-glibc-2.35.Dockerfile` — ubuntu:22.04 + clang-14 + clang++-14 + glibc-2.35
+    - `alpine-gcc-11-musl-1.2.3.Dockerfile` — alpine:latest + gcc-11 + g++-11 + musl-1.2.3
+    - `ubuntu-gcc-11-glibc-2.35-aarch64.Dockerfile` — ubuntu:22.04 + gcc-11 + g++-11 + glibc-2.35 + aarch64
+    - Similar variants with different compiler versions, C runtimes, architectures
+  
+- `pkg/runtimes/cpp/docker/dockerfile_builder.go` — **On-demand image building**
+  - Interface `DockerfileProvider` — Manage Dockerfile templates (embedded)
+  - `GetDockerfile(spec RuntimeSpec) → string` — Load embedded Dockerfile for runtime spec
+  - `BuildImage(spec RuntimeSpec) → imageID, error` — Build image on demand
+    - Check if image already exists locally (tagged with canonical name)
+    - If missing: Load template → Build via Docker API → Tag → Cache tags in metadata
+    - If exists: Return cached image ID (fast path)
+  - **On-demand strategy:** Build image when runtime first requested, reuse for all jobs requiring that runtime
+  - **Local image caching:** Once built, image stays in Docker daemon; detector finds via tag scanning
+  - **Zero external dependencies:** Dockerfiles embedded; no need for users to provide Dockerfile files
+  
+- **Comprehensive Docker Image Tagging Strategy with Canonical Compiler Names:**
+  - Docker image tags **must include full toolchain specification** for reproducibility
+  - **Key insight:** Use canonical compiler name in tag (gcc, clang), not language-specific drivers (g++, clang++)
+    - Rationale: gcc/g++ are same compiler; clang/clang++ are same compiler; language specified separately
+  - Tag format: `buildozer-<language>-<compiler>-<compiler_version>-<architecture>-<cruntime>-<cruntime_version>`
+  - Full metadata examples:
+    - `buildozer-c-gcc-11-x86_64-glibc-2.35` (C jobs using gcc-11, glibc 2.35, x86_64)
+    - `buildozer-cxx-gcc-11-x86_64-glibc-2.35` (C++ jobs using gcc-11, same base image)
+    - `buildozer-c-gcc-12-aarch64-glibc-2.36` (C jobs with gcc-12, glibc 2.36, aarch64)
+    - `buildozer-cxx-clang-14-x86_64-glibc-2.35` (C++ jobs with clang-14, glibc)
+    - `buildozer-c-gcc-11-x86_64-musl-1.2.3` (C jobs with gcc-11, musl-1.2.3)
+  
+  - Smart image reuse: Single base image registered under TWO tags (C and C++)
+    - Base image: ubuntu:22.04 + gcc-11 + g++-11 + glibc-2.35 + x86_64
+      - Tag 1: `buildozer-c-gcc-11-x86_64-glibc-2.35` (for C compilation jobs → uses gcc driver)
+      - Tag 2: `buildozer-cxx-gcc-11-x86_64-glibc-2.35` (for C++ compilation jobs → uses g++ driver)
+      - Both tags point to same Dockerfile/image (efficient storage, zero image duplication)
+  
+- `pkg/runtimes/cpp/docker/docker_cpp_runtime.go` — Docker-based C/C++ runtime (implements Runtime interface)
+  - Encapsulates single Docker image, but registers as separate runtime for C and C++
+  - **Key insight:** Reuses native executor logic inside container via `docker exec`
+  - At startup: Mount source, working dir as volumes; select appropriate driver (gcc/g++/clang/clang++)
+  - **Driver selection happens at execution based on job language:**
+    - C job + gcc compiler → Execute with: `docker exec container gcc -c source.c ...`
+    - C++ job + gcc compiler → Execute with: `docker exec container g++ -c source.cpp ...`
+    - Both use same underlying compiler, different driver entry point
+  - Same output as native execution (because same toolchain, mounted files)
+  - **Runtime metadata:** Fully qualified with all components:
+    - Language: c or cxx
+    - Compiler: gcc or clang (canonical name, not g++ or clang++)
+    - Compiler version: 11, 12, 14, etc.
+    - Target architecture: x86_64, aarch64, armv7, etc.
+    - C runtime: glibc or musl
+    - C runtime version: 2.35, 2.36, 1.2.3, etc.
+  
+- `pkg/runtimes/cpp/docker/detector.go` — Discover and auto-build available Docker runtimes
+  - **Discovery phase:** 
+    - Scan local Docker images for `buildozer-*` pattern
+    - Parse image tags to extract full toolchain metadata
+  - **Auto-build phase:**
+    - For each known runtime spec (from embedded Dockerfile list), check if image exists
+    - If missing: Call `dockerfile_builder.BuildImage()` to build on-demand
+    - Once built: Tag appropriately, register both C and C++ variants
+  - **Parse image tag to extract full toolchain metadata:**
+    - Extract language, compiler, compiler version, architecture, C runtime, C runtime version
+    - Example tag: `buildozer-cxx-gcc-11-aarch64-glibc-2.36`
+      → Language: cxx, Compiler: gcc, Version: 11, Arch: aarch64, CRuntime: glibc, CRuntimeVer: 2.36
+  - Register single image under multiple tags (C and C++ variants)
+  - **Implement smart matching:** "Job needs C, gcc, ver=11, x86_64, glibc, ver=2.35" → finds or builds `buildozer-c-gcc-11-x86_64-glibc-2.35`
+  - **Implement smart matching:** "Job needs C++, gcc, ver=11, x86_64, glibc, ver=2.35" → finds or builds `buildozer-cxx-gcc-11-x86_64-glibc-2.35` (same image)
+  - At runtime: Job language determines which driver (gcc vs g++) to invoke
+  - **Caching metadata:** Track which images are built, when, and their base Dockerfile for rebuilds if needed
 
-Create:
+**Architecture - Smart Image Reuse with Canonical Compiler Names:**
+```
+Physical Docker Image: ubuntu:22.04 + gcc-11 + g++-11 + glibc-2.35 + x86_64 (built once)
+                         ↓
+            Two Tag Registrations (same image, different tags)
+            ↙                                          ↘
+buildozer-c-gcc-11-x86_64-glibc-2.35        buildozer-cxx-gcc-11-x86_64-glibc-2.35
+    ↓                                             ↓
+C Runtime Metadata:                          C++ Runtime Metadata:
+- Language: c                                - Language: cxx
+- Compiler: gcc (canonical)                  - Compiler: gcc (canonical)
+- Compiler Version: 11                       - Compiler Version: 11
+- Target Architecture: x86_64                - Target Architecture: x86_64
+- C Runtime: glibc                           - C Runtime: glibc
+- C Runtime Version: 2.35                    - C Runtime Version: 2.35
+- Driver at execution: gcc                   - Driver at execution: g++
+- Same underlying image                      - Same underlying image
+```
+
+**Verification:**
+- Embedded Dockerfiles can be read from binary (no external files needed)
+- `dockerfile_builder.GetDockerfile(spec)` returns embedded Dockerfile content
+- **On-demand build workflow:**
+  - Request runtime: buildozer-c-gcc-11-x86_64-glibc-2.35 (not yet built)
+  - Detector checks Docker daemon → image not found
+  - Calls `BuildImage()` → Loads embedded Dockerfile → Builds image → Tags correctly
+  - Registers as TWO runtimes (C and C++) with metadata
+  - Second request for same runtime → Fast path (image already exists)
+- Image discovered and registered as TWO separate runtimes with full metadata
+  - Both runtimes share same underlying image (verified by Docker; no duplication)
+- C job(language=c, compiler=gcc, ver=11, arch=x86_64, cruntime=glibc, ver=2.35) → Triggers build if needed, then executes
+- Docker executor invokes: `docker exec <image> gcc -c ...` (driver selected by job language)
+- C++ job(language=cxx, same compiler/version/arch/cruntime) → Finds already-built image, executes
+- Docker executor invokes: `docker exec <image> g++ -c ...` (driver selected by job language)
+- C job hash matches native gcc-11 compilation
+- C++ job hash matches native g++-11 compilation (same underlying gcc-11, different driver)
+- Container lifecycle: Start, mount volumes, execute with language-selected driver, cleanup
+- Verify driver selection logic: Language field determines gcc vs g++ (or clang vs clang++)
+- **Binary portability:** Deploy buildozer binary to any system; embedded Dockerfiles build required runtimes on first use (no external Dockerfile files needed)
+
+**Acceptance:** Docker runtimes with embedded Dockerfile templates provide comprehensive toolchain coverage; on-demand image building simplifies deployment (no external files); C and C++ separated by language tag; compiler name canonical (gcc, clang) not driver-specific (g++, clang++); full metadata enables precise matching; single image efficiently provides both C and C++ runtimes; output identical to native; no duplication; reproducible builds across architectures and C runtime versions; **binary portable** (embedded Dockerfiles → builds runtimes on first use).
+
+**Effort:** 1.5 weeks (~60 hours) — Medium complexity (embedded Dockerfile management, on-demand Docker builds, image caching, comprehensive metadata tagging, driver selection logic)
+
+---
+
+#### Milestone 1.3: Job, Runtime Matching, and Submission Pipeline Abstractions (Week 3)
+
+**What (now that runtimes are proven):**
+- `pkg/job/job.go` — Job interface, hash computation (reuses `Runtime.Execute()` to compute output)
+- `pkg/job/cpp_compile.go` — CppCompileJob 
+  - Specifies: source file, output file, flags, **required runtime spec**
+  - Hash = SHA256(job_type + runtime_spec + input_hashes)
+  - Uses runtime registry to find compatible `Runtime`
+  
+- `pkg/runtime/matcher.go` — Job-to-runtime matching (now using proven runtime system)
+  - Given job spec → Find compatible runtimes from registry
+  - Match C++ version, architecture, C runtime
+  
+**NEW - Submission Pipeline Abstractions (critical for extensibility to Phase 4):**
+- `pkg/queuer/queuer.go` — Interface for job queueing (local to client)
+  - `Enqueue(job) → error` — Accept or reject job submission (e.g., queue full)
+  - `Dequeue() → Job` — Get next pending job
+  - Query queue state (size, oldest job, etc.)
+- `pkg/scheduler/scheduler.go` — Interface for job scheduling (can have multiple implementations)
+  - `Schedule(job) → ExecutionTarget` — Where should this job execute? (local client ID or peer address)
+  - `IsCompatibleRuntimeAvailable(job) → bool` — Does target have compatible runtime?
+  - `CanExecuteNow(job) → bool` — Is runtime busy? Ready to execute?
+  - Phase 1 impl: Always return local client; Phase 4 impl: Query P2P network, quorum voting
+- `pkg/progress/progress.go` — Interface for progress monitoring
+  - `Subscribe(jobID) → chan JobProgress` — Stream progress updates
+  - `ReportProgress(jobID, progress)` — Execution updates self or remote client
+  - Phase 1 impl: Local in-memory updates; Phase 3 impl: Network broadcast
+- `pkg/scheduler/local/local_scheduler.go` — Phase 1 implementation: Always execute on this client
+
+**Verification:**
+- Create compile job requiring gcc-11 x86_64 glibc
+- Query registry for compatible runtimes → returns [gcc-native, gcc-docker]
+- Execute on native → output cached
+- Execute on Docker → output matches native hash
+- Submission pipeline: driver → queue → schedule → execute on compatible runtime → cache → progress
+
+**Acceptance:** Job abstractions work with proven runtime system; job-to-runtime matching reliable; execution deterministic across native/Docker.
+
+**Effort:** 1 week (~40 hours) — Medium complexity (job abstractions, runtime matching)
+
+---
+
+#### Milestone 1.4: Structured Logging Setup (Week 3-4)
+
+**What:**
 - `pkg/logging/logger.go` — Component-scoped logger factory using slog
-- Log levels: Error, Warn, Info, Debug, Trace (per user spec)
-- Structured fields: component, request_id, job_id, client_id, peer_addr
-- Remote log querying interface (stub for now; implement in Phase 3)
+- Five levels: Error, Warn, Info, Debug, Trace
+- Structured fields: component, request_id, job_id, client_id, timestamp
+- File rotation and retention policies
 
-**Verification:** All log levels work; component identifiers visible in output.
-**Dependencies:** None.
+**Verification:**
+- All log levels emitted correctly
+- Structured fields visible in output
+- Log file rotates at size limit
+- No memory leaks from loggers
 
-#### Step 5: gRPC Services Foundation (Week 3-4)
+**Acceptance:** All log levels work; structured output machine-parseable (JSON); file rotation tested.
 
-**Affected files:** `pkg/proto/`, `pkg/services/`
+**Effort:** 4 days (~32 hours) — Low complexity (using Go slog stdlib)
 
-Define three gRPC services in `.proto`:
-- `JobService.SubmitJob(Job) → JobStatus` — Client submits a job
-- `JobService.GetJobStatus(JobID) → JobStatus` — Query job progress (polling or streaming)
-- `JobService.QueryCache(Hash) → CacheLocation[]` — Find which peers have cached result
-- `PeerService.ExecuteJob(Job) → stream JobProgress` — Peer executes; streams progress
-- `PeerService.Announce() → PeerCapabilities` — Peer announces itself (for discovery)
+---
 
-**Verification:** gRPC services compile; can instantiate servers without implementation.
-**Dependencies:** Depends on Step 1.
+#### Milestone 1.5: Persistent Store (Week 4)
+
+**What:**
+- `pkg/store/store.go` — Interface for local metadata persistence
+- `pkg/store/boltdb/boltdb_store.go` — BoltDB implementation (embedded B+ tree)
+- Data models: Client metadata, job metadata, cache index, peer directory
+- CRUD operations: Store/retrieve job by hash, update status, query cache
+
+**Verification:**
+- Integration tests: Write job metadata, restart daemon, re-read metadata (persist ✓)
+- Concurrent access: Multiple goroutines write/read simultaneously (race condition free ✓)
+- Performance: Lookup cache entry <1ms
+
+**Acceptance:** Persistence tests pass; concurrent access deadlock-free; 1000s of cache entries retrievable <100ms.
+
+**Effort:** 1 week (~40 hours) — Medium complexity (database indices, schema versioning)
+
+---
+
+#### Milestone 1.6: Cache Manager (Week 4)
+
+**What:**
+- `pkg/cache/cache.go` — Cache interface
+- `pkg/cache/local/local_cache.go` — Local disk-based artifact cache
+  - Directory structure: `cache/<hash>/<artifact_name>`
+  - Metadata file: hash, size, timestamp, runtime_tag
+  - Operations: Store artifact, retrieve, delete
+  - Retention: Size limits + LRU + age-based eviction
+- Hash verification: Verify retrieved artifact matches stored hash
+
+**Verification:**
+- Store artifact for job hash X
+- Retrieve artifact for job hash X → same bytes
+- Query non-existent hash → nil
+- Cache eviction: Add 1000 small artifacts exceeding size limit → LRU eviction works
+
+**Acceptance:** Cache CRUD works; eviction strategies tested; hash verification correct.
+
+**Effort:** 1.5 weeks (~60 hours) — Medium complexity (eviction algorithms, file management)
+
+---
+
+#### Milestone 1.7: Job Executor (Refactored for Runtime System) (Week 4-5)
+
+**What - Now using the proven runtime system:**
+- `pkg/executor/executor.go` — Executor interface
+- `pkg/executor/executor_impl.go` — Implementation using runtime registry
+  - Validate job inputs present
+  - Query runtime registry for compatible runtime based on job spec
+  - Invoke `runtime.Execute()` command via discovered runtime (native or Docker)
+  - Capture stdout/stderr/exit code
+  - Handle resource limits (CPU, memory) - passed to runtime
+
+**Key Change:** Executor now delegates to discovered `Runtime` instances instead of hardcoding subprocess logic. This supports both native and Docker-based runtimes seamlessly.
+
+**Verification:**
+- Execute C++ compile job on native runtime → object file created
+- Execute same job on Docker runtime → identical output hash
+- Stderr captured on compile error
+- Output file hash computed correctly across native and Docker execution
+- Resource limits enforced (CPU, memory)
+
+**Acceptance:** Execution works on both native and Docker runtimes; output deterministic; resource limits functional.
+
+**Effort:** 1.5 weeks (~60 hours) — Medium complexity (runtime invocation, error handling)
+
+---
+
+#### Milestone 1.8: Local Client Daemon (Week 5)
+
+**What:**
+- `cmd/buildozer-client/main.go` — Daemon entry point
+- `pkg/client/client.go` — Client coordinator orchestrating job submission pipeline
+  - Initialize: logging, store, executor, cache, queuer, local scheduler, progress tracker
+  - Initialize runtime discovery & registry (from Phase 1.0-1.2)
+  - Accept job submission via Connect RPC → `JobService.SubmitJob(job)`
+  - **Submission Pipeline:**
+    1. **Queueing:** `queuer.Enqueue(job)` — Accept or reject (queue full?)
+    2. **Scheduling:** `scheduler.Schedule(job)` → ExecutionTarget (Phase 1: always local)
+    3. **Check Runtime:** `scheduler.IsCompatibleRuntimeAvailable(target, job)` → error if no match
+    4. **Wait for Capacity:** `scheduler.CanExecuteNow(target, job)` → may block if runtime busy
+    5. **Execute:** Pass to executor (which uses discovered runtime)
+    6. **Progress Reporting:** `progressMonitor.Subscribe(jobID)` streams updates back to caller
+  - Submission RPC is **blocking**: Returns when job completes or error occurs
+  - Driver receives `JobStatus` stream (progress updates) during execution
+
+**Verification:**
+- Start daemon without errors
+- Submit local compile job via Connect RPC → RPC blocks until completion
+- During execution, progress streamed (every 5s)
+- On completion, client receives final result
+- Query job status → shows history and progress events
+- Query cache → shows cached artifact
+- Second submission of same job → Queued immediately, scheduled, **cache hit** (no re-execution)
+- Daemon handles queue full → Returns error, driver can retry
+- Runtime registry working: Discover native + Docker runtimes, match jobs to compatible runtimes
+
+**Acceptance:** Daemon starts/stops cleanly; submission pipeline works; queueing + scheduling + progress tracking integrated; cache hit on re-execution; runtime discovery functional.
+
+**Effort:** 2 weeks (~80 hours) — Medium-high complexity (pipeline orchestration, Connect streaming, state management, runtime coordination)
+
+**Note:** Scheduler interface is abstract; Phase 1 uses `LocalScheduler`. Phase 4 swaps in `P2PScheduler` without changing `Client` code.
+
+---
+
+#### Milestone 1.9: Minimal Test Drivers (Week 5)
+
+**What:** Basic driver implementations for end-to-end testing (full drivers deferred to Phase 5)
+- `cmd/buildozer-gcc/main.go` — Minimal gcc wrapper
+  - Parse: input file, output file, basic flags
+  - Create CppCompileJob proto
+  - Submit via Connect RPC to local daemon (which discovers native/Docker runtimes)
+  - Stream progress + write output file
+  - **Limitation:** Only basic flags; no optimization flags, includes, etc. (added in Phase 5)
+  - **Fallback:** If daemon unavailable, invoke native gcc
+- `cmd/buildozer-g++/main.go` — Minimal g++ wrapper (same)
+- `cmd/buildozer-make/main.go` — Minimal make wrapper (basic invocation, no recursive resolution)
+
+**Verification:**
+- `buildozer-gcc -c hello.cpp -o hello.o` → Compiles locally (on native runtime) → hello.o created
+- `buildozer-gcc --version` → Returns gcc version (from underlying compiler)
+- Daemon unavailable → Falls back to native gcc
+- Multiple submissions of same job → Cache hit (no re-execution)
+- Integration test: E2E pipeline from driver submission through runtime discovery to cached result
+
+**Acceptance:** Minimal drivers work for testing; fallback mode functional; E2E tests pass; drivers work with discovered runtimes (native and Docker).
+
+**Effort:** 1 week (~40 hours) — Low-medium complexity (basic argument parsing, simple fallback logic)
+
+**Note:** These are deliberate **MVP drivers** for testing Phase 1 functionality. Full drivers with all flags, recursion, include path handling, etc. come in Phase 5.
+
+---
+
+**Phase 1 Exit Criteria:**
+- ✅ Runtime Foundation: Docker API wrapper, native & Docker runtime implementations
+- ✅ Job abstractions with deterministic hashing
+- ✅ Abstract submission pipeline (Queuer, Scheduler, ProgressMonitor interfaces)
+- ✅ Local persistence working (BoltDB)
+- ✅ Logger integrated across codebase
+- ✅ Local executor can compile C++ files on native or Docker runtimes
+- ✅ Cache manager working (CRUD + eviction)
+- ✅ Single-client daemon with full submission pipeline (queue → schedule → execute → cache)
+- ✅ Minimal test drivers (gcc/g++/make) with fallback mode
+- ✅ All unit + integration tests passing
+- ✅ Reproducible builds: same job hash = same output (native and Docker identical)
+- ✅ **E2E validation: Driver submission → queueing → scheduling → execution on discovered runtime → caching → progress streaming**
+
+**Key Architectural Achievement:** 
+- Runtime system proven before building execution abstractions
+- Job submission pipeline is **abstract and extensible**
+- Phase 1 uses local implementations; Phase 4 swaps scheduler to P2P network without changing client code
+- Native and Docker executions produce identical outputs (code reuse via `docker exec`)
+
+**Cumulative Time:** 5 weeks
 
 ---
 
@@ -391,6 +799,125 @@ Retry policy: Exponential backoff (base 2s, max 5 attempts).
 ### Phase 5: Client & Driver Implementation (Weeks 17-20)
 
 **Goal:** Implement daemon, drivers, and query API.
+
+#### Step 17.5: Client CLI Architecture with Cobra & Viper (Week 17)
+
+**What - Build buildozer-client CLI with cobra + viper for enterprise-grade configuration management:**
+
+**Configuration Priority (Cobra + Viper Pattern):**
+- **Priority 1 (Highest):** CLI flags (e.g., `--port 6789`)
+- **Priority 2:** Environment variables (e.g., `BUILDOZER_DAEMON_PORT=6789`)
+- **Priority 3:** Configuration file (e.g., `~/.config/buildozer/config.yaml`)
+- **Priority 4 (Lowest):** Hardcoded defaults in code
+
+Viper library automatically merges these sources in priority order. Configuration file is optional (won't error if missing). Environment variables are prefixed with `BUILDOZER_`.
+
+**buildozer-client CLI Structure - Two Operating Modes:**
+
+1. **Daemon Mode** — `buildozer-client daemon [FLAGS]`
+   - Launches persistent client daemon
+   - Registers on mDNS for peer discovery
+   - Accepts job submissions via gRPC
+   - Optionally `--standalone` flag: If set, runs daemon in-process within CLI (for dev/testing)
+   
+2. **Interactive Mode** — Commands to interact with running daemon via API
+   - `buildozer-client status` — Query client status (load, capabilities)
+   - `buildozer-client peers` — List connected peers
+   - `buildozer-client logs [FLAGS]` — Tail client logs (local or remote)
+   - `buildozer-client cache` — View cached artifacts and stats
+   - `buildozer-client queue` — View current job queue
+   - `buildozer-client config` — Show effective configuration (after merging all sources)
+   - `buildozer-client cancel JOB_ID` — Cancel a running job
+
+**Global Flags (apply to all commands):**
+- `--config` — Config file path (default: `~/.config/buildozer/config.yaml`)
+- `--standalone` — Run daemon in-process (only with `daemon` command)
+- `--debug` — Enable debug logging
+- `--log-level` — Set logging level: error/warn/info/debug/trace
+- `--host` — Daemon address (default: localhost)
+- `--port` — Daemon gRPC port (default: 6789)
+
+**Configuration File Structure (YAML):**
+```yaml
+# ~/.config/buildozer/config.yaml
+daemon:
+  port: 6789
+  listen: "0.0.0.0"
+  max_concurrent_jobs: 4
+  max_ram_mb: 8192
+
+logging:
+  level: "info"
+  format: "text"  # or "json"
+
+cache:
+  dir: "~/.cache/buildozer"
+  max_size_gb: 100
+  retention_days: 30
+
+peer_discovery:
+  enabled: true
+  mDNS_interval_seconds: 30
+```
+
+**Environment Variables (with prefix BUILDOZER_):**
+- `BUILDOZER_DAEMON_PORT` → daemon.port
+- `BUILDOZER_DAEMON_LISTEN` → daemon.listen
+- `BUILDOZER_DAEMON_MAX_CONCURRENT_JOBS` → daemon.max_concurrent_jobs
+- `BUILDOZER_LOGGING_LEVEL` → logging.level
+- `BUILDOZER_CACHE_DIR` → cache.dir
+- `BUILDOZER_DEBUG` → global --debug flag
+
+**Implementation Details:**
+- Use `spf13/cobra` for command framework
+- Use `spf13/viper` for configuration management
+- Bind cobra flags to viper: `viper.BindPFlag("daemon.port", cmd.Flags().Lookup("port"))`
+- Auto-load config file if exists: `viper.ReadInConfig()` (non-fatal if missing)
+- Set env prefix: `viper.SetEnvPrefix("BUILDOZER")`
+- Enable auto-env: `viper.AutomaticEnv()`
+- Read config from standard locations: `$HOME/.config/buildozer/config.yaml`, `/etc/buildozer/config.yaml`
+
+**buildozer-client daemon flow:**
+1. Parse cobra flags
+2. Load config file (if exists) + env vars + CLI flags → merged config via viper
+3. Initialize logger with effective log level
+4. If `--standalone`: Create daemon in-process, skip port/host setup
+5. If not standalone: Start gRPC server on (host, port) from config
+6. Register on mDNS with capabilities
+7. Main loop: Accept job submissions, trigger scheduling, stream progress
+8. Graceful shutdown: Finish in-flight jobs, close connections
+
+**buildozer-client status flow:**
+1. Parse cobra flags
+2. Load config (host, port)
+3. Connect to daemon via gRPC
+4. Call `IntrospectionService.GetClientStatus()`
+5. Display results (load, queue size, peer count, cache stats)
+
+**Verification:**
+- CLI help: `buildozer-client help` shows commands + flags
+- Daemon mode: `buildozer-client daemon` starts server on default port 6789
+- Standalone mode: `buildozer-client daemon --standalone` runs in-process (no port binding)
+- Config file usage: Create `~/.config/buildozer/config.yaml` with custom port → daemon starts on custom port
+- Env var override: `BUILDOZER_DAEMON_PORT=7890 buildozer-client daemon` → overrides config file (runs on 7890)
+- CLI flag override: `buildozer-client daemon --port 8890` → overrides both config and env vars (runs on 8890)
+- Config command: `buildozer-client config` shows merged configuration from all sources
+- Interactive commands: `buildozer-client status`, `buildozer-client peers`, etc. connect to daemon and display info
+- Graceful shutdown: `Ctrl+C` or `buildozer-client cancel JOB_ID` works cleanly
+
+**Acceptance:**
+- All commands work with cobra + viper priority order
+- Configuration file optional (daemon starts with defaults if missing)
+- Env vars override config file, CLI flags override everything
+- Daemon and interactive modes fully functional
+- E2E: Start daemon with config file → Submit job via interactive command → Stream progress → Job completes
+- Standalone flag enables in-process daemon for testing without port conflicts
+
+**Effort:** 1 week (~40 hours) — Low-medium complexity (cobra/viper setup, command structure, config merging)
+
+**Note:** Cobra + Viper is standard Go CLI pattern; viper handling the inheritance/override logic automatically once configured correctly.
+
+---
 
 #### Step 18: Client Daemon (Week 17)
 

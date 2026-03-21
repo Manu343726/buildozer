@@ -2,15 +2,21 @@ syntax = "proto3";
 
 package buildozer.proto.v1;
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // TimeUnit represents units of time
 enum TimeUnit {
+  // Unspecified time unit
   TIME_UNIT_UNSPECIFIED = 0;
+  // Milliseconds (1/1000 second)
   TIME_UNIT_MILLISECOND = 1;
+  // Seconds
   TIME_UNIT_SECOND = 2;
+  // Minutes
   TIME_UNIT_MINUTE = 3;
+  // Hours
   TIME_UNIT_HOUR = 4;
+  // Days
   TIME_UNIT_DAY = 5;
 }
 
@@ -48,10 +54,30 @@ message Percentage {
 
 // HashAlgorithm represents cryptographic hash algorithms
 enum HashAlgorithm {
+  // Unspecified hash algorithm
   HASH_ALGORITHM_UNSPECIFIED = 0;
+  // SHA256 (256-bit output)
   HASH_ALGORITHM_SHA256 = 1;
+  // SHA512 (512-bit output)
   HASH_ALGORITHM_SHA512 = 2;
+  // BLAKE3 (cryptographically secure, faster than SHA3)
   HASH_ALGORITHM_BLAKE3 = 3;
+}
+
+// SignatureAlgorithm represents cryptographic signature algorithms
+enum SignatureAlgorithm {
+  // Unspecified signature algorithm
+  SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+  // RSA signature with SHA256 hash
+  SIGNATURE_ALGORITHM_RSA_SHA256 = 1;
+  // RSA signature with SHA512 hash
+  SIGNATURE_ALGORITHM_RSA_SHA512 = 2;
+  // ECDSA signature with SHA256 hash
+  SIGNATURE_ALGORITHM_ECDSA_SHA256 = 3;
+  // ECDSA signature with SHA512 hash
+  SIGNATURE_ALGORITHM_ECDSA_SHA512 = 4;
+  // EdDSA signature with Ed25519 keys
+  SIGNATURE_ALGORITHM_ED25519 = 5;
 }
 
 // Size represents data sizes with explicit unit
@@ -66,12 +92,18 @@ message Size {
 
 // SizeUnit represents units of storage
 enum SizeUnit {
+  // Unspecified size unit
   SIZE_UNIT_UNSPECIFIED = 0;
-  SIZE_UNIT_BYTE = 1; // 1024 bytes
-  SIZE_UNIT_KILOBYTE = 2; // 1024 bytes
-  SIZE_UNIT_MEGABYTE = 3; // 1024 KB
-  SIZE_UNIT_GIGABYTE = 4; // 1024 MB
-  SIZE_UNIT_TERABYTE = 5; // 1024 GB
+  // Single byte
+  SIZE_UNIT_BYTE = 1;
+  // 1024 bytes
+  SIZE_UNIT_KILOBYTE = 2;
+  // 1024 kilobytes (1,048,576 bytes)
+  SIZE_UNIT_MEGABYTE = 3;
+  // 1024 megabytes (1,073,741,824 bytes)
+  SIZE_UNIT_GIGABYTE = 4;
+  // 1024 gigabytes (1,099,511,627,776 bytes)
+  SIZE_UNIT_TERABYTE = 5;
 }
 
 // Version represents a semantic version
@@ -80,16 +112,19 @@ message Version {
   uint32 major = 1;
 
   // Minor version (feature additions)
-  uint32 minor = 2;
+  optional uint32 minor = 2;
 
   // Patch version (bug fixes)
-  uint32 patch = 3;
+  optional uint32 patch = 3;
 
   // Optional: Pre-release label (e.g., "alpha", "beta", "rc1")
-  string prerelease = 4;
+  optional string prerelease = 4;
 
   // Optional: Build metadata
-  string metadata = 5;
+  optional string metadata = 5;
+
+  // Codename for this version (e.g., "Focal Fossa", "Bionic Beaver")
+  optional string codename = 6;
 }
 
 // Hash represents a cryptographic hash
@@ -101,11 +136,28 @@ message Hash {
   string value = 2;
 }
 
+// Signature represents a cryptographic signature
+// Used for authenticating artifacts, peers, and RPC messages
+message Signature {
+  // Algorithm used for signing
+  SignatureAlgorithm algorithm = 1;
+
+  // Base64-encoded signature value
+  string value = 2;
+
+  // Optional: Key ID (identifies which key was used to create signature)
+  // Useful for key rotation and multi-key scenarios
+  optional string key_id = 3;
+}
+
 // ApiProtocol represents communication protocols for APIs
 enum ApiProtocol {
-  API_PROTOCOL_UNSPECIFIED = 0; // Unknown/unspecified protocol
-  API_PROTOCOL_GRPC = 1; // gRPC protocol
-  API_PROTOCOL_REST = 2; // REST API
+  // Unspecified protocol
+  API_PROTOCOL_UNSPECIFIED = 0;
+  // gRPC protocol (binary, low-latency, streaming)
+  API_PROTOCOL_GRPC = 1;
+  // REST API (HTTP/1.1, JSON-based)
+  API_PROTOCOL_REST = 2;
 }
 
 // ApiUri represents a network endpoint with protocol and optional path
@@ -160,11 +212,14 @@ message IOUsage {
   // Total data written
   Size total_write = 2;
 
-  // Bandwidth statistics
-  Size peak_read_bandwidth = 3; // Peak read bandwidth
-  Size peak_write_bandwidth = 4; // Peak write bandwidth
-  Size avg_read_bandwidth = 5; // Average read bandwidth
-  Size avg_write_bandwidth = 6; // Average write bandwidth
+  // Peak read bandwidth
+  Size peak_read_bandwidth = 3;
+  // Peak write bandwidth
+  Size peak_write_bandwidth = 4;
+  // Average read bandwidth
+  Size avg_read_bandwidth = 5;
+  // Average write bandwidth
+  Size avg_write_bandwidth = 6;
 }
 
 // ResourceUsage tracks comprehensive resource consumption (CPU, memory, disk I/O, network I/O)
@@ -195,8 +250,10 @@ message CacheQueryStatistics {
   // If cache hit, which peer had the cached item
   string cache_source_peer_id = 2;
 
-  // Cache operation timings
-  TimeDuration hash_time = 3; // Time spent computing hash of the item
-  TimeDuration query_time = 4; // Time spent querying the cache
-  TimeDuration extraction_time = 5; // Time spent extracting item from cache (if cache_hit=true)
+  // Time spent computing hash of the item
+  TimeDuration hash_time = 3;
+  // Time spent querying the cache
+  TimeDuration query_time = 4;
+  // Time spent extracting item from cache (if cache_hit=true)
+  TimeDuration extraction_time = 5;
 }

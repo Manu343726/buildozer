@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/runtime.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// DiscoveryService handles peer discovery and capability advertisement
+// This is the P2P service used by clients to discover each other and exchange capabilities
+service DiscoveryService {
+  // AnnounceSelf registers a peer on the network
+  // Used by clients to periodically announce their presence and capabilities (for mDNS/peer discovery)
+  rpc AnnounceSelf(AnnounceSelfRequest) returns (AnnounceSelfResponse);
+
+  // QueryCapabilities retrieves the capabilities and status of a specific peer
+  // Used by scheduling clients to determine if a peer can execute a particular job
+  rpc QueryCapabilities(QueryCapabilitiesRequest) returns (QueryCapabilitiesResponse);
+}
+
+// AnnounceSelfRequest announces peer presence and capabilities to the network
+message AnnounceSelfRequest {
+  // Unique peer identifier
+  string peer_id = 1;
+
+  // Peer hostname
+  string hostname = 2;
+
+  // gRPC API endpoint of this peer
+  buildozer.proto.v1.ApiUri grpc_uri = 3;
+
+  // Optional: REST API endpoint of this peer
+  buildozer.proto.v1.ApiUri rest_api_uri = 4;
+
+  // Current peer capabilities
+  PeerCapabilities capabilities = 5;
+
+  // Peer metadata (protocol version, buildozer version, etc.)
+  PeerMetadata metadata = 6;
+}
+
+// AnnounceSelfResponse confirms peer announcement
+message AnnounceSelfResponse {
+  // Was announcement successful?
+  bool success = 1;
+
+  // Error message if unsuccessful
+  string error_message = 2;
+
+  // List of other known peers (bootstrap info)
+  repeated PeerInfo other_peers = 3;
+}
+
+// PeerCapabilities describes what a peer can do
+message PeerCapabilities {
+  // Number of available CPU cores
+  uint32 available_cpu_cores = 1;
+
+  // Available memory (MB)
+  uint32 available_memory_mb = 2;
+
+  // Maximum concurrent jobs this peer can execute
+  uint32 max_concurrent_jobs = 3;
+
+  // Number of jobs currently running on this peer
+  uint32 running_jobs_count = 4;
+
+  // Supported runtimes on this peer
+  repeated buildozer.proto.v1.Runtime available_runtimes = 5;
+
+  // Local cache size (MB)
+  uint32 cache_size_mb = 6;
+
+  // Maximum cache size this peer can maintain (MB)
+  uint32 max_cache_size_mb = 7;
+}
+
+// PeerMetadata contains peer version and configuration info
+message PeerMetadata {
+  // Protocol version supported by this peer
+  string protocol_version = 1;
+
+  // Buildozer binary version on this peer
+  string buildozer_version = 2;
+
+  // Operating system (Linux, Darwin, Windows)
+  string operating_system = 3;
+
+  // Architecture (x86_64, aarch64, etc.)
+  string architecture = 4;
+}
+
+// PeerInfo contains information about a known peer
+message PeerInfo {
+  // Unique peer identifier
+  string peer_id = 1;
+
+  // Peer hostname
+  string hostname = 2;
+
+  // gRPC API endpoint
+  buildozer.proto.v1.ApiUri grpc_uri = 3;
+
+  // Optional: REST API endpoint
+  buildozer.proto.v1.ApiUri rest_api_uri = 4;
+
+  // Last time this peer announced itself
+  buildozer.proto.v1.TimeStamp last_seen = 5;
+
+  // Is this peer currently online/responsive?
+  bool is_online = 6;
+}
+
+// QueryCapabilitiesRequest queries a peer's capabilities
+message QueryCapabilitiesRequest {
+  // Peer to query (by peer ID or URL)
+  string peer_id = 1;
+
+  // Include detailed statistics?
+  bool include_stats = 2;
+}
+
+// QueryCapabilitiesResponse returns peer capabilities and status
+message QueryCapabilitiesResponse {
+  // Peer ID
+  string peer_id = 1;
+
+  // Current capabilities
+  PeerCapabilities capabilities = 2;
+
+  // Peer metadata
+  PeerMetadata metadata = 3;
+
+  // Time this capability info was captured
+  buildozer.proto.v1.TimeStamp timestamp = 4;
+
+  // Is the peer responsive?
+  bool is_responsive = 5;
+}

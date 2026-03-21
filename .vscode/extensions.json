@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "bufbuild.vscode-buf",
+    "golang.go",
+    "GitHub.copilot-chat"
+  ]
+}

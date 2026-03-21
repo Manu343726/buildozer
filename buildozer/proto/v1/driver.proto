@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/auth.proto";
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// JobService is the API used by driver CLIs (gcc, g++, make) to submit jobs to a client
+// This is the primary entry point for external clients/drivers to interact with buildozer
+service JobService {
+  // SubmitJob submits a job for execution in the network
+  // The job is validated and queued for execution
+  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+
+  // GetJobStatus queries the current status of a submitted job (single query)
+  // Returns the latest known status without blocking
+  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse);
+
+  // WatchJobStatus streams real-time job status updates
+  // Streams status changes as the job progresses through execution phases
+  rpc WatchJobStatus(WatchJobStatusRequest) returns (stream WatchJobStatusResponse);
+
+  // CancelJob cancels a job and optionally its dependents
+  // Cancellation is broadcast to all peers; dependent jobs in the DAG are also cancelled
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+}
+
+// SubmitJobRequest submits a new job for execution
+message SubmitJobRequest {
+  // The job to submit (includes all inputs and specifications)
+  buildozer.proto.v1.Job job = 1;
+
+  // Optional: Client metadata (correlation ID, deadline, priority hints)
+  buildozer.proto.v1.RequestMetadata metadata = 2;
+}
+
+// SubmitJobResponse confirms job submission
+message SubmitJobResponse {
+  // Submitted job status
+  JobStatus job_status = 1;
+
+  // Job accepted by the receiving client?
+  bool accepted = 2;
+
+  // If rejected, error explanation
+  string error_message = 3;
+}
+
+// JobStatus represents the current state of a submitted job
+message JobStatus {
+  // Unique job ID
+  string job_id = 1;
+
+  // Client ID that received the submission
+  string submitter_client_id = 2;
+
+  // Time job was submitted
+  buildozer.proto.v1.TimeStamp submitted_at = 3;
+
+  // Current job execution status
+  buildozer.proto.v1.JobProgress progress = 4;
+}
+
+// GetJobStatusRequest queries a job's current status
+message GetJobStatusRequest {
+  // Job ID to query
+  string job_id = 1;
+
+  // Optional: only return if status changed since this timestamp
+  buildozer.proto.v1.TimeStamp since = 2;
+}
+
+// GetJobStatusResponse returns the job status
+message GetJobStatusResponse {
+  // Current job status (or error if job not found)
+  JobStatus job_status = 1;
+
+  // Error message if job not found
+  string error_message = 2;
+}
+
+// WatchJobStatusRequest starts streaming job status updates
+message WatchJobStatusRequest {
+  // Job ID to watch
+  string job_id = 1;
+
+  // Optional: only return updates after this timestamp
+  buildozer.proto.v1.TimeStamp since = 2;
+}
+
+// WatchJobStatusResponse is streamed back with each status change
+message WatchJobStatusResponse {
+  // Updated job status
+  JobStatus job_status = 1;
+
+  // Timestamp of the update
+  buildozer.proto.v1.TimeStamp updated_at = 2;
+}
+
+// CancelJobRequest cancels a job
+message CancelJobRequest {
+  // Job ID to cancel
+  string job_id = 1;
+
+  // Cancellation reason (for logging and debugging)
+  string reason = 2;
+
+  // Should dependent jobs also be cancelled? (if job A depends on job B, cancel both)
+  bool cancel_dependents = 3;
+}
+
+// CancelJobResponse confirms job cancellation
+message CancelJobResponse {
+  // Was the cancellation successful?
+  bool success = 2;
+
+  // Error message if cancellation failed
+  string error_message = 3;
+
+  // Number of jobs cancelled (including dependents if requested)
+  uint32 jobs_cancelled = 4;
+}

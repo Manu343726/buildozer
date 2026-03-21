@@ -10,6 +10,9 @@
   "buf.lint.runOnSave": true,
   "buf.breakingChecks.runOnSave": false,
   "buf.checkForUpdates": true,
+  "[protobuf]": {
+    "editor.defaultFormatter": "bufbuild.vscode-buf"
+  },
   "[go]": {
     "editor.defaultFormatter": "golang.go",
     "editor.formatOnSave": true,
@@ -18,5 +21,5 @@
     }
   },
   "go.lintTool": "golangci-lint",
-  "go.lintOnSave": "package"
+  "go.lintOnSave": "package",
 }

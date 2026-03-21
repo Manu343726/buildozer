@@ -4,7 +4,7 @@ package buildozer.proto.v1;
 
 import "buildozer/proto/v1/vocabulary.proto";
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // RequestMetadata includes authentication and authorization info for all requests
 message RequestMetadata {

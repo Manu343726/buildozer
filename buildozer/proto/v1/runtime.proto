@@ -4,48 +4,66 @@ package buildozer.proto.v1;
 
 import "buildozer/proto/v1/vocabulary.proto";
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // CppLanguage represents C/C++ language variants
 enum CppLanguage {
+  // Unspecified C/C++ language
   CPP_LANGUAGE_UNSPECIFIED = 0;
+  // C language (ISO C99, C11, C17, etc.)
   CPP_LANGUAGE_C = 1;
+  // C++ language (C++11, C++14, C++17, C++20, etc.)
   CPP_LANGUAGE_CPP = 2;
 }
 
 // CppCompiler represents C/C++ compiler implementations
 enum CppCompiler {
+  // Unspecified C/C++ compiler
   CPP_COMPILER_UNSPECIFIED = 0;
+  // GCC (GNU Compiler Collection)
   CPP_COMPILER_GCC = 1;
+  // Clang (LLVM-based compiler)
   CPP_COMPILER_CLANG = 2;
 }
 
-// CppArchitecture represents target CPU architectures
-enum CppArchitecture {
-  CPP_ARCHITECTURE_UNSPECIFIED = 0;
-  CPP_ARCHITECTURE_X86_64 = 1;
-  CPP_ARCHITECTURE_AARCH64 = 2;
-  CPP_ARCHITECTURE_ARM = 3;
+// CpuArchitecture represents target CPU architectures
+enum CpuArchitecture {
+  // Unspecified architecture
+  CPU_ARCHITECTURE_UNSPECIFIED = 0;
+  // x86-64 (AMD64, Intel 64-bit)
+  CPU_ARCHITECTURE_X86_64 = 1;
+  // ARM 64-bit (ARMv8, AArch64)
+  CPU_ARCHITECTURE_AARCH64 = 2;
+  // ARM 32-bit (ARMv7, ARMv6, ARMv5)
+  CPU_ARCHITECTURE_ARM = 3;
 }
 
 // CRuntime represents C runtime implementations
 enum CRuntime {
+  // Unspecified C runtime
   C_RUNTIME_UNSPECIFIED = 0;
+  // GNU C Library (glibc) - standard on Linux
   C_RUNTIME_GLIBC = 1;
+  // musl libc - lightweight, security-focused C runtime (Alpine Linux)
   C_RUNTIME_MUSL = 2;
 }
 
 // CppAbi represents C++ ABI (Application Binary Interface) specifications
 enum CppAbi {
+  // Unspecified C++ ABI
   CPP_ABI_UNSPECIFIED = 0;
-  CPP_ABI_ITANIUM = 1; // Itanium ABI (used by GCC, Clang on Unix-like systems)
+  // Itanium ABI (used by GCC, Clang on Unix-like systems)
+  CPP_ABI_ITANIUM = 1;
 }
 
 // CppStdlib represents C++ standard library implementations
 enum CppStdlib {
+  // Unspecified C++ standard library
   CPP_STDLIB_UNSPECIFIED = 0;
-  CPP_STDLIB_LIBSTDCXX = 1; // GCC's libstdc++
-  CPP_STDLIB_LIBCXX = 2; // LLVM/Clang's libc++
+  // GCC's libstdc++
+  CPP_STDLIB_LIBSTDCXX = 1;
+  // LLVM/Clang's libc++
+  CPP_STDLIB_LIBCXX = 2;
 }
 
 // CppToolchain describes a C/C++ compilation environment
@@ -60,7 +78,7 @@ message CppToolchain {
   Version compiler_version = 3;
 
   // Target architecture
-  CppArchitecture architecture = 4;
+  CpuArchitecture architecture = 4;
 
   // C runtime implementation
   CRuntime c_runtime = 5;
@@ -144,6 +162,48 @@ message RuntimeLoad {
   uint32 running_jobs = 2;
 }
 
+// DockerRuntimeMetadata provides information about a Docker-based runtime
+message DockerRuntimeMetadata {
+  // Image reference (e.g., "docker.io/library/ubuntu:20.04")
+  string image = 1;
+
+  // SHA256 digest of the Docker image (used for caching and verification)
+  Signature image_digest = 2;
+
+  // Optional: Base image reference (i.e. Ubuntu 20.04, without toolchain or recipe-specific layers)
+  optional string base_image = 3;
+
+  // Optional: Dockerfile recipe used to build this image (if available)
+  optional DockerfileRecipe recipe = 4;
+
+  // Optional: Runtime metadata of the linux native runtime that this Docker image replicates (if applicable)
+  optional LinuxNativeRuntimeMetadata linux_native_equivalent = 5;
+}
+
+// LinuxNativeRuntimeMetadata provides information about a native runtime on Linux
+message LinuxNativeRuntimeMetadata {
+  // Kernel version (e.g., "5.15.0-1051-azure")
+  string kernel_version = 1;
+  // C library (e.g., "glibc 2.31")
+  CRuntime c_library = 2;
+  // C library version (e.g., "2.31")
+  Version c_library_version = 3;
+  // CPU architecture (e.g., "x86_64")
+  CpuArchitecture cpu_architecture = 4;
+  // Linux distribution (e.g., "Ubuntu 20.04")
+  string linux_distribution = 5;
+  // Linux distribution version (e.g., "20.04")
+  Version linux_distribution_version = 6;
+}
+
+// RuntimeMetadata provides information about how to build or replicate a runtime
+message RuntimeMetadata {
+  oneof metadata {
+    DockerRuntimeMetadata docker = 1;
+    LinuxNativeRuntimeMetadata linux_native = 2;
+  }
+}
+
 // Runtime represents an executable environment where jobs run.
 // Contains the toolchain specification (C++, Go, Rust, etc.) and resource constraints.
 message Runtime {
@@ -170,8 +230,8 @@ message Runtime {
   // Whether this runtime is available natively on the peer (vs. Docker-only)
   bool is_native = 23;
 
-  // If Docker-based: Docker image digest (sha256:...)
-  string docker_image_digest = 24;
+  // If Docker-based: Docker image digest
+  optional Signature docker_image_digest = 24;
 
   // Current load and utilization of the runtime
   RuntimeLoad load = 25;

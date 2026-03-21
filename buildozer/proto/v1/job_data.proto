@@ -5,7 +5,7 @@ package buildozer.proto.v1;
 import "buildozer/proto/v1/runtime.proto";
 import "buildozer/proto/v1/vocabulary.proto";
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // JobData is a generic abstraction for both inputs and outputs of jobs.
 // Can be a file, directory, stream, or reference to another artifact.
@@ -17,13 +17,18 @@ message JobData {
   // Size of data
   Size size = 2;
 
-  // Data type (determines which oneof is used)
+  // Type of data (file, directory, stream chunk, reference)
   enum DataType {
+    // Unspecified data type
     DATA_TYPE_UNSPECIFIED = 0;
+    // Single file
     DATA_TYPE_FILE = 1;
+    // Directory with multiple files and subdirectories
     DATA_TYPE_DIRECTORY = 2;
-    DATA_TYPE_STREAM = 3;
-    DATA_TYPE_REFERENCE = 4; // Pointer to another artifact (e.g., from cache)
+    // Chunk of streaming data
+    DATA_TYPE_STREAM_CHUNK = 3;
+    // Reference to data stored elsewhere (e.g., in cache)
+    DATA_TYPE_REFERENCE = 4;
   }
   DataType type = 3;
 
@@ -82,9 +87,6 @@ message DirectoryJobData {
 
   // Total size of all files in directory
   Size total_size = 3;
-
-  // Directory permissions (unix mode)
-  uint32 mode = 4;
 }
 
 // StreamChunk represents a chunk of streaming data
@@ -114,17 +116,20 @@ message StreamChunk {
 
 // JobDataReference points to a previously stored artifact in cache
 message JobDataReference {
-  // ID of referenced data (usually content hash)
-  string referenced_data_id = 1;
+  // Data unique ID (i.e. full path of file or directory)
+  string id = 1;
 
-  // Which peer(s) have this data cached?
-  repeated string peer_ids_with_data = 2;
+  // Size of referenced data (bytes)
+  Size size = 2;
 
-  // How to retrieve it (e.g., "gRPC", "HTTP", "local")
-  string retrieval_method = 3;
+  // Type of referenced data (file, directory, etc)
+  JobData.DataType type = 3;
 
-  // Optional: Peer endpoint for direct fetch
-  ApiUri peer_uri = 4;
+  // Hash of referenced data (for verification and cache lookup)
+  Hash hash = 4;
+
+  // Which peer has this data? (for direct fetch)
+  optional string peer_id = 5;
 }
 
 // RetentionPolicy controls how long data is kept in cache

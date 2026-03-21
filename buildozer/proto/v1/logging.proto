@@ -1,0 +1,300 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// LoggingService provides RPC methods for managing client daemon logging configuration
+// This service is used by the CLI to:
+// - View current logging configuration
+// - Dynamically change global logging level
+// - Change logging levels for specific loggers
+// - Change logging levels for specific sinks
+// - Enable/disable logger-specific file sinks
+service LoggingService {
+  // GetLoggingStatus returns current logging configuration and status
+  rpc GetLoggingStatus(GetLoggingStatusRequest) returns (GetLoggingStatusResponse);
+
+  // SetGlobalLevel changes the global logging level for all loggers/sinks
+  rpc SetGlobalLevel(SetGlobalLevelRequest) returns (SetGlobalLevelResponse);
+
+  // SetLoggerLevel changes the logging level for a specific logger
+  rpc SetLoggerLevel(SetLoggerLevelRequest) returns (SetLoggerLevelResponse);
+
+  // SetSinkLevel changes the logging level for a specific sink
+  rpc SetSinkLevel(SetSinkLevelRequest) returns (SetSinkLevelResponse);
+
+  // EnableFileSink enables a file-based sink for a specific logger
+  rpc EnableFileSink(EnableFileSinkRequest) returns (EnableFileSinkResponse);
+
+  // DisableFileSink disables a file-based sink for a specific logger
+  rpc DisableFileSink(DisableFileSinkRequest) returns (DisableFileSinkResponse);
+
+  // TailLogs streams log records in real-time (with optional filtering)
+  rpc TailLogs(TailLogsRequest) returns (stream TailLogsResponse);
+}
+
+// LogLevel represents the severity level of log messages
+enum LogLevel {
+  // Unspecified log level
+  LOG_LEVEL_UNSPECIFIED = 0;
+  // Error level - only errors
+  LOG_LEVEL_ERROR = 1;
+  // Warning level - warnings and above
+  LOG_LEVEL_WARN = 2;
+  // Info level - informational messages and above
+  LOG_LEVEL_INFO = 3;
+  // Debug level - detailed debugging information
+  LOG_LEVEL_DEBUG = 4;
+  // Trace level - very detailed tracing information
+  LOG_LEVEL_TRACE = 5;
+}
+
+// SinkType represents the type of logging sink
+enum SinkType {
+  // Unspecified sink type
+  SINK_TYPE_UNSPECIFIED = 0;
+  // Standard output stream
+  SINK_TYPE_STDOUT = 1;
+  // Standard error stream
+  SINK_TYPE_STDERR = 2;
+  // File-based sink with rotation
+  SINK_TYPE_FILE = 3;
+  // Syslog sink
+  SINK_TYPE_SYSLOG = 4;
+}
+
+// SinkConfig represents configuration for a logging sink
+message SinkConfig {
+  // Sink name (unique identifier)
+  string name = 1;
+
+  // Sink type
+  SinkType type = 2;
+
+  // Logging level for this sink
+  LogLevel level = 3;
+
+  // File-specific configuration (only relevant for SINK_TYPE_FILE)
+  message FileConfig {
+    // Absolute path to log file
+    string path = 1;
+
+    // Maximum file size in bytes before rotation (0 = no limit)
+    int64 max_size_bytes = 2;
+
+    // Maximum number of rotated backup files to keep (0 = unlimited)
+    int32 max_backups = 3;
+
+    // Maximum age of log files in days before deletion (0 = no age-based rotation)
+    int32 max_age_days = 4;
+
+    // Whether to use JSON format for log entries
+    bool json_format = 5;
+  }
+
+  // File configuration (optional, only for file sinks)
+  optional FileConfig file_config = 4;
+
+  // Syslog-specific configuration (only relevant for SINK_TYPE_SYSLOG)
+  message SyslogConfig {
+    // Tag to prepend to syslog messages
+    string tag = 1;
+  }
+
+  // Syslog configuration (optional, only for syslog sinks)
+  optional SyslogConfig syslog_config = 5;
+}
+
+// LoggerConfig represents configuration for a named logger
+message LoggerConfig {
+  // Logger name (hierarchical, e.g., "buildozer", "buildozer.runtime")
+  string name = 1;
+
+  // List of sink names this logger outputs to
+  repeated string sink_names = 2;
+}
+
+// LoggingStatus represents the current logging configuration state
+message LoggingStatus {
+  // Global logging level (applies to all loggers/sinks)
+  LogLevel global_level = 1;
+
+  // All configured sinks
+  repeated SinkConfig sinks = 2;
+
+  // All configured loggers
+  repeated LoggerConfig loggers = 3;
+
+  // Timestamp of when this configuration was retrieved
+  TimeStamp retrieved_at = 4;
+}
+
+// GetLoggingStatusRequest requests the current logging configuration
+message GetLoggingStatusRequest {
+  // No parameters needed
+}
+
+// GetLoggingStatusResponse returns the current logging configuration
+message GetLoggingStatusResponse {
+  // Current logging configuration status
+  LoggingStatus status = 1;
+}
+
+// SetGlobalLevelRequest changes the global logging level
+message SetGlobalLevelRequest {
+  // New global logging level
+  LogLevel level = 1;
+}
+
+// SetGlobalLevelResponse confirms the global level change
+message SetGlobalLevelResponse {
+  // New global logging level
+  LogLevel level = 1;
+
+  // Number of loggers affected by this change
+  uint32 affected_loggers = 2;
+
+  // Timestamp of when the change was applied
+  TimeStamp updated_at = 3;
+}
+
+// SetLoggerLevelRequest changes the logging level for a specific logger
+message SetLoggerLevelRequest {
+  // Logger name (e.g., "buildozer", "buildozer.runtime")
+  string logger_name = 1;
+
+  // New logging level for this logger
+  LogLevel level = 2;
+}
+
+// SetLoggerLevelResponse confirms the logger level change
+message SetLoggerLevelResponse {
+  // Logger name
+  string logger_name = 1;
+
+  // New logging level
+  LogLevel level = 2;
+
+  // Whether an existing logger was updated or a new logger was created
+  bool created_new_logger = 3;
+
+  // Timestamp of when the change was applied
+  TimeStamp updated_at = 4;
+}
+
+// SetSinkLevelRequest changes the logging level for a specific sink
+message SetSinkLevelRequest {
+  // Sink name (e.g., "stdout", "stderr", "file_sink_1")
+  string sink_name = 1;
+
+  // New logging level for this sink
+  LogLevel level = 2;
+}
+
+// SetSinkLevelResponse confirms the sink level change
+message SetSinkLevelResponse {
+  // Sink name
+  string sink_name = 1;
+
+  // New logging level
+  LogLevel level = 2;
+
+  // Timestamp of when the change was applied
+  TimeStamp updated_at = 3;
+}
+
+// EnableFileSinkRequest enables a file-based sink for a logger
+message EnableFileSinkRequest {
+  // Logger name to attach the sink to
+  string logger_name = 1;
+
+  // Absolute path to the log file
+  string file_path = 2;
+
+  // Maximum file size in bytes before rotation (0 = no limit, default 104857600 = 100MB)
+  int64 max_size_bytes = 3;
+
+  // Maximum number of rotated backup files to keep (0 = unlimited, default 10)
+  int32 max_backups = 4;
+
+  // Maximum age of log files in days before deletion (0 = no age-based rotation, default 0)
+  int32 max_age_days = 5;
+
+  // Whether to use JSON format for log entries
+  bool json_format = 6;
+}
+
+// EnableFileSinkResponse confirms that a file sink was created
+message EnableFileSinkResponse {
+  // Generated sink name
+  string sink_name = 1;
+
+  // Logger name that the sink was attached to
+  string logger_name = 2;
+
+  // File path being used
+  string file_path = 3;
+
+  // Timestamp of when the sink was created
+  TimeStamp created_at = 4;
+}
+
+// DisableFileSinkRequest disables a file-based sink for a logger
+message DisableFileSinkRequest {
+  // Logger name with the sink attached
+  string logger_name = 1;
+
+  // Optional specific sink name to remove; if empty, removes the most recent file sink
+  optional string sink_name = 2;
+}
+
+// DisableFileSinkResponse confirms that a file sink was removed
+message DisableFileSinkResponse {
+  // Logger name
+  string logger_name = 1;
+
+  // Removed sink name
+  string sink_name = 2;
+
+  // File path that was removed (if applicable)
+  optional string file_path = 3;
+
+  // Timestamp of when the sink was removed
+  TimeStamp removed_at = 4;
+}
+
+// TailLogsRequest requests to stream log records in real-time
+message TailLogsRequest {
+  // Log levels to filter (empty = all levels)
+  repeated LogLevel levels = 1;
+
+  // Logger name filter (empty = all loggers, supports wildcards like "buildozer*")
+  string logger_filter = 2;
+
+  // Number of historical log lines to retrieve before streaming new ones
+  int32 history_lines = 3;
+
+  // Whether to stream new logs after history
+  bool follow = 4;
+}
+
+// TailLogsResponse represents a single log record in the stream
+message TailLogsResponse {
+  // Timestamp when the log was created
+  TimeStamp timestamp = 1;
+
+  // Logger name that produced this log
+  string logger_name = 2;
+
+  // Log level
+  LogLevel level = 3;
+
+  // Log message
+  string message = 4;
+
+  // Additional fields (JSON encoded for flexibility)
+  map<string, string> attributes = 5;
+}

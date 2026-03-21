@@ -1,0 +1,333 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/discovery.proto";
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/job_data.proto";
+import "buildozer/proto/v1/runtime.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// IntrospectionService is the API used by tools/CLI/web UI to query client state
+// This service provides visibility into:
+// - Client configuration and capabilities
+// - Job queue status and history
+// - Peer network information
+// - Cache statistics and contents
+// - Structured logging with remote tail
+service IntrospectionService {
+  // GetClientStatus returns comprehensive information about the client
+  rpc GetClientStatus(GetClientStatusRequest) returns (GetClientStatusResponse);
+
+  // ListPeers lists all known peers in the network
+  rpc ListPeers(ListPeersRequest) returns (ListPeersResponse);
+
+  // GetPeerInfo returns detailed information about a specific peer
+  rpc GetPeerInfo(GetPeerInfoRequest) returns (GetPeerInfoResponse);
+
+  // QueryLogs retrieves structured logs from this client (with remote tail capability)
+  rpc QueryLogs(QueryLogsRequest) returns (stream QueryLogsResponse);
+
+  // GetCacheStatus returns statistics about the local cache
+  rpc GetCacheStatus(GetCacheStatusRequest) returns (GetCacheStatusResponse);
+
+  // ListCachedArtifacts lists artifacts stored in the local cache
+  rpc ListCachedArtifacts(ListCachedArtifactsRequest) returns (ListCachedArtifactsResponse);
+
+  // GetJobQueue returns the current job queue state and statistics
+  rpc GetJobQueue(GetJobQueueRequest) returns (GetJobQueueResponse);
+
+  // GetJobHistory returns historical job execution data
+  rpc GetJobHistory(GetJobHistoryRequest) returns (GetJobHistoryResponse);
+}
+
+// GetClientStatusRequest queries overall client state
+message GetClientStatusRequest {
+  // Optional: include detailed statistics
+  bool include_stats = 1;
+}
+
+// GetClientStatusResponse returns comprehensive client information
+message GetClientStatusResponse {
+  // Unique client ID
+  string client_id = 1;
+
+  // Client hostname
+  string hostname = 2;
+
+  // Client startup time
+  buildozer.proto.v1.TimeStamp started_at = 3;
+
+  // Is the client currently accepting new jobs?
+  bool accepting_jobs = 4;
+
+  // Number of currently running jobs
+  uint32 running_jobs_count = 5;
+
+  // Number of queued jobs waiting for execution
+  uint32 queued_jobs_count = 6;
+
+  // Client resource constraints
+  ResourceConstraints resource_constraints = 7;
+
+  // Current client load
+  CurrentLoad current_load = 8;
+
+  // Supported runtimes on this client
+  repeated buildozer.proto.v1.Runtime available_runtimes = 9;
+
+  // Build timestamp of buildozer binary
+  string buildozer_version = 10;
+
+  // Protocol version supported
+  string protocol_version = 11;
+}
+
+// ResourceConstraints describes client resource limits
+message ResourceConstraints {
+  // Maximum CPU cores available
+  uint32 max_cpu_cores = 1;
+
+  // Maximum memory (MB)
+  uint32 max_memory_mb = 2;
+
+  // Maximum concurrent jobs
+  uint32 max_concurrent_jobs = 3;
+
+  // Maximum disk cache size (MB)
+  uint32 max_cache_disk_mb = 4;
+}
+
+// CurrentLoad describes current resource utilization
+message CurrentLoad {
+  // Current CPU utilization percentage (0-100)
+  buildozer.proto.v1.Percentage current_cpu_percent = 1;
+
+  // Current memory utilization percentage (0-100)
+  buildozer.proto.v1.Percentage current_memory_percent = 2;
+
+  // Current disk cache usage percentage (0-100)
+  buildozer.proto.v1.Percentage current_cache_percent = 3;
+}
+
+// ListPeersRequest lists known peers
+message ListPeersRequest {
+  // Only return peers with these runtime capabilities (filter)
+  repeated buildozer.proto.v1.Runtime filter_by_runtime = 1;
+}
+
+// ListPeersResponse returns peer list
+message ListPeersResponse {
+  // List of known peers
+  repeated PeerInfo peers = 1;
+}
+
+// GetPeerInfoRequest queries information about a specific peer
+message GetPeerInfoRequest {
+  // Peer ID
+  string peer_id = 1;
+}
+
+// GetPeerInfoResponse returns detailed peer information
+message GetPeerInfoResponse {
+  // Peer information
+  PeerInfo peer_info = 1;
+}
+
+// QueryLogsRequest retrieves structured logs
+message QueryLogsRequest {
+  // Log levels to include (empty = all levels)
+  repeated string levels = 1; // "error", "warn", "info", "debug", "trace"
+
+  // Component filter (e.g., "scheduler", "executor", regex patterns)
+  string component_filter = 2;
+
+  // Number of most recent log lines to retrieve
+  uint32 tail = 3;
+
+  // Stream logs in real-time after initial results?
+  bool follow = 4;
+
+  // Optional: only return logs after this timestamp
+  buildozer.proto.v1.TimeStamp since = 5;
+
+  // Optional: only return logs before this timestamp
+  buildozer.proto.v1.TimeStamp until = 6;
+
+  // Search string (substring match in log message)
+  string search = 7;
+}
+
+// LogEntry is a single structured log line
+message LogEntry {
+  // Log level
+  string level = 1;
+
+  // Component name
+  string component = 2;
+
+  // Log message
+  string message = 3;
+
+  // Timestamp of log entry
+  buildozer.proto.v1.TimeStamp timestamp = 4;
+
+  // Structured fields (JSON-like)
+  map<string, string> fields = 5;
+}
+
+// QueryLogsResponse returns log entries (streamed)
+message QueryLogsResponse {
+  // A single log entry
+  LogEntry entry = 1;
+}
+
+// GetCacheStatusRequest queries cache statistics
+message GetCacheStatusRequest {
+  // unused
+}
+
+// CacheStatistics contains cache info
+message CacheStatistics {
+  // Total artifacts stored in cache
+  uint32 artifact_count = 1;
+
+  // Total cache size (MB)
+  uint32 total_size_mb = 2;
+
+  // Percentage of cache disk used
+  buildozer.proto.v1.Percentage usage_percent = 3;
+
+  // Number of cache hits since startup
+  uint64 cache_hits = 4;
+
+  // Number of cache misses since startup
+  uint64 cache_misses = 5;
+
+  // Cache hit rate (hits / (hits + misses))
+  double hit_rate = 6;
+
+  // Oldest artifact timestamp (LRU eviction target)
+  buildozer.proto.v1.TimeStamp oldest_artifact = 7;
+}
+
+// GetCacheStatusResponse returns cache statistics
+message GetCacheStatusResponse {
+  // Cache statistics
+  CacheStatistics stats = 1;
+}
+
+// ListCachedArtifactsRequest lists cached artifacts
+message ListCachedArtifactsRequest {
+  // Filter by hash algorithm (empty = all)
+  repeated string hash_algorithms = 1;
+
+  // Only return artifacts newer than this time
+  buildozer.proto.v1.TimeStamp newer_than = 2;
+
+  // Only return artifacts older than this time
+  buildozer.proto.v1.TimeStamp older_than = 3;
+
+  // Pagination: offset
+  uint32 offset = 4;
+
+  // Pagination: limit
+  uint32 limit = 5;
+}
+
+// CachedArtifact describes a single cached artifact
+message CachedArtifact {
+  // Artifact hash
+  buildozer.proto.v1.Hash hash = 1;
+
+  // Artifact size
+  buildozer.proto.v1.Size size = 2;
+
+  // Time cached
+  buildozer.proto.v1.TimeStamp cached_at = 3;
+
+  // Last accessed time (for LRU)
+  buildozer.proto.v1.TimeStamp last_accessed = 4;
+
+  // Retention policy for this artifact
+  buildozer.proto.v1.RetentionPolicy retention_policy = 5;
+}
+
+// ListCachedArtifactsResponse lists cached artifacts
+message ListCachedArtifactsResponse {
+  // List of cached artifacts
+  repeated CachedArtifact artifacts = 1;
+
+  // Total count of artifacts (for pagination)
+  uint32 total_count = 2;
+}
+
+// GetJobQueueRequest queries the job queue
+message GetJobQueueRequest {
+  // unused
+}
+
+// QueuedJobInfo describes a job in the queue
+message QueuedJobInfo {
+  // Job ID
+  string job_id = 1;
+
+  // Job status
+  buildozer.proto.v1.JobProgress progress = 2;
+
+  // Time in queue (ms)
+  buildozer.proto.v1.TimeDuration time_in_queue = 3;
+
+  // Queue position (lowest = highest priority)
+  uint32 queue_position = 4;
+}
+
+// GetJobQueueResponse returns queue information
+message GetJobQueueResponse {
+  // Queued jobs
+  repeated QueuedJobInfo queued_jobs = 1;
+
+  // Number of running jobs
+  uint32 running_jobs_count = 2;
+
+  // Total queue size
+  uint32 queue_size = 3;
+}
+
+// GetJobHistoryRequest queries historical job data
+message GetJobHistoryRequest {
+  // Number of jobs to retrieve
+  uint32 limit = 1;
+
+  // Only return jobs from the last N seconds
+  uint32 last_n_seconds = 2;
+
+  // Filter by job status
+  repeated string statuses = 3; // "RUNNING", "COMPLETED", "FAILED", etc.
+}
+
+// HistoricalJobInfo describes a completed/failed job
+message HistoricalJobInfo {
+  // Job ID
+  string job_id = 1;
+
+  // Final job status
+  buildozer.proto.v1.JobResult result = 2;
+
+  // Execution statistics
+  buildozer.proto.v1.JobStatistics statistics = 3;
+
+  // Which peer executed this job
+  string executed_on_peer_id = 4;
+
+  // Total execution time
+  buildozer.proto.v1.TimeDuration total_time = 5;
+}
+
+// GetJobHistoryResponse returns historical job data
+message GetJobHistoryResponse {
+  // Historical jobs
+  repeated HistoricalJobInfo jobs = 1;
+}

@@ -15,11 +15,12 @@
         "llvm-vs-code-extensions.clangd",
         "ms-vscode.cmake-tools",
         "ms-vscode-remote.vscode-remote-extensionpack",
-        "GitHub.copilot",
+        "GitHub.copilot-chat",
         "eamodio.gitlens",
         "bungcip.better-toml",
         "rust-lang.rust-analyzer",
-        "bufbuild.vscode-buf"
+        "bufbuild.vscode-buf",
+        "Anthropic.claude-code"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh",
@@ -60,7 +61,7 @@
       }
     }
   },
-  "postCreateCommand": "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/bufbuild/buf/cmd/buf@v1.40.1",
+  "postCreateCommand": "go mod download && go install -tags tools ./... && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/bufbuild/buf/cmd/buf@v1.40.1",
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],

@@ -2,8 +2,10 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 )
 
 // ComponentLogger wraps logging functionality with a component tag
@@ -67,6 +69,23 @@ func (cl *ComponentLogger) WarnCtx(ctx context.Context, msg string, args ...any)
 // Error logs an error message with component tag
 func (cl *ComponentLogger) Error(msg string, args ...any) {
 	slog.Default().Error(msg, append([]any{"component", cl.component}, args...)...)
+}
+
+// Errorf logs a formatted error message with component tag and returns it as an error
+func (cl *ComponentLogger) Errorf(format string, args ...any) error {
+	err := fmt.Errorf(format, args...)
+	cl.Error(err.Error())
+	return err
+}
+
+// Panicf logs a formatted error message with component tag and panics
+func (cl *ComponentLogger) Panicf(format string, args ...any) {
+	var backtrace [4096]byte
+	n := runtime.Stack(backtrace[:], false)
+	err := fmt.Errorf(format, args...)
+	msg := fmt.Sprintf("panic: %s\nStack trace:\n%s", err.Error(), string(backtrace[:n]))
+	slog.Default().Error(msg, "component", cl.component)
+	panic(err.Error())
 }
 
 // ErrorCtx logs an error message with context and component tag

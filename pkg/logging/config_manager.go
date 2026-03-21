@@ -55,6 +55,7 @@ type SinkStatus struct {
 type LoggerStatus struct {
 	Name      string
 	SinkNames []string
+	Level     slog.Level
 }
 
 // LogRecord represents a single log record
@@ -101,10 +102,11 @@ func (m *LocalConfigManager) GetLoggingStatus(ctx context.Context) (*LoggingStat
 	}
 
 	// Get all loggers from configuration
-	for name, sinkNames := range m.registry.loggerConfigs {
+	for name, config := range m.registry.loggerConfigs {
 		loggerStatus := LoggerStatus{
 			Name:      name,
-			SinkNames: sinkNames,
+			SinkNames: config.sinkNames,
+			Level:     config.level,
 		}
 		snapshot.Loggers = append(snapshot.Loggers, loggerStatus)
 	}

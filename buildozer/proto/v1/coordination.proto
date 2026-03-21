@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/job_data.proto";
+import "buildozer/proto/v1/network_messages.proto";
+import "buildozer/proto/v1/runtime.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// CoordinationService handles P2P coordination for distributed scheduling, caching, and error handling
+// This service is used by clients to coordinate with other clients for:
+// - Distributed job scheduling (quorum-based)
+// - Cache queries and artifact location
+// - Error broadcast and synchronization
+service CoordinationService {
+  // QueryCache asks: do you have this artifact in your cache?
+  // Used by clients to locate cached artifacts across the network
+  rpc QueryCache(QueryCacheRequest) returns (QueryCacheResponse);
+
+  // BroadcastCacheAnnouncement announces a newly cached artifact to all peers
+  // Used by clients to inform the network about new cached results
+  rpc BroadcastCacheAnnouncement(BroadcastCacheAnnouncementRequest) returns (BroadcastCacheAnnouncementResponse);
+
+  // BroadcastError broadcasts a job error to all peers (for quorum synchronization)
+  // Used to ensure all peers agree on job failure
+  rpc BroadcastError(BroadcastErrorRequest) returns (BroadcastErrorResponse);
+
+  // ProposeSchedule proposes scheduling a job to a target peer
+  // Other peers vote; if majority agree, job is scheduled
+  rpc ProposeSchedule(ProposeScheduleRequest) returns (ProposeScheduleResponse);
+
+  // CommitSchedule finalizes a scheduling decision after quorum agreement
+  // Used to confirm the scheduling after voting
+  rpc CommitSchedule(CommitScheduleRequest) returns (CommitScheduleResponse);
+}
+
+// QueryCacheRequest asks if a peer has an artifact
+message QueryCacheRequest {
+  // Artifact hash to query
+  buildozer.proto.v1.Hash hash = 1;
+
+  // Expected artifact size
+  buildozer.proto.v1.Size expected_size = 2;
+
+  // Requesting peer ID
+  string requester_peer_id = 3;
+}
+
+// QueryCacheResponse indicates cache hit status
+message QueryCacheResponse {
+  // Does this peer have the artifact?
+  bool has_artifact = 1;
+
+  // If not, do you know which peer has it?
+  string peer_id_with_artifact = 2;
+
+  // Hash of the artifact (for verification)
+  buildozer.proto.v1.Hash artifact_hash = 3;
+
+  // Artifact size
+  buildozer.proto.v1.Size artifact_size = 4;
+
+  // API endpoint to fetch from (if has_artifact)
+  buildozer.proto.v1.ApiUri fetch_uri = 5;
+}
+
+// BroadcastCacheAnnouncementRequest announces a cached artifact
+message BroadcastCacheAnnouncementRequest {
+  // Hash of newly cached artifact
+  buildozer.proto.v1.Hash artifact_hash = 1;
+
+  // Size of artifact
+  buildozer.proto.v1.Size artifact_size = 2;
+
+  // Peer announcing the cache hit
+  string announcing_peer_id = 3;
+
+  // Timestamp of cache insertion
+  buildozer.proto.v1.TimeStamp cached_at = 4;
+
+  // Retention policy for this artifact
+  buildozer.proto.v1.RetentionPolicy retention_policy = 5;
+
+  // Optional: Job that produced this artifact
+  string job_id = 6;
+
+  // Optional: Runtime that produced this artifact
+  buildozer.proto.v1.Runtime produced_by_runtime = 7;
+}
+
+// BroadcastCacheAnnouncementResponse confirms announcement receipt
+message BroadcastCacheAnnouncementResponse {
+  // Was announcement successful?
+  bool success = 1;
+
+  // Error message if unsuccessful
+  string error_message = 2;
+
+  // Number of peers that acknowledged the announcement
+  uint32 peers_acknowledged = 3;
+}
+
+// BroadcastErrorRequest broadcasts a job error to all peers
+message BroadcastErrorRequest {
+  // Job ID that failed
+  string job_id = 1;
+
+  // Error information
+  buildozer.proto.v1.JobErrorMessage error = 2;
+
+  // Peer that detected the error
+  string error_detecting_peer_id = 3;
+
+  // Timestamp of error
+  buildozer.proto.v1.TimeStamp error_timestamp = 4;
+}
+
+// BroadcastErrorResponse confirms error broadcast receipt
+message BroadcastErrorResponse {
+  // Was broadcast successful?
+  bool success = 1;
+
+  // Error message if unsuccessful
+  string error_message = 2;
+
+  // Number of peers that acknowledged the error
+  uint32 peers_acknowledged = 3;
+}
+
+// ProposeScheduleRequest proposes scheduling a job to a target peer
+message ProposeScheduleRequest {
+  // Job to schedule
+  buildozer.proto.v1.Job job = 1;
+
+  // Target peer ID (the peer we want to execute this job)
+  string target_peer_id = 2;
+
+  // Proposing peer ID (usually the source client)
+  string proposer_peer_id = 3;
+
+  // Proposal ID (unique per scheduling decision, for tracking)
+  string proposal_id = 4;
+
+  // Proposal timestamp
+  buildozer.proto.v1.TimeStamp proposed_at = 5;
+}
+
+// ProposeScheduleResponse indicates voting result for scheduling proposal
+message ProposeScheduleResponse {
+  // Does this peer agree with the proposal?
+  bool agreed = 1;
+
+  // Reason for agreement/disagreement
+  string reason = 2;
+
+  // Peer ID of responder
+  string responder_peer_id = 3;
+
+  // Current load of this peer (helps in decision-making)
+  buildozer.proto.v1.Percentage current_load_percent = 4;
+}
+
+// CommitScheduleRequest finalizes a scheduling decision
+message CommitScheduleRequest {
+  // Job ID being scheduled
+  string job_id = 1;
+
+  // Target peer ID (executor)
+  string target_peer_id = 2;
+
+  // Proposal ID that was voted on
+  string proposal_id = 3;
+
+  // Committing peer ID
+  string committer_peer_id = 4;
+
+  // Timestamp of commit
+  buildozer.proto.v1.TimeStamp committed_at = 5;
+}
+
+// CommitScheduleResponse confirms scheduling finalization
+message CommitScheduleResponse {
+  // Was commit successful?
+  bool success = 1;
+
+  // Error message if unsuccessful
+  string error_message = 2;
+
+  // Expected execution start time
+  buildozer.proto.v1.TimeStamp expected_start_time = 3;
+}

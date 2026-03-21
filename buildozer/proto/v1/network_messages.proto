@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package buildozer.proto.v1;
 
+import "buildozer/proto/v1/discovery.proto";
 import "buildozer/proto/v1/job.proto";
 import "buildozer/proto/v1/job_data.proto";
-import "buildozer/proto/v1/runtime.proto";
 import "buildozer/proto/v1/vocabulary.proto";
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // NetworkMessage is the top-level envelope for all P2P communication.
 // Each message includes metadata (ID, sender, timestamp) and a payload.
@@ -84,21 +84,6 @@ message PeerGoodbye {
   string reason = 3;
 }
 
-// PeerCapabilities describes what a peer can do
-message PeerCapabilities {
-  // Available runtimes (toolchains)
-  repeated Runtime available_runtimes = 1;
-
-  // Resource constraints
-  ResourceLimit resources = 2;
-
-  // Cache size used (bytes)
-  Size cache_size = 6;
-
-  // Software version
-  Version buildozer_version = 7;
-}
-
 // JobSubmissionMessage submits a job for execution
 message JobSubmissionMessage {
   // The job to execute (includes all inputs)
@@ -121,15 +106,24 @@ message JobErrorMessage {
 
   // Error type
   enum ErrorType {
-    ERROR_TYPE_UNSPECIFIED = 0; // No progress for timeout duration
-    ERROR_TYPE_TIMEOUT = 1; // No progress for timeout duration
-    ERROR_TYPE_EXECUTOR_FAILURE = 2; // Subprocess or container failed
-    ERROR_TYPE_NETWORK_FAILURE = 3; // Network communication error
-    ERROR_TYPE_RESOURCE_EXHAUSTION = 4; // Out of memory, CPU, etc.
-    ERROR_TYPE_PEER_CRASHED = 5; // Executing peer disappeared
-    ERROR_TYPE_CANCELLED_BY_USER = 6; // User cancelled job
-    ERROR_TYPE_DEPENDENCY_FAILED = 7; // A dependency job failed
-    ERROR_TYPE_NO_COMPATIBLE_RUNTIME = 8; // No peer has required runtime
+    // No progress for timeout duration
+    ERROR_TYPE_UNSPECIFIED = 0;
+    // No progress for timeout duration
+    ERROR_TYPE_TIMEOUT = 1;
+    // Subprocess or container failed
+    ERROR_TYPE_EXECUTOR_FAILURE = 2;
+    // Network communication error
+    ERROR_TYPE_NETWORK_FAILURE = 3;
+    // Out of memory, CPU, etc.
+    ERROR_TYPE_RESOURCE_EXHAUSTION = 4;
+    // Executing peer disappeared
+    ERROR_TYPE_PEER_CRASHED = 5;
+    // User cancelled job
+    ERROR_TYPE_CANCELLED_BY_USER = 6;
+    // A dependency job failed
+    ERROR_TYPE_DEPENDENCY_FAILED = 7;
+    // No peer has required runtime
+    ERROR_TYPE_NO_COMPATIBLE_RUNTIME = 8;
   }
   ErrorType error_type = 4;
 

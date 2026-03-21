@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/auth.proto";
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/job_data.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// ExecutorService handles job execution on remote peers
+// This is the P2P service used by clients to execute jobs on other clients
+service ExecutorService {
+  // ExecuteJob executes a job on this peer and streams progress back
+  // Used by scheduling clients to execute jobs on remote peers
+  rpc ExecuteJob(ExecuteJobRequest) returns (stream ExecuteJobResponse);
+
+  // FetchArtifact streams artifact data from this peer's cache
+  // Used by other clients to retrieve cached job outputs
+  rpc FetchArtifact(FetchArtifactRequest) returns (stream FetchArtifactResponse);
+}
+
+// ExecuteJobRequest requests job execution on a remote peer
+message ExecuteJobRequest {
+  // The job to execute
+  buildozer.proto.v1.Job job = 1;
+
+  // Client metadata (auth, tracing, etc.)
+  buildozer.proto.v1.RequestMetadata metadata = 2;
+
+  // Timeout for this job execution
+  buildozer.proto.v1.TimeDuration timeout = 3;
+}
+
+// ExecuteJobResponse streams job progress back to the requesting client
+message ExecuteJobResponse {
+  // Job execution progress
+  buildozer.proto.v1.JobProgress progress = 1;
+
+  // Output data (streamed as it becomes available)
+  buildozer.proto.v1.JobData output = 2;
+
+  // Final job result (sent when execution completes)
+  buildozer.proto.v1.JobResult result = 3;
+
+  // Execution statistics
+  buildozer.proto.v1.JobStatistics statistics = 4;
+}
+
+// FetchArtifactRequest requests artifact data from cache
+message FetchArtifactRequest {
+  // Artifact hash (unique identifier)
+  buildozer.proto.v1.Hash hash = 1;
+
+  // Expected artifact size (for validation)
+  buildozer.proto.v1.Size expected_size = 2;
+
+  // Timeout for the transfer
+  buildozer.proto.v1.TimeDuration timeout = 3;
+}
+
+// FetchArtifactResponse streams artifact data back
+message FetchArtifactResponse {
+  // Artifact data chunk
+  buildozer.proto.v1.JobData chunk = 1;
+
+  // Bytes transferred so far
+  uint64 bytes_transferred = 2;
+
+  // Is this the final chunk?
+  bool is_final = 3;
+}

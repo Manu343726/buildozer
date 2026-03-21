@@ -6,7 +6,7 @@ import "buildozer/proto/v1/job_data.proto";
 import "buildozer/proto/v1/runtime.proto";
 import "buildozer/proto/v1/vocabulary.proto";
 
-option go_package = "github.com/Manu343726/buildozer/buildozer/proto/v1";
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
 // Job is the generic base for all distributable work.
 // Each job has a runtime requirement and input/output specifications.
@@ -104,15 +104,24 @@ message JobProgress {
 
   // Current status
   enum JobStatus {
-    JOB_STATUS_UNSPECIFIED = 0; // In queue, waiting to be scheduled
-    JOB_STATUS_READY = 1; // All dependencies met, ready to run
-    JOB_STATUS_SCHEDULED = 2; // Assigned to a peer
-    JOB_STATUS_INPUT_TRANSFER = 3; // Inputs being transferred to executing peer
-    JOB_STATUS_RUNNING = 4; // Currently executing
-    JOB_STATUS_COMPLETED = 5; // Execution finished, outputs ready
-    JOB_STATUS_OUTPUT_TRANSFER = 6; // Outputs being transferred back to requesting client
-    JOB_STATUS_FAILED = 7; // Execution failed
-    JOB_STATUS_CANCELLED = 8; // Cancelled by user or due to dependency failure
+    // In queue, waiting to be scheduled
+    JOB_STATUS_UNSPECIFIED = 0;
+    // All dependencies met, ready to run
+    JOB_STATUS_READY = 1;
+    // Assigned to a peer
+    JOB_STATUS_SCHEDULED = 2;
+    // Inputs being transferred to executing peer
+    JOB_STATUS_INPUT_TRANSFER = 3;
+    // Currently executing
+    JOB_STATUS_RUNNING = 4;
+    // Execution finished, outputs ready
+    JOB_STATUS_COMPLETED = 5;
+    // Outputs being transferred back to requesting client
+    JOB_STATUS_OUTPUT_TRANSFER = 6;
+    // Execution failed
+    JOB_STATUS_FAILED = 7;
+    // Cancelled by user or due to dependency failure
+    JOB_STATUS_CANCELLED = 8;
   }
   JobStatus status = 2;
 
@@ -136,33 +145,51 @@ message JobTimings {
 
   // Phase time ranges: exact period when the job was in each state
   // Time ranges capture start and end times, handling any gaps naturally
-  TimeRange pending_time_range = 2; // Time from submission to READY
-  TimeRange ready_time_range = 3; // Time from READY to SCHEDULED
-  TimeRange scheduled_time_range = 4; // Time from SCHEDULED to INPUT_TRANSFER
-  TimeRange input_transfer_time_range = 5; // Time from INPUT_TRANSFER to RUNNING
-  TimeRange running_time_range = 6; // Time from RUNNING to COMPLETED
-  TimeRange completed_time_range = 7; // Time from COMPLETED to OUTPUT_TRANSFER
-  TimeRange output_transfer_time_range = 8; // Time from OUTPUT_TRANSFER to completion
+  // Time from submission to READY
+  TimeRange pending_time_range = 2;
+  // Time from READY to SCHEDULED
+  TimeRange ready_time_range = 3;
+  // Time from SCHEDULED to INPUT_TRANSFER
+  TimeRange scheduled_time_range = 4;
+  // Time from INPUT_TRANSFER to RUNNING
+  TimeRange input_transfer_time_range = 5;
+  // Time from RUNNING to COMPLETED
+  TimeRange running_time_range = 6;
+  // Time from COMPLETED to OUTPUT_TRANSFER
+  TimeRange completed_time_range = 7;
+  // Time from OUTPUT_TRANSFER to completion
+  TimeRange output_transfer_time_range = 8;
 
   // Terminal state timestamps (if applicable)
   // If a job fails or gets cancelled, these mark when that occurred
-  TimeStamp failed_at = 9; // Job failed (can occur at any phase)
-  TimeStamp cancelled_at = 10; // Job cancelled (can occur at any phase)
+  // Job failed (can occur at any phase)
+  TimeStamp failed_at = 9;
+  // Job cancelled (can occur at any phase)
+  TimeStamp cancelled_at = 10;
 
   // Phase durations: time spent in each state (derived from time ranges)
-  TimeDuration pending_duration = 11; // Duration of PENDING phase
-  TimeDuration ready_duration = 12; // Duration of READY phase
-  TimeDuration scheduled_duration = 13; // Duration of SCHEDULED phase
-  TimeDuration input_transfer_duration = 14; // Duration of INPUT_TRANSFER phase
-  TimeDuration running_duration = 15; // Duration of RUNNING phase
-  TimeDuration output_transfer_duration = 16; // Duration of OUTPUT_TRANSFER phase
+  // Duration of PENDING phase
+  TimeDuration pending_duration = 11;
+  // Duration of READY phase
+  TimeDuration ready_duration = 12;
+  // Duration of SCHEDULED phase
+  TimeDuration scheduled_duration = 13;
+  // Duration of INPUT_TRANSFER phase
+  TimeDuration input_transfer_duration = 14;
+  // Duration of RUNNING phase
+  TimeDuration running_duration = 15;
+  // Duration of OUTPUT_TRANSFER phase
+  TimeDuration output_transfer_duration = 16;
 
   // Total duration from submission to completion
-  TimeDuration total_duration = 17; // End-to-end time from submission to final state
+  // End-to-end time from submission to final state
+  TimeDuration total_duration = 17;
 
   // Optional metadata
-  TimeDuration wall_clock_duration = 18; // Total elapsed time (includes any gaps)
-  TimeDuration compute_duration = 19; // Actual execution time (running_duration)
+  // Total elapsed time (includes any gaps)
+  TimeDuration wall_clock_duration = 18;
+  // Actual execution time (running_duration)
+  TimeDuration compute_duration = 19;
 }
 
 // JobResult is the final output of a completed or failed job
@@ -172,9 +199,12 @@ message JobResult {
 
   // Final status
   enum JobStatus {
-    JOB_STATUS_UNSPECIFIED = 0; // Successfully completed and outputs fully delivered
-    JOB_STATUS_FAILED = 1; // Execution failed
-    JOB_STATUS_CANCELLED = 2; // Cancelled by user or due to dependency failure
+    // Successfully completed and outputs fully delivered
+    JOB_STATUS_UNSPECIFIED = 0;
+    // Execution failed
+    JOB_STATUS_FAILED = 1;
+    // Cancelled by user or due to dependency failure
+    JOB_STATUS_CANCELLED = 2;
   }
   JobStatus status = 2;
 
