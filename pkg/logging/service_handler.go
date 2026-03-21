@@ -72,9 +72,9 @@ func (h *loggingServiceHandler) SetGlobalLevel(ctx context.Context, req *connect
 
 	return &connect.Response[v1.SetGlobalLevelResponse]{
 		Msg: &v1.SetGlobalLevelResponse{
-			Level:            req.Msg.Level,
-			AffectedLoggers:  0, // TODO: Count affected loggers
-			UpdatedAt:        timeNowTimestamp(),
+			Level:           req.Msg.Level,
+			AffectedLoggers: 0, // TODO: Count affected loggers
+			UpdatedAt:       timeNowTimestamp(),
 		},
 	}, nil
 }

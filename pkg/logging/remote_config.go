@@ -155,10 +155,10 @@ func (m *RemoteConfigManager) TailLogs(ctx context.Context, logLevels []slog.Lev
 
 	stream, err := m.client.TailLogs(ctx, &connect.Request[v1.TailLogsRequest]{
 		Msg: &v1.TailLogsRequest{
-			Levels:        protoLevels,
-			LoggerFilter:  loggerFilter,
-			HistoryLines:  int32(historyLines),
-			Follow:        true,
+			Levels:       protoLevels,
+			LoggerFilter: loggerFilter,
+			HistoryLines: int32(historyLines),
+			Follow:       true,
 		},
 	})
 	if err != nil {

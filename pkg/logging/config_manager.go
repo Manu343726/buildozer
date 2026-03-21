@@ -44,11 +44,11 @@ type LoggingStatusSnapshot struct {
 
 // SinkStatus represents the status of a sink
 type SinkStatus struct {
-	Name      string
-	Type      string
-	Level     slog.Level
-	Path      string // Only for file sinks
-	JSONFormat bool  // Only for file sinks
+	Name       string
+	Type       string
+	Level      slog.Level
+	Path       string // Only for file sinks
+	JSONFormat bool   // Only for file sinks
 }
 
 // LoggerStatus represents the status of a logger
