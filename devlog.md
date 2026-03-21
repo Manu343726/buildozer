@@ -1624,4 +1624,120 @@ As development progresses, services will be registered in `daemon.NewServer()`:
 
 ---
 
+## Logger Attributes & Groups Support (2026-03-21)
+
+**Status:** ✅ COMPLETE
+
+**Enhancement Overview:**
+
+Updated Logger to fully support fixed attributes and groups, enabling loggers to carry context through their lifecycle.
+
+**Completed Features:**
+
+1. **WithAttrs() Now Fully Implemented**
+   - Accumulates attributes that are included in all subsequent log calls
+   - Returns a new Logger instance with accumulated attributes
+   - Attributes properly combined with message-level attributes
+   - Multiple WithAttrs() calls stack attributes
+
+2. **WithGroup() Now Fully Implemented**
+   - Sets a group context for all subsequent log calls
+   - Returns a new Logger instance with group set
+   - Group attributes properly scoped
+
+3. **Attribute Inheritance in Child Loggers**
+   - Child loggers inherit accumulated attributes from parents  
+   - Child can add additional attributes on top of inherited ones
+   - Full attribute hierarchy preserved through logger tree
+   - Example: parent with `user=alice` creates child that logs with `user=alice` + child's new attrs
+
+4. **Logger Struct Enhancements**
+   - Added `attrs []slog.Attr` field to track accumulated attributes
+   - Added `group string` field for group context
+   - Thread-safe with RWMutex for concurrent access
+
+5. **Logging Method Updates**
+   - `log()` method now combines accumulated attrs with varargs
+   - `logAttrs()` method appends accumulated attrs to provided attrs
+   - Both methods properly handle edge cases (no attrs, attrs + varargs, attrs + LogAttrs)
+   - Automatic conversion of varargs to slog.Attr when accumulated attrs present
+
+**Test Coverage:**
+
+Created comprehensive test suite in `logger_test.go`:
+- **TestLoggerWithAttrs**: Verifies basic WithAttrs() functionality
+  - Output: `user=alice id=42` properly included in messages
+- **TestLoggerWithGroup**: Verifies WithGroup() context setting
+- **TestLoggerHierarchy**: Verifies attribute accumulation through hierarchy
+  - Output shows all three levels: `env=prod type=postgres host=localhost`
+  - Demonstrates full attribute inheritance through nested Child() calls
+
+All tests pass with proper attribute accumulation verified in output.
+
+**Example Usage:**
+
+```go
+// Parent logger with environment
+appLog := registry.GetLogger("app").WithAttrs(slog.String("env", "prod"))
+
+// Database module inherits env, adds type
+dbLog := appLog.Child("db").WithAttrs(slog.String("type", "postgres"))
+
+// Postgres component inherits both, adds specific host
+pgLog := dbLog.Child("postgres").WithAttrs(slog.String("host", "localhost"))
+
+// All attributes present: env=prod type=postgres host=localhost
+pgLog.Info("connected")
+```
+
+**Technical Implementation Details:**
+
+1. **Child() Inheritance**
+   - Updated to copy parent's accumulated attrs and group to child
+   - Child loggers maintain full context from parent chain
+
+2. **Log Call Handling**
+   - Varargs form (msg, key1, val1, key2, val2...):
+     - If accumulated attrs: convert varargs to slog.Attr and combine
+     - If no accumulated attrs: use standard Log() call
+   - LogAttrs form: append accumulated attrs to provided attrs
+
+3. **Thread Safety**
+   - RWMutex protects attrs and group fields
+   - No race conditions in concurrent access
+   - Copy-on-write semantics for new logger instances
+
+**Files Modified:**
+
+- ✅ `pkg/logging/logger.go` — Enhanced Logger struct and methods (added ~80 lines)
+- ✅ `pkg/logging/logger_test.go` — NEW file with comprehensive tests (~160 lines)
+
+**Compilation & Validation:**
+
+- ✅ Full build succeeds: `go build ./cmd/buildozer-client`
+- ✅ All tests pass: 3/3 Logger attribute/group tests passing
+- ✅ Zero compiler errors or warnings
+- ✅ Proper attribute values verified in test output
+
+**Remaining TODOs:**
+
+1. ~~Implement fixed attributes support~~ ✅ DONE
+2. ~~Implement fixed group support~~ ✅ DONE
+3. Attribute Filtering — Consider filtering "_logger" attribute from final output
+4. Error Detection in Registry.Log() — Add error handling for failed sink writes
+5. Connection to Services:
+   - LoggingService integration with new Logger interface
+   - Remote config setting via logging.proto RPC
+   - Status queries via LoggerStatus proto
+6. Performance Validation — Benchmark attribute inheritance (if needed)
+
+**Next Steps:**
+
+1. ✅ Complete logger interface with attributes/groups (COMPLETE)
+2. → Move to Docker API abstraction (Milestone 1.0)
+3. → Implement native C/C++ toolchain detector (Milestone 1.1)
+4. → Implement Docker-based C/C++ runtime (Milestone 1.2)
+
+---
+
 ## Next Phase: Step 2 - Job & Runtime Abstractions
