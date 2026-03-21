@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"log/slog"
 	"testing"
+
+	"github.com/Manu343726/buildozer/pkg/logging/sinks"
 )
 
 // TestLoggerWithAttrs verifies that WithAttrs accumulates and applies attributes
@@ -11,8 +13,8 @@ func TestLoggerWithAttrs(t *testing.T) {
 	// Create a buffer to capture output
 	var buf bytes.Buffer
 
-	// Create a simple text handler
-	handler := slog.NewTextHandler(&buf, nil)
+	// Create an ordered text handler
+	handler := sinks.NewOrderedTextHandler(&buf, nil)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -75,7 +77,7 @@ func TestLoggerWithAttrs(t *testing.T) {
 // TestLoggerWithGroup verifies that WithGroup creates a group context
 func TestLoggerWithGroup(t *testing.T) {
 	var buf bytes.Buffer
-	handler := slog.NewTextHandler(&buf, nil)
+	handler := sinks.NewOrderedTextHandler(&buf, nil)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -103,7 +105,7 @@ func TestLoggerWithGroup(t *testing.T) {
 // TestLoggerHierarchy verifies that WithAttrs accumulates correctly through hierarchy
 func TestLoggerHierarchy(t *testing.T) {
 	var buf bytes.Buffer
-	handler := slog.NewTextHandler(&buf, nil)
+	handler := sinks.NewOrderedTextHandler(&buf, nil)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
