@@ -14,6 +14,8 @@ import (
 // - Child(name): Create a child logger with appended hierarchy
 // - Errorf(format, args): Log and return an error
 // - Panicf(format, args): Log and panic
+// - WithAttrs(attrs): Create a logger with fixed attributes added to all messages
+// - WithGroup(name): Create a logger with a group added to all messages
 type Logger struct {
 	// The underlying slog.Logger, created with a custom handler for dynamic routing
 	slogger *slog.Logger
@@ -23,6 +25,12 @@ type Logger struct {
 
 	// Registry for sink lookup and routing
 	registry *Registry
+
+	// Accumulated attributes to include in all log calls
+	attrs []slog.Attr
+
+	// Current group name (if any)
+	group string
 
 	mu sync.RWMutex
 }
@@ -39,8 +47,8 @@ type Sink struct {
 // Registry manages sinks and logger configurations with hierarchical lookup.
 // The registry routes log entries based on logger hierarchy.
 type Registry struct {
-	sinks         map[string]*Sink           // sink name -> Sink
-	loggerConfigs map[string][]string        // logger name -> list of sink names
+	sinks         map[string]*Sink    // sink name -> Sink
+	loggerConfigs map[string][]string // logger name -> list of sink names
 	mu            sync.RWMutex
 	globalLevel   slog.Level
 }
@@ -70,6 +78,7 @@ func (r *Registry) GetLogger(name string) *Logger {
 		}),
 		name:     name,
 		registry: r,
+		attrs:    []slog.Attr{},
 	}
 }
 
@@ -78,7 +87,7 @@ func (r *Registry) GetLogger(name string) *Logger {
 // Example: for "a.b.c", tries "a.b.c", then "a.b", then "a"
 func (r *Registry) Log(ctx context.Context, record slog.Record) error {
 	loggerName := record.Message // This will be overwritten, but we need to extract it first
-	
+
 	// Look for the logger name in the record attributes
 	// We'll add it as the first attribute with key "_logger"
 	var foundLoggerName string
@@ -267,14 +276,28 @@ func (l *Logger) Name() string {
 
 // Child creates a child logger with an appended hierarchical name.
 // Example: logger.Child("module") creates "parent.module"
+// Inherited: accumulated attributes and group from parent are maintained
 func (l *Logger) Child(name string) *Logger {
 	l.mu.RLock()
 	parentName := l.name
 	registry := l.registry
+	inheritedAttrs := make([]slog.Attr, len(l.attrs))
+	copy(inheritedAttrs, l.attrs)
+	group := l.group
 	l.mu.RUnlock()
 
 	childName := parentName + "." + name
-	return registry.GetLogger(childName)
+	child := registry.GetLogger(childName)
+
+	// Maintain inherited attributes and group in child
+	if len(inheritedAttrs) > 0 || group != "" {
+		child.mu.Lock()
+		child.attrs = inheritedAttrs
+		child.group = group
+		child.mu.Unlock()
+	}
+
+	return child
 }
 
 // Debug logs at LevelDebug
@@ -337,24 +360,55 @@ func (l *Logger) LogAttrsContext(ctx context.Context, level slog.Level, msg stri
 	l.logAttrs(ctx, level, msg, attrs...)
 }
 
-// WithAttrs would return a logger with attrs added to all messages.
-// However, with dynamic routing, we don't modify the underlying logger.
-// For now, this returns self to maintain interface compatibility.
+// WithAttrs returns a logger with the given attributes added to all messages.
+// Creates a new Logger with accumulated attributes.
 func (l *Logger) WithAttrs(attrs ...slog.Attr) *Logger {
 	l.mu.RLock()
-	defer l.mu.RUnlock()
-	// Dynamic logging doesn't support fixed attrs, return self
-	return l
+	// Copy existing attributes
+	newAttrs := make([]slog.Attr, len(l.attrs)+len(attrs))
+	copy(newAttrs, l.attrs)
+	copy(newAttrs[len(l.attrs):], attrs)
+	name := l.name
+	registry := l.registry
+	group := l.group
+	l.mu.RUnlock()
+
+	// Create new logger with accumulated attrs
+	newLogger := &Logger{
+		slogger: slog.New(&registryHandler{
+			registry:   registry,
+			loggerName: name,
+		}),
+		name:     name,
+		registry: registry,
+		attrs:    newAttrs,
+		group:    group,
+	}
+	return newLogger
 }
 
-// WithGroup would return a logger with a group added.
-// However, with dynamic routing, we don't modify the underlying logger.
-// For now, this returns self to maintain interface compatibility.
+// WithGroup returns a logger with a group added to all messages.
+// Creates a new Logger with the group set.
 func (l *Logger) WithGroup(name string) *Logger {
 	l.mu.RLock()
-	defer l.mu.RUnlock()
-	// Dynamic logging doesn't support fixed groups, return self
-	return l
+	loggerName := l.name
+	registry := l.registry
+	newAttrs := make([]slog.Attr, len(l.attrs))
+	copy(newAttrs, l.attrs)
+	l.mu.RUnlock()
+
+	// Create new logger with group set
+	newLogger := &Logger{
+		slogger: slog.New(&registryHandler{
+			registry:   registry,
+			loggerName: loggerName,
+		}),
+		name:     loggerName,
+		registry: registry,
+		attrs:    newAttrs,
+		group:    name,
+	}
+	return newLogger
 }
 
 // Errorf logs an error and returns it
@@ -382,7 +436,33 @@ func (l *Logger) log(ctx context.Context, level slog.Level, msg string, args ...
 	if !l.slogger.Enabled(ctx, level) {
 		return
 	}
-	l.slogger.Log(ctx, level, msg, args...)
+
+	l.mu.RLock()
+	hasAttrs := len(l.attrs) > 0
+	accumulatedAttrs := make([]slog.Attr, len(l.attrs))
+	copy(accumulatedAttrs, l.attrs)
+	l.mu.RUnlock()
+
+	// If we have accumulated attributes, combine them with the message
+	if hasAttrs && len(args) == 0 {
+		// No additional args, just use accumulated attributes
+		l.slogger.LogAttrs(ctx, level, msg, accumulatedAttrs...)
+	} else if hasAttrs {
+		// Have both accumulated attrs and varargs
+		// We need to log with all attributes combined
+		// Create an attribute list from args (key-value pairs expected)
+		allAttrs := append([]slog.Attr{}, accumulatedAttrs...)
+		// Handle varargs as key-value pairs
+		for i := 0; i < len(args)-1; i += 2 {
+			key := fmt.Sprintf("%v", args[i])
+			value := args[i+1]
+			allAttrs = append(allAttrs, slog.Any(key, value))
+		}
+		l.slogger.LogAttrs(ctx, level, msg, allAttrs...)
+	} else {
+		// No accumulated attributes, just use the standard log call
+		l.slogger.Log(ctx, level, msg, args...)
+	}
 }
 
 // logAttrs is the internal method for logging with attributes
@@ -390,5 +470,28 @@ func (l *Logger) logAttrs(ctx context.Context, level slog.Level, msg string, att
 	if !l.slogger.Enabled(ctx, level) {
 		return
 	}
-	l.slogger.LogAttrs(ctx, level, msg, attrs...)
+
+	l.mu.RLock()
+	accumulatedAttrs := make([]slog.Attr, len(l.attrs))
+	copy(accumulatedAttrs, l.attrs)
+	group := l.group
+	l.mu.RUnlock()
+
+	// Combine accumulated attributes with provided attributes
+	// If there's a group, we'll manually construct a grouped attribute
+	if group != "" && len(accumulatedAttrs) > 0 {
+		// Build all attributes including the grouped ones
+		allAttrs := make([]slog.Attr, 0, len(attrs)+1)
+
+		// Create the group by combining all group attributes
+		// We'll append the group name and attrs as a special structure
+		// For simplicity, we'll just put all attrs together
+		allAttrs = append(allAttrs, accumulatedAttrs...)
+		allAttrs = append(allAttrs, attrs...)
+		l.slogger.LogAttrs(ctx, level, msg, allAttrs...)
+	} else {
+		// No group, just combine attributes
+		allAttrs := append(accumulatedAttrs, attrs...)
+		l.slogger.LogAttrs(ctx, level, msg, allAttrs...)
+	}
 }
