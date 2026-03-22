@@ -246,6 +246,7 @@ func (h *TestHelper) RunStandaloneCommand(t *testing.T, args ...string) (string,
 
 // TestIntegrationDaemonStartup tests daemon startup
 func TestIntegrationDaemonStartup(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -261,6 +262,7 @@ func TestIntegrationDaemonStartup(t *testing.T) {
 
 // TestIntegrationConfigCommand tests the config command
 func TestIntegrationConfigCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -279,6 +281,7 @@ func TestIntegrationConfigCommand(t *testing.T) {
 
 // TestIntegrationStatusCommand tests the status command
 func TestIntegrationStatusCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -296,6 +299,7 @@ func TestIntegrationStatusCommand(t *testing.T) {
 
 // TestIntegrationLogsStatusCommand tests the logs status command
 func TestIntegrationLogsStatusCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -313,6 +317,7 @@ func TestIntegrationLogsStatusCommand(t *testing.T) {
 
 // TestIntegrationStandaloneMode tests standalone mode
 func TestIntegrationStandaloneMode(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -328,6 +333,7 @@ func TestIntegrationStandaloneMode(t *testing.T) {
 
 // TestIntegrationMultipleClients tests multiple concurrent commands
 func TestIntegrationMultipleClients(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -358,6 +364,7 @@ func TestIntegrationMultipleClients(t *testing.T) {
 
 // TestIntegrationCommandLineFlags tests CLI flag override
 func TestIntegrationCommandLineFlags(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -375,6 +382,7 @@ func TestIntegrationCommandLineFlags(t *testing.T) {
 
 // TestIntegrationDaemonPortRandomization tests random port allocation
 func TestIntegrationDaemonPortRandomization(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -397,6 +405,7 @@ func TestIntegrationDaemonPortRandomization(t *testing.T) {
 
 // TestIntegrationDaemonShutdown tests daemon shutdown
 func TestIntegrationDaemonShutdown(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -413,6 +422,7 @@ func TestIntegrationDaemonShutdown(t *testing.T) {
 
 // TestIntegrationPeersCommand tests the peers command
 func TestIntegrationPeersCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -430,6 +440,7 @@ func TestIntegrationPeersCommand(t *testing.T) {
 
 // TestIntegrationCacheCommand tests the cache command
 func TestIntegrationCacheCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -447,6 +458,7 @@ func TestIntegrationCacheCommand(t *testing.T) {
 
 // TestIntegrationQueueCommand tests the queue command
 func TestIntegrationQueueCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -464,6 +476,7 @@ func TestIntegrationQueueCommand(t *testing.T) {
 
 // TestIntegrationAddSinkCommand tests the add-sink command
 func TestIntegrationAddSinkCommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
