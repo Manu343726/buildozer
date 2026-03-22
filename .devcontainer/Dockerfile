@@ -42,7 +42,5 @@ RUN su - vscode -c 'echo "# VS Code shell integration" >> ~/.zshrc' && \
 
 USER vscode
 
-# Install Go-based tools for protobuf code generation
-RUN go install github.com/bufbuild/buf/cmd/buf@v1.35.1 && \
-    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
-    go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+# WORKDIR for the project
+WORKDIR /workspaces/buildozer

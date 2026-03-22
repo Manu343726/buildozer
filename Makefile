@@ -1,4 +1,4 @@
-.PHONY: help generate build test clean all install-tools
+.PHONY: help generate build test clean all install-tools deps
 
 # Build CLI binaries - DEFAULT TARGET
 build: generate
@@ -7,12 +7,19 @@ build: generate
 	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
 	@echo "✓ Build complete: ./bin/buildozer-client"
 
+# Download module dependencies
+deps:
+	@echo "Downloading module dependencies..."
+	go mod download
+	@echo "✓ Module dependencies downloaded"
+
 # Install development tools (protoc plugins, buf, etc.)
-install-tools:
+install-tools: deps
 	@echo "Installing development tools..."
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install github.com/bufbuild/buf/cmd/buf@v1.35.1
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "✓ Development tools installed"
 
 # Generate code (protobuf via buf)
@@ -28,6 +35,7 @@ help:
 	@echo "  build        - Build CLI binaries (buildozer-client) [DEFAULT]"
 	@echo "  generate     - Run code generation (protobuf, etc.)"
 	@echo "  install-tools- Install development tools (buf, protoc plugins)"
+	@echo "  deps         - Download module dependencies"
 	@echo "  test         - Run unit tests for all packages"
 	@echo "  test-short   - Run unit tests in short mode (faster)"
 	@echo "  test-verbose - Run unit tests with verbose output"

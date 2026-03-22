@@ -61,7 +61,7 @@
       }
     }
   },
-  "postCreateCommand": "go mod download && go install -tags tools ./... && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install github.com/bufbuild/buf/cmd/buf@v1.40.1",
+  "postCreateCommand": "make generate",
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
