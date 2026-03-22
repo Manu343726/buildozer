@@ -12,6 +12,8 @@ import (
 	"github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1/protov1connect"
 )
 
+
+
 // loggingServiceHandler is the private implementation of LoggingServiceHandler
 // It uses a ConfigManager to implement all logging configuration operations
 type loggingServiceHandler struct {
@@ -424,13 +426,115 @@ func (h *loggingServiceHandler) DetachSink(ctx context.Context, req *connect.Req
 func (h *loggingServiceHandler) TailLogs(ctx context.Context, req *connect.Request[v1.TailLogsRequest], stream *connect.ServerStream[v1.TailLogsResponse]) error {
 	h.logRequesterInfo("Received TailLogs request", req.Msg.RequesterInfo)
 
-	// Convert proto log levels to slog levels
+	// Convert proto log levels to slog levels for filtering
 	logLevels := make([]slog.Level, len(req.Msg.Levels))
 	for i, level := range req.Msg.Levels {
 		logLevels[i] = ProtoLogLevelToSlogLevel(level)
 	}
 
-	// Note: This is a placeholder as TailLogs requires log buffering infrastructure
-	// In a real implementation, logs would be streamed from a circular buffer
-	return connect.NewError(connect.CodeUnimplemented, nil)
+	loggerFilter := req.Msg.LoggerFilter
+
+	// Generate a session-specific sink name to avoid conflicts between concurrent streams
+	sinkName := fmt.Sprintf("broadcaster-session-%d", time.Now().UnixNano()%1000000)
+
+	// Create broadcaster sink for this session
+	broadcaster, err := CreateBroadcasterSink(sinkName)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create broadcaster sink: %w", err))
+	}
+
+	// Determine which loggers to attach the broadcaster to
+	var loggersToAttach []string
+	if loggerFilter != "" {
+		loggersToAttach = []string{loggerFilter}
+	} else {
+		loggersToAttach = GetAvailableLoggers()
+	}
+
+	// Add broadcaster sink to the requested loggers
+	if err := AddSinkToLoggers(sinkName, loggersToAttach); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to add broadcaster to loggers: %w", err))
+	}
+
+	// Cleanup: remove broadcaster sink on exit
+	defer func() {
+		if err := RemoveSinkFromLoggers(sinkName, loggersToAttach); err != nil {
+			h.Logger.Warn("Failed to remove broadcaster sink", "sink", sinkName, "error", err)
+		}
+	}()
+
+	// Subscribe to live log stream
+	logChan, unsubscribe := broadcaster.Subscribe()
+	defer unsubscribe()
+
+	for {
+		select {
+		case <-ctx.Done():
+			h.Logger.Debug("Tail logs stream cancelled by client")
+			return nil
+		case entry, ok := <-logChan:
+			if !ok {
+				h.Logger.Debug("Log broadcaster closed")
+				return nil
+			}
+
+			if shouldIncludeLog(entry, logLevels, loggerFilter) {
+				resp := entryToResponse(entry)
+				if err := stream.Send(resp.Msg); err != nil {
+					h.Logger.Debug("Error sending log entry", "error", err)
+					return err
+				}
+			}
+		}
+	}
+}
+
+// shouldIncludeLog checks if a log entry matches the filters
+func shouldIncludeLog(entry *LogEntry, levels []slog.Level, loggerFilter string) bool {
+	// Filter by level (empty levels = all levels)
+	if len(levels) > 0 {
+		includeLevel := false
+		for _, level := range levels {
+			if entry.Level == level {
+				includeLevel = true
+				break
+			}
+		}
+		if !includeLevel {
+			return false
+		}
+	}
+
+	// Filter by logger name (simple prefix match for now)
+	if loggerFilter != "" && !matchesFilter(entry.LoggerName, loggerFilter) {
+		return false
+	}
+
+	return true
+}
+
+// matchesFilter does simple wildcard matching (currently just prefix match)
+func matchesFilter(loggerName, filter string) bool {
+	if filter == "" {
+		return true
+	}
+	// Simple implementation: exact match or prefix with *
+	if filter[len(filter)-1] == '*' {
+		return len(loggerName) >= len(filter)-1 && loggerName[:len(filter)-1] == filter[:len(filter)-1]
+	}
+	return loggerName == filter
+}
+
+// entryToResponse converts a LogEntry to a TailLogsResponse
+func entryToResponse(entry *LogEntry) *connect.Response[v1.TailLogsResponse] {
+	timestamp := timeToTimestamp(time.Unix(0, entry.Timestamp))
+	return &connect.Response[v1.TailLogsResponse]{
+		Msg: &v1.TailLogsResponse{
+			Timestamp:  timestamp,
+			LoggerName: entry.LoggerName,
+			Level:      SlogLevelToProtoLogLevel(entry.Level),
+			Message:    entry.Message,
+			Attributes: entry.Attributes,
+		},
+	}
 }
