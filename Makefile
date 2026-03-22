@@ -1,6 +1,13 @@
 .PHONY: help generate build test clean all
 
-# Generate code (protobuf via buf) - DEFAULT TARGET
+# Build CLI binaries - DEFAULT TARGET
+build: generate
+	@echo "Building CLI binaries..."
+	mkdir -p ./bin
+	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
+	@echo "✓ Build complete: ./bin/buildozer-client"
+
+# Generate code (protobuf via buf)
 generate:
 	@echo "Generating code..."
 	go generate ./...
@@ -10,21 +17,14 @@ generate:
 help:
 	@echo "Buildozer Makefile - Available targets:"
 	@echo ""
-	@echo "  generate     - Run code generation (protobuf, etc.) [DEFAULT]"
-	@echo "  build        - Build CLI binaries (buildozer-client)"
+	@echo "  build        - Build CLI binaries (buildozer-client) [DEFAULT]"
+	@echo "  generate     - Run code generation (protobuf, etc.)"
 	@echo "  test         - Run unit tests for all packages"
 	@echo "  test-short   - Run unit tests in short mode (faster)"
 	@echo "  test-verbose - Run unit tests with verbose output"
 	@echo "  all          - Run generate, build, and test"
 	@echo "  clean        - Clean build artifacts and generated code"
 	@echo ""
-
-# Build CLI binaries
-build: generate
-	@echo "Building CLI binaries..."
-	mkdir -p ./bin
-	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
-	@echo "✓ Build complete: ./bin/buildozer-client"
 
 # Run unit tests for all packages
 test: generate
