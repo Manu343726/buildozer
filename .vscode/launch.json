@@ -13,7 +13,7 @@
       },
       "showLog": true,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "go: build",
+      "preLaunchTask": "make: build",
       "logOutput": "rpc"
     },
     {
@@ -29,7 +29,7 @@
       },
       "showLog": true,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "go: build",
+      "preLaunchTask": "make: build",
       "logOutput": "rpc"
     },
     {
@@ -44,7 +44,7 @@
       },
       "showLog": true,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "go: build",
+      "preLaunchTask": "make: build",
       "logOutput": "rpc"
     },
     {
@@ -59,7 +59,7 @@
       },
       "showLog": true,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "go: build",
+      "preLaunchTask": "make: build",
       "logOutput": "rpc"
     }
   ]

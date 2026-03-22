@@ -2,13 +2,24 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "make: build",
+      "type": "shell",
+      "command": "make",
+      "args": ["build"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$go"],
+      "isBackground": false
+    },
+    {
       "label": "go: build",
       "type": "shell",
       "command": "go",
       "args": ["build", "./cmd/buildozer-client"],
       "group": {
-        "kind": "build",
-        "isDefault": true
+        "kind": "build"
       },
       "problemMatcher": ["$go"],
       "isBackground": false
