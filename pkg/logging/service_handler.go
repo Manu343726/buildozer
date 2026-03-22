@@ -12,8 +12,6 @@ import (
 	"github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1/protov1connect"
 )
 
-
-
 // loggingServiceHandler is the private implementation of LoggingServiceHandler
 // It uses a ConfigManager to implement all logging configuration operations
 type loggingServiceHandler struct {

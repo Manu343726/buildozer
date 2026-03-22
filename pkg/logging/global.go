@@ -33,7 +33,7 @@ func InitializeGlobal(config LoggingConfig) error {
 		// (initialization may trigger logger calls which would deadlock)
 		registry := NewRegistry()
 		factory := NewFactory(registry)
-		
+
 		if err := factory.InitializeFromConfig(config); err != nil {
 			return err
 		}
@@ -74,7 +74,7 @@ func GetRegistry() *Registry {
 
 	registry := NewRegistry()
 	factory := NewFactory(registry)
-	
+
 	if err := factory.InitializeFromConfig(DefaultLoggingConfig()); err != nil {
 		panic("failed to initialize global logging: " + err.Error())
 	}
@@ -222,31 +222,31 @@ func GetAvailableLoggers() []string {
 // This is typically called per RPC streaming session with a unique name
 func CreateBroadcasterSink(sinkName string) (*LogBroadcaster, error) {
 	registry := GetRegistry()
-	
+
 	broadcaster := NewLogBroadcaster()
 	handler := NewBroadcasterHandler(broadcaster, &slog.HandlerOptions{Level: slog.LevelDebug})
-	
+
 	sink := &Sink{
 		Name:    sinkName,
 		Type:    "broadcaster",
 		Level:   slog.LevelDebug,
 		Handler: handler,
 	}
-	
+
 	if err := registry.RegisterSink(sink); err != nil {
 		return nil, err
 	}
-	
+
 	return broadcaster, nil
 }
 
 // AddSinkToLoggers adds a sink to specified loggers
 func AddSinkToLoggers(sinkName string, loggerNames []string) error {
 	registry := GetRegistry()
-	
+
 	for _, loggerName := range loggerNames {
 		sinkNames, _ := registry.GetLoggerSinks(loggerName)
-		
+
 		// Check if sink already added
 		alreadyAdded := false
 		for _, s := range sinkNames {
@@ -255,7 +255,7 @@ func AddSinkToLoggers(sinkName string, loggerNames []string) error {
 				break
 			}
 		}
-		
+
 		if !alreadyAdded {
 			sinkNames = append(sinkNames, sinkName)
 			if err := registry.SetLoggerSinks(loggerName, sinkNames); err != nil {
@@ -263,28 +263,28 @@ func AddSinkToLoggers(sinkName string, loggerNames []string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
 // RemoveSinkFromLoggers removes a sink from specified loggers
 func RemoveSinkFromLoggers(sinkName string, loggerNames []string) error {
 	registry := GetRegistry()
-	
+
 	for _, loggerName := range loggerNames {
 		sinkNames, _ := registry.GetLoggerSinks(loggerName)
-		
+
 		newSinkNames := []string{}
 		for _, s := range sinkNames {
 			if s != sinkName {
 				newSinkNames = append(newSinkNames, s)
 			}
 		}
-		
+
 		if err := registry.SetLoggerSinks(loggerName, newSinkNames); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }

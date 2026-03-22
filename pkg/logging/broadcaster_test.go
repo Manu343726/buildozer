@@ -95,7 +95,7 @@ func TestLogBroadcasterNonBlocking(t *testing.T) {
 	// Create a slow subscriber that doesn't read from channel
 	_ch, unsub := broadcaster.Subscribe()
 	defer unsub()
-	_ = _ch  // Mark as used (simulating a slow subscriber)
+	_ = _ch // Mark as used (simulating a slow subscriber)
 
 	// Broadcast should not block even though subscriber isn't reading
 	entry := &LogEntry{
@@ -176,10 +176,10 @@ func TestShouldIncludeLogByLevel(t *testing.T) {
 // TestShouldIncludeLogByLoggerName verifies logger name filtering
 func TestShouldIncludeLogByLoggerName(t *testing.T) {
 	testCases := []struct {
-		name        string
-		loggerName  string
-		filter      string
-		included    bool
+		name       string
+		loggerName string
+		filter     string
+		included   bool
 	}{
 		{
 			name:       "Empty filter includes all loggers",

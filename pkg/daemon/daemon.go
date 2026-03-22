@@ -223,6 +223,12 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	// Create the HTTP server
 	httpSrv := newHTTPServer(config)
 
+	// Register health check endpoint
+	httpSrv.registerHandler("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "buildozer-client daemon healthy")
+	}))
+
 	// Register logging service
 	loggingPath, loggingHandler := logging.RegisterLoggingService(loggingConfigMgr)
 	httpSrv.registerHandler(loggingPath, loggingHandler)

@@ -85,9 +85,9 @@ func TestIntegrationTailCommandWithLevelFilter(t *testing.T) {
 			if line != "" {
 				// Line should contain error level indicator
 				assert.True(t,
-					strings.Contains(strings.ToLower(line), "error") || 
-					strings.Contains(line, "ERROR") ||
-					strings.Contains(line, "E "),
+					strings.Contains(strings.ToLower(line), "error") ||
+						strings.Contains(line, "ERROR") ||
+						strings.Contains(line, "E "),
 					"filtered log line should contain error level: %s", line)
 			}
 		}
