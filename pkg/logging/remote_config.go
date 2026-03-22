@@ -87,11 +87,12 @@ func (m *RemoteConfigManager) GetLoggingStatus(ctx context.Context) (*LoggingSta
 	// Convert sinks
 	for _, sink := range status.Sinks {
 		sinkStatus := SinkStatus{
-			Name:  sink.Name,
-			Type:  sinkTypeToString(sink.Type),
-			Level: ProtoLogLevelToSlogLevel(sink.Level),
+			Name:                  sink.Name,
+			Type:                  sinkTypeToString(sink.Type),
+			Level:                 ProtoLogLevelToSlogLevel(sink.Level),
+			IncludeSourceLocation: sink.IncludeSourceLocation,
 		}
-		
+
 		// Extract file-specific configuration if present
 		if sink.FileConfig != nil {
 			sinkStatus.Path = sink.FileConfig.Path
@@ -100,7 +101,7 @@ func (m *RemoteConfigManager) GetLoggingStatus(ctx context.Context) (*LoggingSta
 			sinkStatus.MaxAgeDays = sink.FileConfig.MaxAgeDays
 			sinkStatus.JSONFormat = sink.FileConfig.JsonFormat
 		}
-		
+
 		snapshot.Sinks = append(snapshot.Sinks, sinkStatus)
 	}
 
@@ -177,6 +178,43 @@ func (m *RemoteConfigManager) SetSinkLevel(ctx context.Context, sinkName string,
 	}
 
 	m.Debug("SetSinkLevel response", "response", response.Msg)
+	return nil
+}
+
+// UpdateSinkConfig updates configuration for an existing sink
+func (m *RemoteConfigManager) UpdateSinkConfig(ctx context.Context, sinkName string, changes SinkConfigChange) error {
+	m.Debug("Updating sink config", "sinkName", sinkName)
+
+	msg := &v1.UpdateSinkConfigRequest{
+		SinkName:      sinkName,
+		RequesterInfo: m.newRequesterInfo(),
+	}
+
+	if changes.Level != nil {
+		protoLevel := SlogLevelToProtoLogLevel(*changes.Level)
+		msg.Level = &protoLevel
+	}
+
+	if changes.IncludeSourceLocation != nil {
+		msg.IncludeSourceLocation = changes.IncludeSourceLocation
+	}
+
+	if changes.MaxSizeBytes != nil && *changes.MaxSizeBytes > 0 {
+		msg.MaxSizeBytes = changes.MaxSizeBytes
+	}
+
+	if changes.MaxAgeDays != nil && *changes.MaxAgeDays > 0 {
+		msg.MaxAgeDays = changes.MaxAgeDays
+	}
+
+	response, err := m.client.UpdateSinkConfig(ctx, &connect.Request[v1.UpdateSinkConfigRequest]{
+		Msg: msg,
+	})
+	if err != nil {
+		return m.Errorf("failed to update sink config: %w", err)
+	}
+
+	m.Debug("UpdateSinkConfig response", "response", response.Msg)
 	return nil
 }
 

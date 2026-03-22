@@ -132,6 +132,7 @@ type DaemonConfig struct {
 func DefaultDaemonLoggingConfig() logging.LoggingConfig {
 	return logging.LoggingConfig{
 		GlobalLevel: "debug",
+		LoggingDir:  "~/.cache/buildozer/logs", // Daemon logs go to user cache
 		Sinks: []logging.SinkConfig{
 			{
 				Name:  "stdout",
@@ -142,7 +143,7 @@ func DefaultDaemonLoggingConfig() logging.LoggingConfig {
 				Name:       "daemon_file",
 				Type:       "file",
 				Level:      "debug",
-				Path:       "buildozer-daemon.log",
+				Filename:   "buildozer-daemon.log",
 				MaxSizeB:   100 * 1024 * 1024, // 100MB
 				MaxFiles:   10,
 				MaxAgeDays: 30,

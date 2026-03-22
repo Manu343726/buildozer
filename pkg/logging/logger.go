@@ -24,16 +24,17 @@ type Logger struct {
 
 // Sink represents a log sink (destination) with a handler and filtering level
 type Sink struct {
-	Name       string       // Unique sink name (e.g., "stdout", "file-app")
-	Type       string       // Type of sink (stdout, stderr, file, syslog)
-	FilePath   string       // File path for file sinks (empty for stdout/stderr)
-	Level      slog.Level   // Minimum level to log to this sink
-	Handler    slog.Handler // The slog handler for this sink
-	MaxSize    int64        // Max file size in bytes (file sinks only)
-	MaxBackups int32        // Max rotated files to keep (file sinks only)
-	MaxAgeDays int32        // Max age in days (file sinks only)
-	JSONFormat bool         // Whether to use JSON format (file sinks only)
-	mu         sync.RWMutex
+	Name             string       // Unique sink name (e.g., "stdout", "file-app")
+	Type             string       // Type of sink (stdout, stderr, file, syslog)
+	FilePath         string       // File path for file sinks (empty for stdout/stderr)
+	Level            slog.Level   // Minimum level to log to this sink
+	Handler          slog.Handler // The slog handler for this sink
+	MaxSize          int64        // Max file size in bytes (file sinks only)
+	MaxBackups       int32        // Max rotated files to keep (file sinks only)
+	MaxAgeDays       int32        // Max age in days (file sinks only)
+	JSONFormat       bool         // Whether to use JSON format (file sinks only)
+	IncludeSourceLoc bool         // Include source location in logs (file:line)
+	mu               sync.RWMutex
 }
 
 // Activity-based logger tracking constants
@@ -52,6 +53,7 @@ type Registry struct {
 	loggerActivity map[string]time.Time        // logger name -> last activity time, for cleanup of temporary loggers
 	mu             sync.RWMutex
 	globalLevel    slog.Level
+	loggingDir     string // Base directory for file sinks
 }
 
 type attributeOrGroup struct {

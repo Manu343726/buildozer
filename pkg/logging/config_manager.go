@@ -4,11 +4,28 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/pkg/logging/sinks"
 )
+
+// SinkConfigChange represents changes to sink configuration.
+// All fields are optional pointers - only non-nil fields will be updated.
+type SinkConfigChange struct {
+	// Logging level (nil = no change)
+	Level *slog.Level
+
+	// Include source location in logs (nil = no change)
+	IncludeSourceLocation *bool
+
+	// Maximum file size in bytes (nil or 0 = no change, only for file sinks)
+	MaxSizeBytes *int64
+
+	// Maximum age of log files in days (nil or 0 = no change, only for file sinks)
+	MaxAgeDays *int32
+}
 
 // ConfigManager is the interface for managing logging configuration.
 // It provides a unified API for both local and remote logging management.
@@ -25,7 +42,12 @@ type ConfigManager interface {
 	// SetSinkLevel changes the logging level for a specific sink
 	SetSinkLevel(ctx context.Context, sinkName string, level slog.Level) error
 
+	// UpdateSinkConfig updates configuration for an existing sink with optional changes.
+	// Uses SinkConfigChange with pointer fields - only non-nil fields are updated.
+	UpdateSinkConfig(ctx context.Context, sinkName string, changes SinkConfigChange) error
+
 	// EnableFileSink enables a rotating file sink for a logger
+	// The filePath parameter is a filename relative to the logging directory
 	EnableFileSink(ctx context.Context, loggerName, filePath string, maxSizeMB int, maxBackups int, maxAgeDays int) error
 
 	// DisableFileSink disables a file-based sink for a logger
@@ -70,14 +92,15 @@ type ActiveLoggerInfo struct {
 
 // SinkStatus represents the status of a sink
 type SinkStatus struct {
-	Name       string
-	Type       string
-	Level      slog.Level
-	Path       string // Only for file sinks
-	JSONFormat bool   // Only for file sinks
-	MaxSize    int64  // Only for file sinks - in bytes
-	MaxBackups int32  // Only for file sinks
-	MaxAgeDays int32  // Only for file sinks
+	Name                  string
+	Type                  string
+	Level                 slog.Level
+	Path                  string // Only for file sinks
+	JSONFormat            bool   // Only for file sinks
+	MaxSize               int64  // Only for file sinks - in bytes
+	MaxBackups            int32  // Only for file sinks
+	MaxAgeDays            int32  // Only for file sinks
+	IncludeSourceLocation bool   // Include source location in logs
 }
 
 // LoggerStatus represents the status of a logger
@@ -126,14 +149,15 @@ func (m *LocalConfigManager) GetLoggingStatus(ctx context.Context) (*LoggingStat
 	m.registry.mu.RLock()
 	for _, sink := range m.registry.sinks {
 		sinkStatus := SinkStatus{
-			Name:       sink.Name,
-			Type:       sink.Type,
-			Level:      sink.Level,
-			Path:       sink.FilePath,
-			MaxSize:    sink.MaxSize,
-			MaxBackups: sink.MaxBackups,
-			MaxAgeDays: sink.MaxAgeDays,
-			JSONFormat: sink.JSONFormat,
+			Name:                  sink.Name,
+			Type:                  sink.Type,
+			Level:                 sink.Level,
+			Path:                  sink.FilePath,
+			MaxSize:               sink.MaxSize,
+			MaxBackups:            sink.MaxBackups,
+			MaxAgeDays:            sink.MaxAgeDays,
+			JSONFormat:            sink.JSONFormat,
+			IncludeSourceLocation: sink.IncludeSourceLoc,
 		}
 		snapshot.Sinks = append(snapshot.Sinks, sinkStatus)
 	}
@@ -188,6 +212,52 @@ func (m *LocalConfigManager) SetSinkLevel(ctx context.Context, sinkName string, 
 		return m.Errorf("failed to set sink level: %w", err)
 	}
 	m.Debug("sink level changed", "sink", sinkName, "level", level.String())
+	return nil
+}
+
+// UpdateSinkConfig updates configuration for an existing sink
+// All fields except sinkName are optional (pass nil/0 to skip updating)
+func (m *LocalConfigManager) UpdateSinkConfig(ctx context.Context, sinkName string, changes SinkConfigChange) error {
+	m.Debug("updating sink config", "sink", sinkName, "changes", changes)
+
+	sink, exists := m.registry.GetSink(sinkName)
+	if !exists {
+		return m.Errorf("sink %q not found", sinkName)
+	}
+
+	if changes.Level != nil {
+		if err := m.registry.SetSinkLevel(sinkName, *changes.Level); err != nil {
+			return m.Errorf("failed to update level: %w", err)
+		}
+		m.Debug("updated sink level", "sink", sinkName, "level", changes.Level.String())
+	}
+
+	if changes.IncludeSourceLocation != nil {
+		m.registry.mu.Lock()
+		sink.IncludeSourceLoc = *changes.IncludeSourceLocation
+		m.registry.mu.Unlock()
+		m.Debug("updated sink include_source_location", "sink", sinkName, "include_source_location", *changes.IncludeSourceLocation)
+	}
+
+	// Update file-specific configuration if provided (only for file sinks)
+	if changes.MaxSizeBytes != nil || changes.MaxAgeDays != nil {
+		if sink.Type != "file" {
+			return m.Errorf("sink %q is not a file sink; cannot update file-specific configuration", sinkName)
+		}
+
+		m.registry.mu.Lock()
+		if changes.MaxSizeBytes != nil && *changes.MaxSizeBytes > 0 {
+			sink.MaxSize = *changes.MaxSizeBytes
+			m.Debug("updated sink max_size", "sink", sinkName, "max_size_bytes", sink.MaxSize)
+		}
+
+		if changes.MaxAgeDays != nil && *changes.MaxAgeDays > 0 {
+			sink.MaxAgeDays = *changes.MaxAgeDays
+			m.Debug("updated sink max_age_days", "sink", sinkName, "max_age_days", sink.MaxAgeDays)
+		}
+		m.registry.mu.Unlock()
+	}
+
 	return nil
 }
 
@@ -288,6 +358,7 @@ func (m *LocalConfigManager) AddSink(ctx context.Context, sinkName, sinkType str
 }
 
 // addSinkInternal is the internal implementation that handles file path for file sinks
+// For file sinks, filePath is a filename relative to the logging directory
 func (m *LocalConfigManager) addSinkInternal(ctx context.Context, sinkName, sinkType, filePath string, level slog.Level) error {
 	m.Debug("adding sink", "sink", sinkName, "type", sinkType, "level", level.String())
 
@@ -322,9 +393,11 @@ func (m *LocalConfigManager) addSinkInternal(ctx context.Context, sinkName, sink
 		if filePath == "" {
 			return m.Errorf("file sink requires file path")
 		}
+		// Construct full path using logging directory
+		fullPath := filepath.Join(m.registry.loggingDir, filePath)
 		var err error
 		handler, err = sinks.FileSink(sinks.FileSinkConfig{
-			Path:       filePath,
+			Path:       fullPath,
 			MaxSizeB:   100 * 1024 * 1024, // Default to 100MB
 			MaxFiles:   10,                // Default to 10 backups
 			MaxAgeDays: 0,                 // No age-based rotation by default

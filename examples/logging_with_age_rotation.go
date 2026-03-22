@@ -5,7 +5,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/Manu343726/buildozer/pkg/logging"
@@ -59,6 +58,7 @@ func main() {
 
 	// Example 4: Enable file sink programmatically with age-based rotation
 	loggingConfig := logging.DefaultLoggingConfig()
+	loggingConfig.LoggingDir = os.TempDir() // Use temp directory for this example
 	registry := logging.NewRegistry()
 	factory := logging.NewFactory(registry)
 
@@ -71,7 +71,7 @@ func main() {
 		Name:       "aged-log",
 		Type:       "file",
 		Level:      "debug",
-		Path:       filepath.Join(os.TempDir(), "aged.log"),
+		Filename:   "aged.log",       // Filename relative to logging directory
 		MaxSizeB:   50 * 1024 * 1024, // 50MB
 		MaxFiles:   5,
 		MaxAgeDays: 7, // Rotate after 7 days

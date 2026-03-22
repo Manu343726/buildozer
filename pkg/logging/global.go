@@ -145,7 +145,7 @@ func EnableLoggerFileSink(loggerName, filePath string, maxSizeMB int, maxAgeDays
 		Name:       sinkName,
 		Type:       "file",
 		Level:      "trace", // Capture everything at trace level
-		Path:       filePath,
+		Filename:   filePath,
 		MaxSizeB:   int64(maxSizeMB) * 1024 * 1024,
 		MaxFiles:   5,
 		MaxAgeDays: maxAgeDays,

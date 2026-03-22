@@ -6,6 +6,106 @@
 
 ---
 
+## Implementation Updates - Source Location Flag for Sinks (2026-03-22)
+
+### Added Source Location Control per Sink
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Add a flag to enable/disable source location (file:line) information in log output, disabled by default per sink.
+
+**Changes Made:**
+
+1. **Proto Definition** (`buildozer/proto/v1/logging.proto`)
+   - Added `include_source_location` boolean field to SinkConfig message
+   - Field number 6 to avoid conflicts with existing fields
+   - Applies to all sink types (stdout, stderr, file, syslog)
+
+2. **Go Configuration Structures**
+   - Added `IncludeSourceLocation bool` to `SinkConfig` (config.go)
+   - Added `IncludeSourceLocation bool` to FileSinkConfig (sinks/sinks.go)
+   - Added `IncludeSourceLoc bool` to Sink struct (logger.go)
+   - Added `IncludeSourceLocation bool` to SinkStatus (config_manager.go)
+
+3. **Handler Creation** (`pkg/logging/config.go`)
+   - Updated `CreateSink()` to set `AddSource` in slog.HandlerOptions based on flag
+   - Passes flag through to all sink creation calls
+   - Flag is included in HandlerOptions for proper log formatting
+
+4. **Status Reporting**
+   - LocalConfigManager populates IncludeSourceLocation from Sink
+   - RemoteConfigManager extracts from proto response and populates SinkStatus
+   - Service handler populates proto SinkConfig with IncludeSourceLocation
+
+5. **CLI Display** (`pkg/cli/logging.go`)
+   - Status() method now shows `include_source_location: true/false` for each sink
+   - Displayed for all sink types right after the level
+
+**Default Behavior:**
+- **Default:** `IncludeSourceLocation = false` (disabled)
+- Source location (file:line) NOT included in logs by default
+- Can be enabled per-sink via configuration
+
+**Example Output:**
+
+```
+sinks:
+  - stdout:
+      type: stdout
+      level: DEBUG
+      include_source_location: false
+  - daemon_file:
+      type: file
+      level: DEBUG
+      include_source_location: false
+      path: buildozer-daemon.log
+      json_format: false
+      max_size_mb: 100
+      max_backups: 10
+      max_age_days: 30
+```
+
+**Configuration Usage:**
+
+```yaml
+sinks:
+  - name: verbose_file
+    type: file
+    level: debug
+    path: /var/log/app-verbose.log
+    include_source_location: true
+  
+  - name: stdout
+    type: stdout
+    level: info
+    include_source_location: false  # or omitted (defaults to false)
+```
+
+**Testing Status:**
+- ✅ Proto code generation successful
+- ✅ Full build successful (go build ./...)
+- ✅ Daemon initializes properly
+- ✅ logs status shows include_source_location flag (false by default)
+- ✅ Flag correctly flows through all layers (proto → config → handler)
+
+**Files Modified:**
+- buildozer/proto/v1/logging.proto - Added field to proto
+- pkg/logging/config.go - Added field and updated CreateSink
+- pkg/logging/logger.go - Added field to Sink struct
+- pkg/logging/config_manager.go - Updated SinkStatus
+- pkg/logging/sinks/sinks.go - Updated FileSinkConfig
+- pkg/logging/remote_config.go - Extracts from proto
+- pkg/logging/service_handler.go - Populates proto response
+- pkg/cli/logging.go - Display in status output
+
+**Key Architectural Decision:**
+The flag is per-sink, not global. This allows:
+- Production sinks (stdout) to run without source location overhead
+- Debug/file sinks to include source location when needed
+- Mix and match configurations in the same logger setup
+
+---
+
 ## Implementation Updates - Full Sink Configuration Display (2026-03-22)
 
 ### Enhanced `logs status` to Show Complete Sink Configuration

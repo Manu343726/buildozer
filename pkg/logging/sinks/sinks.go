@@ -33,12 +33,13 @@ func StderrSink(opts *slog.HandlerOptions) slog.Handler {
 
 // FileSinkConfig holds configuration for file sinks
 type FileSinkConfig struct {
-	Path        string // File path
-	MaxSizeB    int64  // Max file size in bytes (default: 100MB)
-	MaxFiles    int    // Max number of rotated files (default: 5)
-	MaxAgeDays  int    // Max age of log files in days (default: 0 = no limit)
-	JSONFormat  bool   // Use JSON format instead of text
-	HandlerOpts *slog.HandlerOptions
+	Path                  string // File path
+	MaxSizeB              int64  // Max file size in bytes (default: 100MB)
+	MaxFiles              int    // Max number of rotated files (default: 5)
+	MaxAgeDays            int    // Max age of log files in days (default: 0 = no limit)
+	JSONFormat            bool   // Use JSON format instead of text
+	IncludeSourceLocation bool   // Include source location in logs (file:line)
+	HandlerOpts           *slog.HandlerOptions
 }
 
 // FileSink creates a rotating file sink using lumberjack

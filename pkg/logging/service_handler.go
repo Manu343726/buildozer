@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -26,6 +27,64 @@ func newLoggingServiceHandler(configManager ConfigManager) *loggingServiceHandle
 		Logger:        Log().Child("LoggingServiceHandler"),
 		configManager: configManager,
 	}
+}
+
+// RegisterLoggingService creates and registers the logging service handler
+// Returns the path and HTTP handler for use with an HTTP mux
+func RegisterLoggingService(configManager ConfigManager) (string, http.Handler) {
+	handler := newLoggingServiceHandler(configManager)
+	return protov1connect.NewLoggingServiceHandler(handler)
+}
+
+// Helper functions for proto conversions
+
+// timeNowTimestamp returns current time as protobuf TimeStamp
+func timeNowTimestamp() *v1.TimeStamp {
+	return timeToTimestamp(time.Now())
+}
+
+// timeToTimestamp converts time.Time to protobuf TimeStamp
+func timeToTimestamp(t time.Time) *v1.TimeStamp {
+	return &v1.TimeStamp{
+		UnixMillis: t.UnixMilli(),
+	}
+}
+
+// stringToSinkType converts string to protobuf SinkType
+func stringToSinkType(sinkType string) v1.SinkType {
+	switch sinkType {
+	case "stdout":
+		return v1.SinkType_SINK_TYPE_STDOUT
+	case "stderr":
+		return v1.SinkType_SINK_TYPE_STDERR
+	case "file":
+		return v1.SinkType_SINK_TYPE_FILE
+	default:
+		return v1.SinkType_SINK_TYPE_UNSPECIFIED
+	}
+}
+
+// sinkStatusToProto converts SinkStatus to protobuf SinkConfig
+func sinkStatusToProto(status SinkStatus) *v1.SinkConfig {
+	config := &v1.SinkConfig{
+		Name:                  status.Name,
+		Type:                  stringToSinkType(status.Type),
+		Level:                 SlogLevelToProtoLogLevel(status.Level),
+		IncludeSourceLocation: status.IncludeSourceLocation,
+	}
+
+	// Add file config if it's a file sink
+	if status.Type == "file" && status.Path != "" {
+		config.FileConfig = &v1.SinkConfig_FileConfig{
+			Path:         status.Path,
+			MaxSizeBytes: status.MaxSize,
+			MaxBackups:   status.MaxBackups,
+			MaxAgeDays:   status.MaxAgeDays,
+			JsonFormat:   status.JSONFormat,
+		}
+	}
+
+	return config
 }
 
 // logRequesterInfo extracts and logs requester info fields
@@ -54,25 +113,7 @@ func (h *loggingServiceHandler) GetLoggingStatus(ctx context.Context, req *conne
 
 	// Convert sinks
 	for _, sinkStatus := range snapshot.Sinks {
-		sinkType := sinkTypeFromString(sinkStatus.Type)
-		sinkConfig := &v1.SinkConfig{
-			Name:  sinkStatus.Name,
-			Type:  sinkType,
-			Level: SlogLevelToProtoLogLevel(sinkStatus.Level),
-		}
-		
-		// Add file-specific configuration if this is a file sink
-		if sinkType == v1.SinkType_SINK_TYPE_FILE && sinkStatus.Path != "" {
-			sinkConfig.FileConfig = &v1.SinkConfig_FileConfig{
-				Path:         sinkStatus.Path,
-				MaxSizeBytes: sinkStatus.MaxSize,
-				MaxBackups:   sinkStatus.MaxBackups,
-				MaxAgeDays:   sinkStatus.MaxAgeDays,
-				JsonFormat:   sinkStatus.JSONFormat,
-			}
-		}
-		
-		status.Sinks = append(status.Sinks, sinkConfig)
+		status.Sinks = append(status.Sinks, sinkStatusToProto(sinkStatus))
 	}
 
 	// Convert loggers
@@ -120,39 +161,50 @@ func (h *loggingServiceHandler) SetGlobalLevel(ctx context.Context, req *connect
 
 // SetLoggerLevel implements LoggingServiceHandler.SetLoggerLevel
 func (h *loggingServiceHandler) SetLoggerLevel(ctx context.Context, req *connect.Request[v1.SetLoggerLevelRequest]) (*connect.Response[v1.SetLoggerLevelResponse], error) {
-	level := ProtoLogLevelToSlogLevel(req.Msg.Level)
 	h.logRequesterInfo("Received SetLoggerLevel request", req.Msg.RequesterInfo)
 	h.Debug("details", "logger_name", req.Msg.LoggerName)
 
-	err := h.configManager.SetLoggerLevel(ctx, req.Msg.LoggerName, level)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	return &connect.Response[v1.SetLoggerLevelResponse]{
-		Msg: &v1.SetLoggerLevelResponse{
-			LoggerName: req.Msg.LoggerName,
-			Level:      req.Msg.Level,
-			UpdatedAt:  timeNowTimestamp(),
-		},
-	}, nil
+	// Note: This would require SetLoggerLevel method on ConfigManager
+	// Currently not implemented - returning unimplemented error
+	return nil, connect.NewError(connect.CodeUnimplemented,
+		fmt.Errorf("SetLoggerLevel not yet implemented"))
 }
 
 // SetSinkLevel implements LoggingServiceHandler.SetSinkLevel
 func (h *loggingServiceHandler) SetSinkLevel(ctx context.Context, req *connect.Request[v1.SetSinkLevelRequest]) (*connect.Response[v1.SetSinkLevelResponse], error) {
-	level := ProtoLogLevelToSlogLevel(req.Msg.Level)
 	h.logRequesterInfo("Received SetSinkLevel request", req.Msg.RequesterInfo)
 	h.Debug("details", "sink_name", req.Msg.SinkName)
 
-	err := h.configManager.SetSinkLevel(ctx, req.Msg.SinkName, level)
-	if err != nil {
+	// Note: This would require SetSinkLevel method on ConfigManager
+	// Currently not implemented - returning unimplemented error
+	return nil, connect.NewError(connect.CodeUnimplemented,
+		fmt.Errorf("SetSinkLevel not yet implemented"))
+}
+
+// UpdateSinkConfig implements LoggingServiceHandler.UpdateSinkConfig
+func (h *loggingServiceHandler) UpdateSinkConfig(ctx context.Context, req *connect.Request[v1.UpdateSinkConfigRequest]) (*connect.Response[v1.UpdateSinkConfigResponse], error) {
+	h.logRequesterInfo("Received UpdateSinkConfig request", req.Msg.RequesterInfo)
+	h.Debug("details", "sink_name", req.Msg.SinkName)
+
+	config := SinkConfigChange{
+		IncludeSourceLocation: req.Msg.IncludeSourceLocation,
+		MaxSizeBytes:          req.Msg.MaxSizeBytes,
+		MaxAgeDays:            req.Msg.MaxAgeDays,
+	}
+
+	// Handle optional level field
+	if req.Msg.Level != nil {
+		level := ProtoLogLevelToSlogLevel(*req.Msg.Level)
+		config.Level = &level
+	}
+
+	if err := h.configManager.UpdateSinkConfig(ctx, req.Msg.SinkName, config); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &connect.Response[v1.SetSinkLevelResponse]{
-		Msg: &v1.SetSinkLevelResponse{
+	return &connect.Response[v1.UpdateSinkConfigResponse]{
+		Msg: &v1.UpdateSinkConfigResponse{
 			SinkName:  req.Msg.SinkName,
-			Level:     req.Msg.Level,
 			UpdatedAt: timeNowTimestamp(),
 		},
 	}, nil
@@ -163,24 +215,18 @@ func (h *loggingServiceHandler) EnableFileSink(ctx context.Context, req *connect
 	h.logRequesterInfo("Received EnableFileSink request", req.Msg.RequesterInfo)
 	h.Debug("details", "logger_name", req.Msg.LoggerName, "file_path", req.Msg.FilePath)
 
+	// Convert MaxSizeBytes to MB for the ConfigManager interface
 	maxSizeMB := int(req.Msg.MaxSizeBytes / (1024 * 1024))
-	if maxSizeMB == 0 {
-		maxSizeMB = 100 // Default to 100MB
+	if maxSizeMB == 0 && req.Msg.MaxSizeBytes > 0 {
+		maxSizeMB = 1 // Minimum 1MB if any size specified
 	}
 
-	maxBackups := int(req.Msg.MaxBackups)
-	if maxBackups == 0 {
-		maxBackups = 10 // Default to 10 backups
-	}
+	// Generate a sink name based on logger name
+	sinkName := req.Msg.LoggerName + "_file"
 
-	maxAgeDays := int(req.Msg.MaxAgeDays)
-
-	err := h.configManager.EnableFileSink(ctx, req.Msg.LoggerName, req.Msg.FilePath, maxSizeMB, maxBackups, maxAgeDays)
-	if err != nil {
+	if err := h.configManager.EnableFileSink(ctx, req.Msg.LoggerName, req.Msg.FilePath, maxSizeMB, int(req.Msg.MaxBackups), int(req.Msg.MaxAgeDays)); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
-	sinkName := "file-" + req.Msg.LoggerName
 
 	return &connect.Response[v1.EnableFileSinkResponse]{
 		Msg: &v1.EnableFileSinkResponse{
@@ -197,17 +243,14 @@ func (h *loggingServiceHandler) DisableFileSink(ctx context.Context, req *connec
 	h.logRequesterInfo("Received DisableFileSink request", req.Msg.RequesterInfo)
 	h.Debug("details", "logger_name", req.Msg.LoggerName)
 
-	err := h.configManager.DisableFileSink(ctx, req.Msg.LoggerName)
-	if err != nil {
+	if err := h.configManager.DisableFileSink(ctx, req.Msg.LoggerName); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-
-	sinkName := "file-" + req.Msg.LoggerName
 
 	return &connect.Response[v1.DisableFileSinkResponse]{
 		Msg: &v1.DisableFileSinkResponse{
 			LoggerName: req.Msg.LoggerName,
-			SinkName:   sinkName,
+			SinkName:   req.Msg.LoggerName + "_file",
 			RemovedAt:  timeNowTimestamp(),
 		},
 	}, nil
@@ -307,21 +350,6 @@ func (h *loggingServiceHandler) RemoveLogger(ctx context.Context, req *connect.R
 	}, nil
 }
 
-// TailLogs implements LoggingServiceHandler.TailLogs
-func (h *loggingServiceHandler) TailLogs(ctx context.Context, req *connect.Request[v1.TailLogsRequest], stream *connect.ServerStream[v1.TailLogsResponse]) error {
-	h.logRequesterInfo("Received TailLogs request", req.Msg.RequesterInfo)
-
-	// Convert proto log levels to slog levels
-	logLevels := make([]interface{}, len(req.Msg.Levels))
-	for i, level := range req.Msg.Levels {
-		logLevels[i] = ProtoLogLevelToSlogLevel(level)
-	}
-
-	// Note: This is a placeholder as TailLogs requires log buffering infrastructure
-	// In a real implementation, logs would be streamed from a circular buffer
-	return connect.NewError(connect.CodeUnimplemented, nil)
-}
-
 // AttachSink implements LoggingServiceHandler.AttachSink
 func (h *loggingServiceHandler) AttachSink(ctx context.Context, req *connect.Request[v1.AttachSinkRequest]) (*connect.Response[v1.AttachSinkResponse], error) {
 	h.logRequesterInfo("Received AttachSink request", req.Msg.RequesterInfo)
@@ -367,7 +395,7 @@ func (h *loggingServiceHandler) DetachSink(ctx context.Context, req *connect.Req
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	// Get updated logger config to return remaining sink names
+	// Get updated logger config to return sink names
 	snapshot, err := h.configManager.GetLoggingStatus(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -392,40 +420,17 @@ func (h *loggingServiceHandler) DetachSink(ctx context.Context, req *connect.Req
 	}, nil
 }
 
-// Helper functions
+// TailLogs implements LoggingServiceHandler.TailLogs
+func (h *loggingServiceHandler) TailLogs(ctx context.Context, req *connect.Request[v1.TailLogsRequest], stream *connect.ServerStream[v1.TailLogsResponse]) error {
+	h.logRequesterInfo("Received TailLogs request", req.Msg.RequesterInfo)
 
-// sinkTypeFromString converts string sink type to protobuf enum
-func sinkTypeFromString(typeStr string) v1.SinkType {
-	switch typeStr {
-	case "stdout":
-		return v1.SinkType_SINK_TYPE_STDOUT
-	case "stderr":
-		return v1.SinkType_SINK_TYPE_STDERR
-	case "file":
-		return v1.SinkType_SINK_TYPE_FILE
-	case "syslog":
-		return v1.SinkType_SINK_TYPE_SYSLOG
-	default:
-		return v1.SinkType_SINK_TYPE_UNSPECIFIED
+	// Convert proto log levels to slog levels
+	logLevels := make([]slog.Level, len(req.Msg.Levels))
+	for i, level := range req.Msg.Levels {
+		logLevels[i] = ProtoLogLevelToSlogLevel(level)
 	}
-}
 
-// timeToTimestamp converts time.Time to protobuf Timestamp
-func timeToTimestamp(t time.Time) *v1.TimeStamp {
-	return &v1.TimeStamp{
-		UnixMillis: t.UnixMilli(),
-	}
-}
-
-// timeNowTimestamp returns current time as protobuf Timestamp
-func timeNowTimestamp() *v1.TimeStamp {
-	return timeToTimestamp(time.Now())
-}
-
-// RegisterLoggingService creates and registers a Connect handler for LoggingService
-// Returns the path and HTTP handler to mount
-func RegisterLoggingService(configManager ConfigManager) (string, http.Handler) {
-	handler := newLoggingServiceHandler(configManager)
-	path, mux := protov1connect.NewLoggingServiceHandler(handler)
-	return path, mux
+	// Note: This is a placeholder as TailLogs requires log buffering infrastructure
+	// In a real implementation, logs would be streamed from a circular buffer
+	return connect.NewError(connect.CodeUnimplemented, nil)
 }

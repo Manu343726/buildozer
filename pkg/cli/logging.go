@@ -53,7 +53,8 @@ func (lc *LoggingCommands) Status() error {
 		fmt.Printf("  - %s:\n", sink.Name)
 		fmt.Printf("      type: %s\n", sink.Type)
 		fmt.Printf("      level: %s\n", sink.Level.String())
-		
+		fmt.Printf("      include_source_location: %v\n", sink.IncludeSourceLocation)
+
 		// Display file-specific configuration
 		if sink.Type == "file" && sink.Path != "" {
 			fmt.Printf("      path: %s\n", sink.Path)

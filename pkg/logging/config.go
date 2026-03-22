@@ -3,9 +3,35 @@ package logging
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/Manu343726/buildozer/pkg/logging/sinks"
 )
+
+// ExpandHome expands the ~ prefix in paths to the user's home directory
+// Examples:
+//   - "~" → "/home/user"
+//   - "~/.cache/logs" → "/home/user/.cache/logs"
+//   - "/var/log" → "/var/log" (unchanged)
+func ExpandHome(path string) string {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
 
 // SinkConfig holds configuration for a single sink
 type SinkConfig struct {
@@ -14,7 +40,7 @@ type SinkConfig struct {
 	Level string `json:"level" yaml:"level"` // Level as string for YAML config
 
 	// File-specific configuration
-	Path       string `json:"path,omitempty" yaml:"path,omitempty"`
+	Filename   string `json:"filename,omitempty" yaml:"filename,omitempty"`         // Filename (relative to logging dir)
 	MaxSizeB   int64  `json:"max_size_b,omitempty" yaml:"max_size_b,omitempty"`     // Max file size
 	MaxFiles   int    `json:"max_files,omitempty" yaml:"max_files,omitempty"`       // Max rotated files
 	MaxAgeDays int    `json:"max_age_days,omitempty" yaml:"max_age_days,omitempty"` // Max age in days
@@ -22,6 +48,9 @@ type SinkConfig struct {
 
 	// Syslog-specific configuration
 	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
+
+	// Include source location (file:line) in log output (default: false)
+	IncludeSourceLocation bool `json:"include_source_location,omitempty" yaml:"include_source_location,omitempty"`
 }
 
 // LoggerConfig holds configuration for a single logger
@@ -34,15 +63,17 @@ type LoggerConfig struct {
 // LoggingConfig holds the overall logging configuration
 type LoggingConfig struct {
 	GlobalLevel string         `json:"global_level" yaml:"global_level"` // Level as string
+	LoggingDir  string         `json:"logging_dir" yaml:"logging_dir"`   // Base directory for file sinks
 	Sinks       []SinkConfig   `json:"sinks" yaml:"sinks"`
 	Loggers     []LoggerConfig `json:"loggers" yaml:"loggers"`
 }
 
 // DefaultLoggingConfig returns the default logging configuration for CLI client
-// It includes only stdout sink for interactive CLI usage
+// It includes only stdout sink for interactive CLI usage and sets default logging directory
 func DefaultLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		GlobalLevel: "debug",
+		LoggingDir:  "~/.cache/buildozer/logs", // Default to user cache directory
 		Sinks: []SinkConfig{
 			{
 				Name:  "stdout",
@@ -116,7 +147,8 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 
 	level := ParseLevel(config.Level)
 	handlerOpts := &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
+		AddSource: config.IncludeSourceLocation,
 	}
 
 	switch config.Type {
@@ -127,17 +159,21 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 		handler = sinks.StderrSink(handlerOpts)
 
 	case "file":
-		if config.Path == "" {
-			return nil, fmt.Errorf("file sink %q requires 'path' configuration", config.Name)
+		if config.Filename == "" {
+			return nil, fmt.Errorf("file sink %q requires 'filename' configuration", config.Name)
 		}
 
+		// Construct full path using logging directory
+		fullPath := filepath.Join(f.registry.loggingDir, config.Filename)
+
 		handler, err = sinks.FileSink(sinks.FileSinkConfig{
-			Path:        config.Path,
-			MaxSizeB:    config.MaxSizeB,
-			MaxFiles:    config.MaxFiles,
-			MaxAgeDays:  config.MaxAgeDays,
-			JSONFormat:  config.JSONFormat,
-			HandlerOpts: handlerOpts,
+			Path:                  fullPath,
+			MaxSizeB:              config.MaxSizeB,
+			MaxFiles:              config.MaxFiles,
+			MaxAgeDays:            config.MaxAgeDays,
+			JSONFormat:            config.JSONFormat,
+			IncludeSourceLocation: config.IncludeSourceLocation,
+			HandlerOpts:           handlerOpts,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create file sink %q: %w", config.Name, err)
@@ -148,15 +184,16 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 	}
 
 	sink := &Sink{
-		Name:       config.Name,
-		Type:       config.Type,
-		Level:      level,
-		Handler:    handler,
-		FilePath:   config.Path,
-		MaxSize:    config.MaxSizeB,
-		MaxBackups: int32(config.MaxFiles),
-		MaxAgeDays: int32(config.MaxAgeDays),
-		JSONFormat: config.JSONFormat,
+		Name:             config.Name,
+		Type:             config.Type,
+		Level:            level,
+		Handler:          handler,
+		FilePath:         config.Filename,
+		MaxSize:          config.MaxSizeB,
+		MaxBackups:       int32(config.MaxFiles),
+		MaxAgeDays:       int32(config.MaxAgeDays),
+		JSONFormat:       config.JSONFormat,
+		IncludeSourceLoc: config.IncludeSourceLocation,
 	}
 
 	if err := f.registry.RegisterSink(sink); err != nil {
@@ -167,10 +204,15 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 }
 
 // InitializeFromConfig initializes the registry from a LoggingConfig
+// The logging directory from the config is used as the base path for all file sinks
 func (f *Factory) InitializeFromConfig(config LoggingConfig) error {
 	// Set global level
 	globalLevel := ParseLevel(config.GlobalLevel)
 	f.registry.SetGlobalLevel(globalLevel)
+
+	// Expand and set logging directory
+	loggingDir := ExpandHome(config.LoggingDir)
+	f.registry.loggingDir = loggingDir
 
 	// Create all sinks
 	for _, sinkCfg := range config.Sinks {
