@@ -39,7 +39,7 @@ func TestLoggerWithAttrs(t *testing.T) {
 
 	// Test 2: Logger with fixed attributes
 	buf.Reset()
-	logger2 := logger.WithAttrs(slog.String("user", "alice"), slog.Int("id", 42))
+	logger2 := logger.With(slog.String("user", "alice"), slog.Int("id", 42))
 	logger2.Info("message with fixed attrs")
 	output := buf.String()
 	if !bytes.Contains(buf.Bytes(), []byte("alice")) {
@@ -63,7 +63,7 @@ func TestLoggerWithAttrs(t *testing.T) {
 
 	// Test 4: Child can add more attributes
 	buf.Reset()
-	child2 := child.WithAttrs(slog.String("request_id", "xyz123"))
+	child2 := child.With(slog.String("request_id", "xyz123"))
 	child2.Info("child with additional attrs")
 	output = buf.String()
 	if !bytes.Contains(buf.Bytes(), []byte("alice")) || !bytes.Contains(buf.Bytes(), []byte("xyz123")) {
@@ -120,13 +120,13 @@ func TestLoggerHierarchy(t *testing.T) {
 	_ = registry.SetLoggerSinks("app.db.postgres", []string{"test"})
 
 	logger := registry.GetLogger("app")
-	logger = logger.WithAttrs(slog.String("env", "prod"))
+	logger = logger.With(slog.String("env", "prod"))
 
 	db := logger.Child("db")
-	db = db.WithAttrs(slog.String("type", "postgres"))
+	db = db.With(slog.String("type", "postgres"))
 
 	postgres := db.Child("postgres")
-	postgres = postgres.WithAttrs(slog.String("host", "localhost"))
+	postgres = postgres.With(slog.String("host", "localhost"))
 
 	// All accumulated attributes should be present
 	buf.Reset()

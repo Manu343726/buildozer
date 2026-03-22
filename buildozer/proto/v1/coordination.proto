@@ -47,6 +47,8 @@ message QueryCacheRequest {
 
   // Requesting peer ID
   string requester_peer_id = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
 }
 
 // QueryCacheResponse indicates cache hit status
@@ -89,6 +91,8 @@ message BroadcastCacheAnnouncementRequest {
 
   // Optional: Runtime that produced this artifact
   buildozer.proto.v1.Runtime produced_by_runtime = 7;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 8;
 }
 
 // BroadcastCacheAnnouncementResponse confirms announcement receipt
@@ -116,6 +120,8 @@ message BroadcastErrorRequest {
 
   // Timestamp of error
   buildozer.proto.v1.TimeStamp error_timestamp = 4;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 5;
 }
 
 // BroadcastErrorResponse confirms error broadcast receipt
@@ -146,6 +152,8 @@ message ProposeScheduleRequest {
 
   // Proposal timestamp
   buildozer.proto.v1.TimeStamp proposed_at = 5;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 6;
 }
 
 // ProposeScheduleResponse indicates voting result for scheduling proposal
@@ -179,6 +187,8 @@ message CommitScheduleRequest {
 
   // Timestamp of commit
   buildozer.proto.v1.TimeStamp committed_at = 5;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 6;
 }
 
 // CommitScheduleResponse confirms scheduling finalization

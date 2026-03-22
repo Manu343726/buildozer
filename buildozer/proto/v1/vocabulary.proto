@@ -257,3 +257,19 @@ message CacheQueryStatistics {
   // Time spent extracting item from cache (if cache_hit=true)
   TimeDuration extraction_time = 5;
 }
+
+// RequesterInfo contains metadata about the RPC requester making a request
+// Allows the service to identify and log which requester sent the request
+message RequesterInfo {
+  // Unique identifier for the requester (e.g., hostname, requester-id UUID, PID@hostname)
+  string requester_id = 1;
+
+  // Type of requester making the request (e.g., "buildozer-client", "cli", "daemon")
+  string requester_type = 2;
+
+  // Version of the requester software
+  Version requester_version = 3;
+
+  // Timestamp when the request was created (requester-side time)
+  TimeStamp request_timestamp = 4;
+}

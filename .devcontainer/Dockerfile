@@ -39,3 +39,8 @@ RUN su - vscode -c "sed -i 's/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"agnoster\"/
 # Enable VS Code shell integration for zsh
 RUN su - vscode -c 'echo "# VS Code shell integration" >> ~/.zshrc' && \
     su - vscode -c 'echo "[[ \"\$TERM_PROGRAM\" == \"vscode\" ]] && . \"\$(code --locate-shell-integration-path zsh)\"" >> ~/.zshrc'
+
+# Install Go-based tools for protobuf code generation
+RUN go install github.com/bufbuild/buf/cmd/buf@v1.35.1 && \
+    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest

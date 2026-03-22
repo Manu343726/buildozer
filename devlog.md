@@ -2,7 +2,757 @@
 
 **Project:** Peer-to-Peer Distributed Build System  
 **Status:** Phase 1 - Core Abstractions & Local Foundation  
-**Last Updated:** 2026-03-21
+**Last Updated:** 2026-03-22
+
+---
+
+## Implementation Updates - Full Sink Configuration Display (2026-03-22)
+
+### Enhanced `logs status` to Show Complete Sink Configuration
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Display full sink configuration including file path, format, and rotation settings when running `buildozer-client logs status`.
+
+**Changes Made:**
+
+1. **SinkStatus Struct Enhancement** (`pkg/logging/config_manager.go`)
+   - Added fields: `MaxSize`, `MaxBackups`, `MaxAgeDays` (in addition to existing `Path` and `JSONFormat`)
+   - Now captures complete file sink rotation configuration
+
+2. **Sink Struct Update** (`pkg/logging/logger.go`)
+   - Added fields to track rotation parameters: `MaxSize`, `MaxBackups`, `MaxAgeDays`, `JSONFormat`
+   - Enables proper status reporting with full configuration details
+
+3. **LocalConfigManager** (`pkg/logging/config_manager.go`)
+   - Updated `GetLoggingStatus()` to populate all rotation fields from Sink struct
+   - Now includes: Path, MaxSize, MaxBackups, MaxAgeDays, JSONFormat
+
+4. **Factory** (`pkg/logging/config.go`)
+   - Updated `CreateSink()` to populate all rotation fields in Sink
+   - Extracts values from SinkConfig and stores them for later retrieval
+
+5. **RemoteConfigManager** (`pkg/logging/remote_config.go`)
+   - Updated sink conversion to extract FileConfig details from proto
+   - Populates: Path, MaxSize, MaxBackups, MaxAgeDays, JSONFormat from proto response
+
+6. **Service Handler** (`pkg/logging/service_handler.go`)
+   - Updated `GetLoggingStatus()` to populate FileConfig in proto response
+   - Now includes all rotation parameters in SinkConfig.FileConfig
+
+7. **CLI Display** (`pkg/cli/logging.go`)
+   - Enhanced Status() method to show complete file sink information
+   - Displays: path, json_format, max_size_mb, max_backups, max_age_days
+   - Conditionally shows file-specific fields only for file sinks with path set
+
+**Example Output:**
+
+```
+sinks:
+  - stdout:
+      type: stdout
+      level: DEBUG
+  - daemon_file:
+      type: file
+      level: DEBUG
+      path: buildozer-daemon.log
+      json_format: false
+      max_size_mb: 100
+      max_backups: 10
+      max_age_days: 30
+```
+
+**Testing Status:**
+- ✅ Full build successful (go build ./...)
+- ✅ Daemon starts and initializes logging config properly
+- ✅ logs status shows complete sink configuration
+- ✅ File sinks display path, format, and all rotation parameters
+- ✅ stdout/stderr sinks show basic configuration
+
+**Backward Compatibility:**
+- Optional fields (MaxSize, MaxBackups, MaxAgeDays) default to 0 if not set
+- CLI conditionally displays file-specific fields only when relevant
+- RemoteConfigManager handles missing FileConfig gracefully
+
+**Key Files Modified:**
+- pkg/logging/logger.go - Added fields to Sink struct
+- pkg/logging/config_manager.go - Updated SinkStatus and LocalConfigManager
+- pkg/logging/config.go - Updated Factory.CreateSink
+- pkg/logging/remote_config.go - Updated proto conversion
+- pkg/logging/service_handler.go - Updated GetLoggingStatus proto population
+- pkg/cli/logging.go - Enhanced Status() display
+
+---
+
+## Implementation Updates - Default Sinks for New Loggers (2026-03-22)
+
+### Automatic Default Sinks for New Loggers
+
+**Status:** ✅ IMPLEMENTED
+
+**Objective:** Automatically attach standard sinks to newly created loggers when no sinks are explicitly specified.
+
+**Key Change:**
+
+**AddLogger Enhancement** ([pkg/logging/config_manager.go](pkg/logging/config_manager.go))
+- When creating a new logger **without explicitly specifying sinks**, automatically attaches default sinks
+- **Default sinks** (in order of preference):
+  1. `"stdout"` - If exists in registry
+  2. `"buildozer-daemon.log"` - If exists in registry
+- If no sinks are explicitly specified, attempts to use available defaults
+- If some defaults don't exist, only uses the ones that do
+- If no default sinks exist in the registry, logs a warning and creates logger with no sinks
+
+**Usage Examples:**
+
+```bash
+# Without --sinks flag: automatically adds stdout and buildozer-daemon.log (if they exist)
+buildozer-client logs add-logger my-logger
+# Result: my-logger attached to [stdout, buildozer-daemon.log]
+
+# With --sinks flag: uses only the specified sinks (bypasses defaults)
+buildozer-client logs add-logger my-logger --sinks stderr,my-custom-sink
+# Result: my-logger attached to [stderr, my-custom-sink] (no defaults added)
+
+# If stdout doesn't exist: uses only available defaults
+buildozer-client logs add-logger my-logger  # (only stderr and buildozer-daemon.log exist)
+# Result: my-logger attached to [buildozer-daemon.log]
+```
+
+**Implementation Details:**
+
+```go
+// getDefaultSinks() helper method:
+// 1. Maintains ordered list: ["stdout", "buildozer-daemon.log"]
+// 2. Checks which ones exist in registry
+// 3. Returns only the ones that exist
+// 4. Used only when sinkNames is empty
+
+// AddLogger logic:
+if len(sinkNames) == 0 {
+    sinkNames = m.getDefaultSinks()  // Apply defaults
+    // Log warning if no defaults available
+} else {
+    // Use explicitly specified sinks as-is
+}
+```
+
+**Design Rationale:**
+
+1. **Sensible Defaults**: Most new loggers should output somewhere (stdout by default is standard)
+2. **Opt-out via Flags**: Users can explicitly specify `--sinks ""` or specific sinks to bypass defaults (via CLI parsing)
+3. **Safe Defaults**: Only adds sinks that actually exist in registry (no phantom sinks)
+4. **Logging**: Warns if no default sinks available to help user understand the configuration
+5. **Explicit Control**: Users who need different behavior can always remove/detach sinks after creation
+
+**Backward Compatibility:**
+- CLI: `add-logger` with `--sinks` flag works exactly as before
+- Code: `AddLogger()` with explicit sinkNames works exactly as before
+- New Behavior: Applies only when sinkNames is empty (which was previously creating loggers with no sinks)
+
+**Testing Status:**
+- ✅ Project compiles without errors
+- ✅ All logging tests pass
+- ✅ No regressions in functionality
+
+**Typical Setup Sequence:**
+
+```bash
+# 1. Create stdout sink
+buildozer-client logs add-sink stdout
+
+# 2. Create daemon file sink
+buildozer-client logs enable-file-sink daemon /var/log/buildozer-daemon.log
+
+# 3. Create new logger (automatically attached to above sinks)
+buildozer-client logs add-logger my-component
+
+# 4. Verify logger has both sinks attached
+buildozer-client logs status
+```
+
+---
+
+## Implementation Updates - Implicit Sink Names for stdout/stderr (2026-03-22)
+
+### Simplified CLI: Implicit Sink Names for Standard Sinks
+
+**Status:** ✅ IMPLEMENTED
+
+**Objective:** Simplify the `add-sink` command by using implicit sink names for stdout and stderr, eliminating the redundant name argument.
+
+**Key Change:**
+
+**CLI Command Update** ([cmd/buildozer-client/cmd/logging.go](cmd/buildozer-client/cmd/logging.go))
+- **Before**: `buildozer-client logs add-sink <sink-name> <type>` (2 arguments required)
+- **After**: `buildozer-client logs add-sink <type>` (1 argument, type only)
+- The sink name is implicitly set to the type name:
+  - `add-sink stdout` → Creates sink named "stdout" of type "stdout"
+  - `add-sink stderr` → Creates sink named "stderr" of type "stderr"
+
+**Rationale:**
+- stdout and stderr are unique sinks (only one can exist of each type)
+- The name and type are always identical for these standard sinks
+- Removes unnecessary redundancy in the CLI interface
+- Makes the command more intuitive and less verbose
+
+**Usage Examples (Updated):**
+
+```bash
+# Create stdout sink (implicit name = "stdout")
+buildozer-client logs add-sink stdout
+
+# Create stderr sink (implicit name = "stderr")
+buildozer-client logs add-sink stderr
+
+# Remove the stdout sink
+buildozer-client logs remove-sink stdout
+
+# Attach stdout to a logger
+buildozer-client logs attach-sink my-logger stdout
+```
+
+**Code Flow:**
+```
+CLI Input: "add-sink stdout"
+    ↓
+Parse as sinkType = "stdout"
+    ↓
+Set sinkName = sinkType (implicit)
+    ↓
+Call commands.AddSink("stdout", "stdout", slog.LevelInfo)
+    ↓
+ConfigManager validates no overlap
+```
+
+**Testing Status:**
+- ✅ CLI client builds successfully
+- ✅ All logging tests pass
+- ✅ No regressions in functionality
+
+**Related Commands** (Unchanged):
+- `remove-sink <sink-name>` - Still requires sink name
+- `attach-sink <logger-name> <sink-name>` - Still requires sink name (use "stdout" or "stderr")
+- `detach-sink <logger-name> <sink-name>` - Still requires sink name
+- `enable-file-sink <logger-name> <file-path>` - File sinks use explicit named sinks
+
+---
+
+## Implementation Updates - AddSink Unified Overlap Detection (2026-03-22)
+
+### Unified AddSink with Smart Overlap Detection
+
+**Status:** ✅ IMPLEMENTED
+
+**Objective:** Enable AddSink to handle all sink types (stdout, stderr, file) with intelligent overlap detection based on sink characteristics.
+
+**Key Changes:**
+
+1. **Sink Struct Enhancement** (`pkg/logging/logger.go`)
+   - Added `FilePath string` field to track file paths for file sinks
+   - Enables detecting overlaps when multiple file sinks point to same file
+
+2. **AddSink Implementation** (`pkg/logging/config_manager.go`)
+   - Now accepts all sink types: `stdout`, `stderr`, `file`
+   - Smart overlap detection:
+     - **stdout**: Error if stdout sink already exists
+     - **stderr**: Error if stderr sink already exists
+     - **file**: Error if file sink already points to same file path
+   - Unified error messages with overlap details (shows overlapping sink name)
+   - Internal: `addSinkInternal(ctx, name, type, filePath, level)` handles file path
+   - Public: `AddSink(ctx, name, type, level)` for stdout/stderr (no file path needed)
+
+3. **Service Handler** (`pkg/logging/service_handler.go`)
+   - AddSink RPC still restricted to stdout/stderr (protobuf lacks file path support)
+   - Clear error message if file sink requested: "use EnableFileSink for file sinks"
+   - Returns error code `CodeInvalidArgument` instead of `CodeInternal` for validation errors
+
+4. **EnableFileSink** - Updated to use new internal method
+   - Uses `addSinkInternal()` for file sink creation with path
+   - Maintains shorthand semantics: create + attach + cleanup old
+
+**Overlap Detection Examples:**
+
+**Error Cases:**
+```bash
+# Error: stdout already exists
+buildozer-client logs add-sink stdout1 stdout  # ✓ succeeds
+buildozer-client logs add-sink stdout2 stdout  # ✗ error: "a stdout sink already exists (overlap with stdout1)"
+
+# Error: stderr already exists  
+buildozer-client logs add-sink stderr1 stderr  # ✓ succeeds
+buildozer-client logs add-sink stderr2 stderr  # ✗ error: "a stderr sink already exists (overlap with stderr1)"
+
+# Error: file sink for same path exists
+buildozer-client logs enable-file-sink logger1 /var/log/app.log  # ✓ succeeds
+buildozer-client logs enable-file-sink logger2 /var/log/app.log  # ✗ error: "a file sink for '/var/log/app.log' already exists"
+```
+
+**Successful Operations:**
+```bash
+# Different files = no overlap
+buildozer-client logs enable-file-sink logger1 /var/log/app1.log  # ✓ succeeds
+buildozer-client logs enable-file-sink logger2 /var/log/app2.log  # ✓ succeeds
+
+# Multiple loggers to same file = error (intended)
+# This is the overlap detection at work - prevents two loggers writing to same file
+```
+
+**Architecture:**
+
+```
+Code Level (ConfigManager):
+  AddSink(name, type, level)                    # Works for stdout, stderr, "file" type errors
+  addSinkInternal(name, type, filePath, level)  # Supports all types with file path
+  
+RPC Level (Service Handler):
+  AddSinkRequest(name, type, level)             # Protobuf doesn't support file path
+  AddSink RPC → AddSink code → stdout/stderr only
+  
+File Sinks:
+  EnableFileSink RPC → addSinkInternal → full file sink creation with validation
+```
+
+**Design Rationale:**
+
+1. **Overlap Detection Granularity**: Different logic for different sink types
+   - stdout/stderr: Single instance per type (mutual exclusion)
+   - file: Path-based uniqueness (same file can't be a sink twice)
+   
+2. **RPC/Code Flexibility**:
+   - Code level: Fully capable of handling file sinks with overlap detection
+   - RPC level: Restricted by protobuf message schema; file sinks via EnableFileSink
+   - Future: Can enhance protobuf if needed for direct file sink creation via RPC
+
+3. **Error Clarity**: Messages identify which sink is causing the overlap:
+   - "overlap with {sinkName}" helps users understand what's already registered
+
+**Testing Status:**
+- ✅ Project builds without errors
+- ✅ All logging tests pass
+- ✅ CLI client builds successfully
+- ✅ No regressions in existing functionality
+
+**Migration Path (if updating existing code):**
+- Code that called `AddSink()` with file type: Now correctly errors
+- Use `addSinkInternal()` or `EnableFileSink()` for file sinks
+- Existing stdout/stderr creation via `AddSink()` works unchanged
+
+---
+
+## Implementation Updates - AddSink/EnableFileSink/DisableFileSink Refinements (2026-03-22)
+
+### Sink Management Commands: Proper Validation and Shorthand Semantics
+
+**Status:** ✅ IMPLEMENTED
+
+**Objective:** Clarify and refine the semantics of sink management commands with proper validation and shorthand behavior.
+
+**Key Changes:**
+
+1. **AddSink Command** - Only for stdout/stderr sinks
+   - Now **rejects file sinks** with clear error message
+   - Returns error if a **stdout or stderr sink already exists** (prevents duplicates)
+   - File sink creation must use `EnableFileSink` instead
+   - Validation: `AddSink(ctx, "my-stdout", "stdout", level)` ✓
+   - Validation: `AddSink(ctx, "my-file", "file", level)` ✗ Error: "use EnableFileSink instead"
+   - Validation: Creating second stdout sink ✗ Error: "a stdout sink already exists"
+
+2. **EnableFileSink Command** - Proper Shorthand Implementation
+   - Creates a rotating file sink with **automatic naming**: `"file-{loggerName}"`
+   - Automatically **attaches the sink only to that logger**
+   - Smart cleanup: If logger already has a file sink attached, **removes the old one first**
+   - Use case: Redirect logger output to file on-the-fly without manual sink management
+   - Example: `EnableFileSink("my-logger", "/var/log/my-logger.log", 100, 10, 30)`
+     - Creates sink named `"file-my-logger"`
+     - Attaches to logger `"my-logger"`
+     - Removes any previous file sink from the logger
+     - Sets rotation: 100MB size limit, 10 backup files, 30 day retention
+
+3. **DisableFileSink Command** - Proper Shorthand Implementation
+   - Finds **automatically named file sink**: `"file-{loggerName}"`
+   - **Detaches and removes** the sink from registry
+   - Cleanup: Removes the sink so it's not reused elsewhere
+   - Example: `DisableFileSink("my-logger")`
+     - Finds and detaches `"file-my-logger"` from `"my-logger"`
+     - Removes `"file-my-logger"` from sink registry entirely
+
+**Implementation Details:**
+
+**Files Modified:**
+- `pkg/logging/config_manager.go`:
+  - Updated `AddSink()` to validate sink types and reject duplicates
+  - Added `AddFileSink()` internal method for creating file sinks with proper rotation
+  - Refactored `EnableFileSink()` as proper shorthand: create + attach + cleanup old
+  - Refactored `DisableFileSink()` as proper shorthand: find + detach + remove
+  - Added import for `"github.com/Manu343726/buildozer/pkg/logging/sinks"`
+
+- `pkg/logging/logger.go`:
+  - Added `GetAllSinks()` method to Registry for validation checks across all sinks
+  - Thread-safe with RWMutex for concurrent access
+
+- `pkg/logging/service_handler.go`:
+  - Updated `AddSink()` handler to enforce stdout/stderr only, reject file sinks
+  - Added validation with clear error messages
+  - Added import for `"fmt"` package
+
+**Architecture Pattern:**
+
+```
+AddSink (stdout/stderr only)
+  └─ Check no duplicate stdout/stderr exists
+  └─ Create and register sink
+  └─ NOT attached to any logger (manual attachment via AttachSink)
+
+EnableFileSink (shorthand for logger redirect)
+  └─ Detach old file sink from logger (if exists)
+  └─ Remove old file sink from registry
+  └─ Create file sink named "file-{loggerName}"
+  └─ Attach to logger
+  └─ Logger now outputs to file (automatically formatted as rotating)
+
+DisableFileSink (shorthand to stop logger redirect)
+  └─ Find file sink "file-{loggerName}"
+  └─ Detach from logger
+  └─ Remove from registry
+  └─ Logger no longer outputs to that file
+```
+
+**Testing Status:**
+- ✅ Project builds without errors
+- ✅ All logging tests pass
+- ✅ CLI client builds successfully
+- ✅ No regressions in existing functionality
+
+**Validation Examples:**
+
+Failed Operations (with error messages):
+```bash
+# Error: prevent duplicate stdout sinks
+buildozer-client logs add-sink stdout1 stdout   # ✓ succeeds
+buildozer-client logs add-sink stdout2 stdout   # ✗ error: "a stdout sink already exists"
+
+# Error: use EnableFileSink for file sinks
+buildozer-client logs add-sink my-file file     # ✗ error: "use EnableFileSink instead"
+
+# Error: logger or sink not found
+buildozer-client logs enable-file-sink unknown /var/log/test.log  # ✗ error: "logger not found"
+```
+
+Successful Operations:
+```bash
+# Create stdout sink
+buildozer-client logs add-sink my-stdout stdout
+
+# Redirect logger to file (replaces old file sink if exists)
+buildozer-client logs enable-file-sink my-logger /var/log/my-logger.log
+
+# Stop file redirection
+buildozer-client logs disable-file-sink my-logger
+
+# Manual sink management (for advanced use cases)
+buildozer-client logs add-sink custom stderr
+buildozer-client logs attach-sink my-logger custom
+```
+
+---
+
+## Implementation Updates - Logging Service AttachSink/DetachSink (2026-03-22)
+
+### Logging Service RPC Methods for Dynamic Sink Management
+
+**Status:** ✅ IMPLEMENTED
+
+**Objective:** Enable dynamic attachment and detachment of logging sinks to/from loggers via RPC API.
+
+**Components Completed:**
+
+1. **Protobuf Message Definitions (`buildozer/proto/v1/logging.proto`)**
+   - Added `AttachSinkRequest` - attaches existing sink to logger
+   - Added `AttachSinkResponse` - confirms attachment and returns updated sink list
+   - Added `DetachSinkRequest` - detaches sink from logger
+   - Added `DetachSinkResponse` - confirms detachment and returns remaining sinks
+   - All messages include timestamps and success messages
+
+2. **Service Handler Implementation (`pkg/logging/service_handler.go`)**
+   - `AttachSink()` handler - validates logger exists, attaches sink, returns updated config
+   - `DetachSink()` handler - validates logger exists, detaches sink, returns updated config
+   - Both handlers fetch updated logger status after modification for consistency
+   - Proper error handling with Connect protocol codes (CodeInternal)
+   - Debug logging for operation tracking
+
+3. **Remote Config Manager Implementation (`pkg/logging/remote_config.go`)**
+   - `AttachSink()` - calls remote `AttachSink` RPC with proper error handling
+   - `DetachSink()` - calls remote `DetachSink` RPC with proper error handling
+   - Replaced placeholder "not yet implemented" messages with actual RPC calls
+   - Debug logging for remote operations
+
+4. **Registry Methods (Already Implemented in `pkg/logging/logger.go`)**
+   - `AttachSink(loggerName, sinkName)` - validates sink exists, checks for duplicates, appends
+   - `DetachSink(loggerName, sinkName)` - finds and removes sink, error if not found
+   - Both methods use RWMutex for thread-safe operations
+   - Proper validation and error messages
+
+5. **CLI Commands (Already Implemented)**
+   - `logs attach-sink <logger-name> <sink-name>` - CLI command to attach sink
+   - `logs detach-sink <logger-name> <sink-name>` - CLI command to detach sink
+   - Commands integrated in logging command help text
+
+6. **CLI Handler Methods (`pkg/cli/logging.go`)**
+   - `AttachSink(loggerName, sinkName)` - calls config manager, logs success
+   - `DetachSink(loggerName, sinkName)` - calls config manager, logs success
+   - Both use context.Background() and proper error propagation
+
+**Usage Examples:**
+
+```bash
+# Attach an existing sink to a logger
+buildozer-client logs attach-sink my-logger my-sink
+
+# Detach a sink from a logger
+buildozer-client logs detach-sink my-logger my-sink
+
+# View current sinks attached to loggers
+buildozer-client logs status
+```
+
+**Architecture:**
+
+The implementation follows the established pattern:
+1. CLI command → LoggingCommands method → ConfigManager method → RemoteConfigManager or LocalConfigManager
+2. Remote operations call Connect RPC to daemon service
+3. Local operations call Registry methods with thread-safe locks
+4. All operations include proper error handling and logging
+
+**Testing Status:**
+- ✅ Project builds without errors
+- ✅ All existing tests pass
+- ✅ Protobuf code regenerated successfully
+- ✅ No regressions in functionality
+
+**Files Modified:**
+- `buildozer/proto/v1/logging.proto` - Added AttachSinkRequest/Response and DetachSinkRequest/Response messages
+- `pkg/logging/service_handler.go` - Added AttachSink and DetachSink handler implementations
+- `pkg/logging/remote_config.go` - Implemented remote AttachSink and DetachSink RPC calls
+
+**Next Steps:**
+- Create integration tests for attach/detach operations
+- Add user documentation for sink management commands
+- Monitor for any edge cases in production usage
+
+---
+
+## Design Decisions - Logging Architecture (2026-03-22)
+
+### Logger Hierarchy with Embedded Component Loggers
+
+**Status:** ✅ DOCUMENTED
+
+**Decision:** Establish hierarchical logging with embedded loggers in components for cleaner code.
+
+**Pattern:**
+1. Every package has `logger.go` with `Log()` function returning package logger
+2. Package loggers are children of root logger: `logging.Log().Child("package_name")`
+3. Each component (struct like `httpServer`) embeds its logger as unnamed field `*logging.Logger`
+4. Components can call logging methods directly: `hs.Debug("message")` instead of `hs.logger.Debug("message")`
+5. Components return errors using `.Errorf(format, args...)` which both logs AND returns the error
+
+**Rationale:**
+- Clean logging API throughout components
+- Proper hierarchical structure for remote log queries
+- Method promotion via embedding reduces verbosity
+- Logger lives with component, easy to track ownership
+- `.Errorf()` ensures all errors are logged while maintaining standard error return pattern
+- Example: `daemon.Log().Child("httpServer")` embedded in httpServer struct
+
+**Implementation pattern:**
+```go
+type httpServer struct {
+    *logging.Logger  // unnamed embedded for method promotion
+    config DaemonConfig
+}
+
+// In constructor:
+return &httpServer{
+    Logger: daemon.Log().Child("httpServer"),
+    config: config,
+}
+
+// Usage - methods are promoted:
+hs.Info("starting server")  // Works directly on httpServer
+if err != nil {
+    return hs.Errorf("failed to listen: %w", err)  // Both logs and returns error
+}
+```
+
+### Stack Depth Fix: Wrapper Methods (Errorf & Panicf) - (2026-03-22)
+
+**Status:** ✅ IMPLEMENTED
+
+**Issue:** Logger.Errorf() and Logger.Panicf() wrapper methods were incorrectly reporting the caller location. When you called `errorf("msg")` from a user function, the log would show the error came from inside Errorf() rather than from the actual call site.
+
+**Root Cause:** Calling `l.Error(msg)` from within a wrapper delegates to slog, which uses `runtime.Caller()` with a fixed skip count. This skip count doesn't account for custom wrapper functions added above slog's internal callstack.
+
+**Solution:** Instead of calling `l.Error(msg)`, use `runtime.Callers()` to manually capture the actual caller's program counter, then create a `slog.Record` with that PC and call the handler directly.
+
+**Implementation:**
+- Created private helper `logAtCallSite(skipFrames, level, msg)` method
+- Uses `runtime.Callers(2+skipFrames, ...)` to get PC of actual caller (skips this method + wrapper method)
+- Creates `slog.Record` with the correct PC value
+- Calls `l.Handler().Handle(ctx, record)` directly
+- Errorf/Panicf now call `logAtCallSite(1, level, msg)` 
+- Result: Logs show the exact line where Errorf/Panicf was called, not wrapper internals
+
+**Code Pattern:**
+```go
+func (l *Logger) Errorf(format string, args ...any) error {
+    return l.logAtCallSite(1, slog.LevelError, fmt.Sprintf(format, args...)).(error)
+}
+
+func (l *Logger) Panicf(format string, args ...any) {
+    msg := fmt.Sprintf(format, args...)
+    l.logAtCallSite(1, slog.LevelError, msg)
+    panic(msg)
+}
+
+func (l *Logger) logAtCallSite(skipFrames int, level slog.Level, msg string interface{} {
+    var pcs [1]uintptr
+    runtime.Callers(2+skipFrames, pcs[:])  // Skip: logAtCallSite + wrapper + skipFrames
+    
+    r := slog.Record{
+        Time:    time.Now(),
+        Level:   level,
+        PC:      pcs[0],      // Use actual caller's PC
+        Message: msg,
+    }
+    l.Handler().Handle(context.Background(), r)
+    
+    if level == slog.LevelError {
+        return errors.New(msg)
+    }
+    return nil
+}
+```
+
+**Testing:** All existing logging tests pass. Stack traces now correctly show user code location.
+
+---
+
+## Implementation Updates - Component Logger Pattern Refactoring (2026-03-22)
+
+### Component Logger Embedding Pattern Applied to All Components
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Ensure all major components in Buildozer follow the component logger embedding pattern established in the logging architecture design.
+
+**Components Refactored:**
+
+1. **`pkg/daemon/daemon.go` - HTTP Server Component (httpServer)**
+   - **Before:** Used explicit `logger` field: `hs.logger.Info(...)`
+   - **After:** Embedded `*logging.Logger` field for method promotion: `hs.Info(...)`
+   - **Changes:**
+     - Removed explicit `logger` field
+     - Added unnamed embedded `*logging.Logger` field to httpServer struct
+     - Updated constructor: `Logger: Log().Child("httpServer")`
+     - Replaced all `slog.Debug/Info/Error` calls with direct methods: `hs.Debug(...)`
+     - Replaced all `fmt.Errorf` with `hs.Errorf()` for automatic logging
+     - Removed unused `fmt` and `slog` imports
+   - **Methods Updated:** All HTTP/Connect server setup and teardown paths
+   - **Benefit:** Cleaner logging API, automatic error logging, hierarchical context
+
+2. **`pkg/cli/daemon.go` - Daemon Command Handler (DaemonCommands)**
+   - **Before:** Used explicit `logger` field: `dc.logger.Info(...)`
+   - **After:** Embedded `*logging.Logger` field: `dc.Info(...)`
+   - **Changes:**
+     - Removed explicit `logger` field (was `logger *logging.Logger`)
+     - Added unnamed embedded `*logging.Logger` field
+     - Updated constructor: `Logger: Log().Child("DaemonCommands")`
+     - Replaced all `dc.logger.Info()` with `dc.Info()` (method promotion)
+     - Replaced all `fmt.Errorf` with `dc.Errorf()` for automatic logging
+   - **Methods Updated:** Start() (daemon startup, signal handling, shutdown logging)
+   - **Key Method Behavior:**
+     - Start() logs daemon startup, handles signals (SIGTERM, SIGINT), logs graceful shutdown
+     - All error returns now use Errorf() for automatic logging
+
+3. **`pkg/cli/logging.go` - Logging Command Handler (LoggingCommands)**
+   - **Before:** Used explicit `logger` field: `lc.logger.Info(...)`
+   - **After:** Embedded `*logging.Logger` field: `lc.Info(...)`
+   - **Changes:**
+     - Removed explicit `logger` field
+     - Added unnamed embedded `*logging.Logger` field
+     - Updated constructor: `Logger: Log().Child("LoggingCommands")`
+     - Replaced 8 instances of `lc.logger.Info()` with `lc.Info()`
+     - Replaced all `fmt.Errorf` with `lc.Errorf()` for automatic logging
+   - **Methods Updated:** Status(), Tail(), SetGlobalLevel(), SetLoggerLevel(), SetSinkLevel(), EnableFileSink(), DisableFileSink()
+   - **Benefit:** All logging operations have automatic context tracking and error logging
+
+4. **`pkg/cli/config.go` - Configuration Command Handler (ConfigCommands)**
+   - **Before:** Used explicit `logger` field: `cc.logger.Info(...)`
+   - **After:** Embedded `*logging.Logger` field: `cc.Info(...)`
+   - **Changes:**
+     - Removed explicit `logger` field
+     - Added unnamed embedded `*logging.Logger` field
+     - Updated constructor: `Logger: Log().Child("ConfigCommands")`
+     - Replaced `cc.logger.Info()` calls with `cc.Info()`
+     - Replaced `fmt.Errorf` with `cc.Errorf()`
+   - **Methods Updated:** All config command implementations
+
+**Pattern Verification:**
+
+All refactored components now:
+- ✅ Embed `*logging.Logger` as unnamed field
+- ✅ Initialize logger with component name: `Log().Child("ComponentName")`
+- ✅ Use direct method calls via promotion: `c.Debug()`, `c.Info()`, `c.Error()`, `c.Errorf()`
+- ✅ Use `Errorf()` for all error returns to ensure logging
+- ✅ Log entry points with Debug() and relevant context
+- ✅ Log successful completions in Debug() calls
+- ✅ Create hierarchical logger structure visible in logs
+
+**Build Status:**
+```bash
+$ go build ./...
+# SUCCESS - All packages compile without errors
+```
+
+**Testing Status:**
+- All existing logging tests pass
+- Full project builds successfully
+- CLI commands work correctly with new logging pattern
+- No regressions in functionality
+
+**Logging Hierarchy Created:**
+```
+daemon                        (from pkg/daemon/logger.go)
+├── httpServer              (embedded in daemon HTTP server)
+
+cli                           (from pkg/cli/logger.go)
+├── DaemonCommands          (CLI daemon command handler)
+├── LoggingCommands         (CLI logging command handler)
+└── ConfigCommands          (CLI config command handler)
+```
+
+**Benefits Realized:**
+1. **Consistency:** All components follow identical logging pattern
+2. **Auditability:** All errors automatically logged before returning
+3. **Method Promotion:** Cleaner syntax reduces verbosity and indentation
+4. **Hierarchical Tracking:** Log hierarchy makes component relationships visible
+5. **Remote Querying:** Future API can query logs by component path: `daemon.httpServer.*`
+6. **Testing:** Embedded loggers easier to mock in unit tests
+7. **Maintenance:** New components can follow established pattern with minimal boilerplate
+
+**Reference Implementation:** All refactored components follow pattern established by `pkg/logging/remote_config.go` (ConfigManager).
+
+**Files Modified:**
+- pkg/daemon/daemon.go (httpServer struct)
+- pkg/cli/daemon.go (DaemonCommands struct)
+- pkg/cli/logging.go (LoggingCommands struct)
+- pkg/cli/config.go (ConfigCommands struct)
+
+**Next Steps:**
+- As new components are added (scheduler, cache manager, peer discovery, etc.), apply same pattern
+- Update code review guidelines to enforce pattern
+- Consider adding lint rule to detect components violating pattern
 
 ---
 

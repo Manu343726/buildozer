@@ -62,13 +62,14 @@ func (b *Builder) EnableMDNS(enable bool) *Builder {
 	return b
 }
 
-// Build creates and returns the configured Daemon.
-func (b *Builder) Build() *Daemon {
-	return New(b.config)
+// Build creates and returns a Daemon with the configured settings.
+// This creates a fully initialized daemon with all services.
+func (b *Builder) Build() (*Daemon, error) {
+	return NewDaemon(b.config)
 }
 
 // BuildWithConfig creates a new Daemon using an explicit DaemonConfig.
 // This is a convenience method for cases where you want to construct a config separately.
-func BuildWithConfig(config DaemonConfig) *Daemon {
-	return New(config)
+func BuildWithConfig(config DaemonConfig) (*Daemon, error) {
+	return NewDaemon(config)
 }

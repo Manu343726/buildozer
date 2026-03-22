@@ -32,6 +32,24 @@ service LoggingService {
   // DisableFileSink disables a file-based sink for a specific logger
   rpc DisableFileSink(DisableFileSinkRequest) returns (DisableFileSinkResponse);
 
+  // AddSink creates and registers a new sink
+  rpc AddSink(AddSinkRequest) returns (AddSinkResponse);
+
+  // RemoveSink removes a sink from the registry
+  rpc RemoveSink(RemoveSinkRequest) returns (RemoveSinkResponse);
+
+  // AddLogger creates a new logger configuration
+  rpc AddLogger(AddLoggerRequest) returns (AddLoggerResponse);
+
+  // RemoveLogger removes a logger configuration
+  rpc RemoveLogger(RemoveLoggerRequest) returns (RemoveLoggerResponse);
+
+  // AttachSink attaches an existing sink to a logger
+  rpc AttachSink(AttachSinkRequest) returns (AttachSinkResponse);
+
+  // DetachSink removes a sink from a logger
+  rpc DetachSink(DetachSinkRequest) returns (DetachSinkResponse);
+
   // TailLogs streams log records in real-time (with optional filtering)
   rpc TailLogs(TailLogsRequest) returns (stream TailLogsResponse);
 }
@@ -115,6 +133,19 @@ message LoggerConfig {
 
   // List of sink names this logger outputs to
   repeated string sink_names = 2;
+
+  // Logging level for this logger (overrides global level)
+  LogLevel level = 3;
+}
+
+// ActiveLoggerInfo represents an active logger and the configured logger it resolves to
+message ActiveLoggerInfo {
+  // Logger name (e.g., "buildozer", "buildozer.db", "buildozer.db.postgres")
+  string name = 1;
+
+  // The configured logger this logger resolves to via hierarchical lookup
+  // Empty string if no configuration is found in the hierarchy
+  string resolved_config_for = 2;
 }
 
 // LoggingStatus represents the current logging configuration state
@@ -128,6 +159,9 @@ message LoggingStatus {
   // All configured loggers
   repeated LoggerConfig loggers = 3;
 
+  // All active loggers (created via GetLogger() or Logger.Child() calls)
+  repeated ActiveLoggerInfo active_loggers = 5;
+
   // Timestamp of when this configuration was retrieved
   TimeStamp retrieved_at = 4;
 }
@@ -135,6 +169,7 @@ message LoggingStatus {
 // GetLoggingStatusRequest requests the current logging configuration
 message GetLoggingStatusRequest {
   // No parameters needed
+  RequesterInfo requester_info = 1;
 }
 
 // GetLoggingStatusResponse returns the current logging configuration
@@ -147,6 +182,8 @@ message GetLoggingStatusResponse {
 message SetGlobalLevelRequest {
   // New global logging level
   LogLevel level = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
 }
 
 // SetGlobalLevelResponse confirms the global level change
@@ -168,6 +205,8 @@ message SetLoggerLevelRequest {
 
   // New logging level for this logger
   LogLevel level = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // SetLoggerLevelResponse confirms the logger level change
@@ -192,6 +231,8 @@ message SetSinkLevelRequest {
 
   // New logging level for this sink
   LogLevel level = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // SetSinkLevelResponse confirms the sink level change
@@ -225,6 +266,8 @@ message EnableFileSinkRequest {
 
   // Whether to use JSON format for log entries
   bool json_format = 6;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 7;
 }
 
 // EnableFileSinkResponse confirms that a file sink was created
@@ -249,6 +292,8 @@ message DisableFileSinkRequest {
 
   // Optional specific sink name to remove; if empty, removes the most recent file sink
   optional string sink_name = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // DisableFileSinkResponse confirms that a file sink was removed
@@ -279,6 +324,8 @@ message TailLogsRequest {
 
   // Whether to stream new logs after history
   bool follow = 4;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 5;
 }
 
 // TailLogsResponse represents a single log record in the stream
@@ -297,4 +344,169 @@ message TailLogsResponse {
 
   // Additional fields (JSON encoded for flexibility)
   map<string, string> attributes = 5;
+}
+
+// AddSinkRequest creates a new sink
+message AddSinkRequest {
+  // Sink name (unique identifier)
+  string name = 1;
+
+  // Type of sink (stdout, stderr, json, etc.)
+  SinkType type = 2;
+
+  // Initial logging level for this sink
+  LogLevel level = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
+}
+
+// AddSinkResponse returns information about the newly created sink
+message AddSinkResponse {
+  // Sink name
+  string name = 1;
+
+  // Sink type
+  SinkType type = 2;
+
+  // Set logging level
+  LogLevel level = 3;
+
+  // Timestamp of when the sink was created
+  TimeStamp created_at = 4;
+
+  // Success message
+  string message = 5;
+}
+
+// RemoveSinkRequest removes a sink from the registry
+message RemoveSinkRequest {
+  // Sink name to remove
+  string name = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
+}
+
+// RemoveSinkResponse confirms the sink was removed
+message RemoveSinkResponse {
+  // Sink name that was removed
+  string name = 1;
+
+  // Number of loggers that had this sink attached
+  uint32 loggers_affected = 2;
+
+  // Timestamp of when the sink was removed
+  TimeStamp removed_at = 3;
+
+  // Success message
+  string message = 4;
+}
+
+// AddLoggerRequest creates a new logger configuration
+message AddLoggerRequest {
+  // Logger name (e.g., "buildozer", "buildozer.runtime")
+  string name = 1;
+
+  // Logging level for this logger
+  LogLevel level = 2;
+
+  // Sink names to attach to this logger
+  repeated string sink_names = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
+}
+
+// AddLoggerResponse returns information about the newly created logger
+message AddLoggerResponse {
+  // Logger name
+  string name = 1;
+
+  // Set logging level
+  LogLevel level = 2;
+
+  // Sink names attached
+  repeated string sink_names = 3;
+
+  // Timestamp of when the logger was created
+  TimeStamp created_at = 4;
+
+  // Success message
+  string message = 5;
+}
+
+// RemoveLoggerRequest removes a logger configuration
+message RemoveLoggerRequest {
+  // Logger name to remove
+  string name = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
+}
+
+// RemoveLoggerResponse confirms the logger was removed
+message RemoveLoggerResponse {
+  // Logger name that was removed
+  string name = 1;
+
+  // Timestamp of when the logger was removed
+  TimeStamp removed_at = 2;
+
+  // Success message
+  string message = 3;
+}
+
+// AttachSinkRequest attaches an existing sink to a logger
+message AttachSinkRequest {
+  // Logger name to attach the sink to
+  string logger_name = 1;
+
+  // Sink name to attach
+  string sink_name = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
+}
+
+// AttachSinkResponse confirms the sink was attached to the logger
+message AttachSinkResponse {
+  // Logger name
+  string logger_name = 1;
+
+  // Sink name that was attached
+  string sink_name = 2;
+
+  // Updated list of all sink names attached to this logger
+  repeated string sink_names = 3;
+
+  // Timestamp of when the attachment occurred
+  TimeStamp attached_at = 4;
+
+  // Success message
+  string message = 5;
+}
+
+// DetachSinkRequest removes a sink from a logger
+message DetachSinkRequest {
+  // Logger name to detach the sink from
+  string logger_name = 1;
+
+  // Sink name to detach
+  string sink_name = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
+}
+
+// DetachSinkResponse confirms the sink was detached from the logger
+message DetachSinkResponse {
+  // Logger name
+  string logger_name = 1;
+
+  // Sink name that was detached
+  string sink_name = 2;
+
+  // Updated list of remaining sink names attached to this logger
+  repeated string sink_names = 3;
+
+  // Timestamp of when the detachment occurred
+  TimeStamp detached_at = 4;
+
+  // Success message
+  string message = 5;
 }

@@ -3,175 +3,287 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
+
+	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
-// Daemon encapsulates the buildozer client daemon, collecting all subsystems
-// and exposing them through a unified gRPC API.
-//
-// The Daemon manages:
-// - Logging infrastructure (global logger and config manager)
-// - Runtime detection and management
-// - Job queue and scheduler
-// - HTTP/Connect server for remote access
-// - Peer discovery (mDNS)
-//
-// The daemon is designed to separate concerns: subsystems focus on their
-// specific domain, while the Daemon orchestrates them together.
-type Daemon struct {
-	// Configuration
-	config DaemonConfig
+// httpServer encapsulates the low-level HTTP/Connect server infrastructure.
+// It handles the network listening, request routing, and graceful shutdown.
+type httpServer struct {
+	*logging.Logger // Embedded logger for hierarchical logging
 
-	// Core subsystems
+	config DaemonConfig
 	server *http.Server
 	mux    *http.ServeMux
 
-	// Lifecycle management
 	mu      sync.RWMutex
 	running bool
 	ctx     context.Context
 	cancel  context.CancelFunc
 }
 
-// DaemonConfig holds the configuration for the daemon
-type DaemonConfig struct {
-	// Network configuration
-	Host string // Host to listen on (e.g., "localhost", "0.0.0.0")
-	Port int    // Port to listen on (e.g., 6789)
-
-	// Resource constraints
-	MaxConcurrentJobs int // Maximum number of jobs to run concurrently
-	MaxRAMMB          int // Maximum RAM to use for jobs (in MB)
-
-	// Feature flags
-	EnableMDNS bool // Enable mDNS peer discovery
-}
-
-// New creates a new Daemon with the given configuration.
-//
-// The daemon is not started until Start() is called. This allows for
-// proper lifecycle management and error handling during initialization.
-func New(config DaemonConfig) *Daemon {
-	return &Daemon{
+// newHTTPServer creates a new HTTP server instance.
+func newHTTPServer(config DaemonConfig) *httpServer {
+	return &httpServer{
+		Logger: Log().Child("httpServer").With("host", config.Host, "port", config.Port),
 		config: config,
 		mux:    http.NewServeMux(),
 	}
 }
 
-// RegisterServiceHandler registers a Connect service handler with the daemon.
-//
-// Services should call this during daemon initialization to register their
-// handlers. Multiple services can be registered before Start() is called.
-//
-// Example:
-//
-//	loggingPath, loggingHandler := logging.RegisterLoggingService(configManager)
-//	daemon.RegisterServiceHandler(loggingPath, loggingHandler)
-func (d *Daemon) RegisterServiceHandler(path string, handler http.Handler) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+// registerHandler registers an HTTP handler for a given path.
+func (hs *httpServer) registerHandler(path string, handler http.Handler) {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
 
-	d.mux.Handle(path, handler)
-	slog.Info("Service registered", "path", path)
+	hs.mux.Handle(path, handler)
+	hs.Debug("Handler registered", "path", path)
 }
 
-// Start initializes and starts the daemon.
-//
-// This method:
-// 1. Validates the configuration
-// 2. Sets up the HTTP/Connect server
-// 3. Starts the server on the configured host:port
-// 4. Returns an error if the server fails to start
-//
-// The daemon runs asynchronously; callers should listen for errors on the
-// error channel or call Stop() to shut down gracefully.
-func (d *Daemon) Start() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+// start initializes and starts the HTTP server.
+func (hs *httpServer) start() error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
 
-	if d.running {
-		return fmt.Errorf("daemon is already running")
+	if hs.running {
+		return hs.Errorf("server is already running")
 	}
 
-	// Create a cancellable context for lifecycle management
-	d.ctx, d.cancel = context.WithCancel(context.Background())
+	hs.ctx, hs.cancel = context.WithCancel(context.Background())
 
-	// Create the HTTP server with the mux
-	addr := fmt.Sprintf("%s:%d", d.config.Host, d.config.Port)
-	d.server = &http.Server{
+	addr := fmt.Sprintf("%s:%d", hs.config.Host, hs.config.Port)
+	hs.server = &http.Server{
 		Addr:    addr,
-		Handler: d.mux,
+		Handler: hs.mux,
 	}
 
-	d.running = true
+	hs.running = true
 
-	// Start the server in a goroutine
 	go func() {
-		slog.Info("Daemon starting", "host", d.config.Host, "port", d.config.Port)
-		if err := d.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server error", "error", err)
+		hs.Info("HTTP server starting", "addr", addr)
+		if err := hs.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			hs.Error("HTTP server error", "error", err)
 		}
 	}()
 
 	return nil
 }
 
-// Stop gracefully shuts down the daemon.
-//
-// This method:
-// 1. Closes the HTTP/Connect server (with context timeout)
-// 2. Cancels the daemon context
-// 3. Cleans up any background goroutines
-// 4. Returns an error if shutdown fails
-//
-// Stop() is idempotent; calling it multiple times is safe.
-func (d *Daemon) Stop(ctx context.Context) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+// stop gracefully shuts down the HTTP server.
+func (hs *httpServer) stop(ctx context.Context) error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
 
-	if !d.running {
-		return nil // Already stopped
+	if !hs.running {
+		return nil
 	}
 
-	slog.Info("Daemon shutting down")
+	hs.Info("HTTP server shutting down")
 
-	// Close the server with timeout
-	if d.server != nil {
-		if err := d.server.Shutdown(ctx); err != nil {
-			slog.Error("Server shutdown error", "error", err)
-			return err
+	if hs.server != nil {
+		if err := hs.server.Shutdown(ctx); err != nil {
+			return hs.Errorf("HTTP server shutdown failed: %w", err)
 		}
 	}
 
-	// Cancel the daemon context
-	if d.cancel != nil {
-		d.cancel()
+	if hs.cancel != nil {
+		hs.cancel()
 	}
 
-	d.running = false
+	hs.running = false
 	return nil
 }
 
-// IsRunning returns true if the daemon is currently running.
-func (d *Daemon) IsRunning() bool {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.running
+// isRunning returns true if the server is running.
+func (hs *httpServer) isRunning() bool {
+	hs.mu.RLock()
+	defer hs.mu.RUnlock()
+	return hs.running
 }
 
-// Context returns the daemon's context, which is cancelled when Stop() is called.
-// Subsystems can use this context to coordinate graceful shutdown.
+// getContext returns the server's context.
+func (hs *httpServer) getContext() context.Context {
+	hs.mu.RLock()
+	defer hs.mu.RUnlock()
+	return hs.ctx
+}
+
+// DaemonConfig holds the configuration for the daemon.
+type DaemonConfig struct {
+	// Network configuration
+	Host string `json:"host" yaml:"host"` // Host to listen on (e.g., "localhost", "0.0.0.0")
+	Port int    `json:"port" yaml:"port"` // Port to listen on (e.g., 6789)
+
+	// Resource constraints
+	MaxConcurrentJobs int `json:"max_concurrent_jobs" yaml:"max_concurrent_jobs"` // Maximum number of jobs to run concurrently
+	MaxRAMMB          int `json:"max_ram_mb" yaml:"max_ram_mb"`                   // Maximum RAM to use for jobs (in MB)
+
+	// Feature flags
+	EnableMDNS bool `json:"enable_mdns" yaml:"enable_mdns"` // Enable mDNS peer discovery
+
+	// Logging configuration for daemon mode
+	Logging logging.LoggingConfig `json:"logging" yaml:"logging"` // Logging config used by daemon
+}
+
+// DefaultDaemonLoggingConfig returns the default logging configuration for daemon mode.
+// It includes stdout and file sinks for buildozer-daemon.log in the daemon log directory.
+func DefaultDaemonLoggingConfig() logging.LoggingConfig {
+	return logging.LoggingConfig{
+		GlobalLevel: "debug",
+		Sinks: []logging.SinkConfig{
+			{
+				Name:  "stdout",
+				Type:  "stdout",
+				Level: "debug",
+			},
+			{
+				Name:       "daemon_file",
+				Type:       "file",
+				Level:      "debug",
+				Path:       "buildozer-daemon.log",
+				MaxSizeB:   100 * 1024 * 1024, // 100MB
+				MaxFiles:   10,
+				MaxAgeDays: 30,
+				JSONFormat: false,
+			},
+		},
+		Loggers: []logging.LoggerConfig{
+			{
+				Name:  "buildozer",
+				Level: "debug",
+				Sinks: []string{"stdout", "daemon_file"},
+			},
+		},
+	}
+}
+
+// DefaultConfig returns the default daemon configuration.
+func DefaultConfig() DaemonConfig {
+	return DaemonConfig{
+		Host:              "127.0.0.1",
+		Port:              6789,
+		MaxConcurrentJobs: 4,
+		MaxRAMMB:          8192,
+		EnableMDNS:        true,
+		Logging:           DefaultDaemonLoggingConfig(),
+	}
+}
+
+// Daemon sets up, configures, and manages all buildozer client services.
+//
+// The Daemon is responsible for:
+// - Initializing logging infrastructure
+// - Setting up service handlers (logging, runtime, jobs, etc.)
+// - Running the HTTP/Connect server
+// - Coordinating graceful shutdown
+//
+// This is the main entry point for starting a buildozer daemon.
+type Daemon struct {
+	*logging.Logger // Embedded logger for daemon-level logging
+
+	httpServer           *httpServer
+	loggingConfigManager logging.ConfigManager
+}
+
+// NewDaemon creates a new Daemon with all standard services configured.
+//
+// This is the recommended way to create and start a daemon with all
+// subsystems initialized:
+//
+// Example:
+//
+//	d, err := daemon.NewDaemon(daemonConfig)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer d.Stop(context.Background())
+//	if err := d.Start(); err != nil {
+//	    log.Fatal(err)
+//	}
+//	// Daemon is now running
+//
+// The Daemon handles initialization of:
+// - Logging infrastructure and configuration manager
+// - Logging service handler registration
+// - (Future) Runtime detection and job execution
+// - (Future) Job queue and scheduler
+// - (Future) Peer discovery
+func NewDaemon(config DaemonConfig) (*Daemon, error) {
+	// Use the global logging system initialized by the caller
+	// The caller (e.g., DaemonCommands) is responsible for initializing
+	// the global logging system with the appropriate config
+	loggingConfigMgr := logging.GetLocalConfigManager()
+	if loggingConfigMgr == nil {
+		return nil, fmt.Errorf("failed to initialize logging config manager")
+	}
+
+	// Create the HTTP server
+	httpSrv := newHTTPServer(config)
+
+	// Register logging service
+	loggingPath, loggingHandler := logging.RegisterLoggingService(loggingConfigMgr)
+	httpSrv.registerHandler(loggingPath, loggingHandler)
+	Log().Debug("Logging service registered", "path", loggingPath)
+
+	// TODO: Register other services
+	// - Runtime/Job service
+	// - Peer discovery service
+	// - Cache service
+	// - Queue/Scheduler service
+
+	return &Daemon{
+		Logger:               Log(),
+		httpServer:           httpSrv,
+		loggingConfigManager: loggingConfigMgr,
+	}, nil
+}
+
+// Start starts the daemon and all registered services.
+//
+// Returns an error if the daemon fails to start.
+func (d *Daemon) Start() error {
+	if err := d.httpServer.start(); err != nil {
+		return d.Errorf("Failed to start daemon: %w", err)
+	}
+	return nil
+}
+
+// Stop gracefully shuts down the daemon and all services.
+//
+// Returns an error if graceful shutdown fails (though the daemon will still stop).
+func (d *Daemon) Stop(ctx context.Context) error {
+	d.Info("stopping daemon")
+	return d.httpServer.stop(ctx)
+}
+
+// IsRunning returns true if the daemon is running.
+func (d *Daemon) IsRunning() bool {
+	return d.httpServer.isRunning()
+}
+
+// Context returns the daemon's context for coordinating graceful shutdown.
 func (d *Daemon) Context() context.Context {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.ctx
+	return d.httpServer.getContext()
 }
 
 // Config returns the daemon's configuration.
 func (d *Daemon) Config() DaemonConfig {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.config
+	return d.httpServer.config
+}
+
+// LoggingConfigManager returns the logging config manager used by the daemon.
+// This can be used to query or update logging configuration.
+func (d *Daemon) LoggingConfigManager() logging.ConfigManager {
+	return d.loggingConfigManager
+}
+
+// RegisterServiceHandler registers a Connect service handler with the daemon.
+// This is used internally by NewDaemon to register all service handlers.
+// For advanced use cases that need custom handlers, you can call this directly
+// on the daemon after creation but before calling Start().
+func (d *Daemon) RegisterServiceHandler(path string, handler http.Handler) {
+	d.httpServer.registerHandler(path, handler)
+	d.Info("Service registered", "path", path)
 }

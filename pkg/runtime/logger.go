@@ -2,7 +2,7 @@ package runtime
 
 import "github.com/Manu343726/buildozer/pkg/logging"
 
-// Logger returns the logger for the runtime package
-func Logger() *logging.Logger {
-	return logging.GetLogger("buildozer.runtime")
+// Log returns the logger for the runtime package
+func Log() *logging.Logger {
+	return logging.Log().Child("runtime")
 }

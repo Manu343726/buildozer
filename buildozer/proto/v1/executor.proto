@@ -31,6 +31,8 @@ message ExecuteJobRequest {
 
   // Timeout for this job execution
   buildozer.proto.v1.TimeDuration timeout = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
 }
 
 // ExecuteJobResponse streams job progress back to the requesting client
@@ -58,6 +60,8 @@ message FetchArtifactRequest {
 
   // Timeout for the transfer
   buildozer.proto.v1.TimeDuration timeout = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
 }
 
 // FetchArtifactResponse streams artifact data back

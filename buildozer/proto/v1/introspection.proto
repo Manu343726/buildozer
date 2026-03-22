@@ -47,6 +47,8 @@ service IntrospectionService {
 message GetClientStatusRequest {
   // Optional: include detailed statistics
   bool include_stats = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
 }
 
 // GetClientStatusResponse returns comprehensive client information
@@ -116,6 +118,8 @@ message CurrentLoad {
 message ListPeersRequest {
   // Only return peers with these runtime capabilities (filter)
   repeated buildozer.proto.v1.Runtime filter_by_runtime = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
 }
 
 // ListPeersResponse returns peer list
@@ -128,6 +132,8 @@ message ListPeersResponse {
 message GetPeerInfoRequest {
   // Peer ID
   string peer_id = 1;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
 }
 
 // GetPeerInfoResponse returns detailed peer information
@@ -158,6 +164,8 @@ message QueryLogsRequest {
 
   // Search string (substring match in log message)
   string search = 7;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 8;
 }
 
 // LogEntry is a single structured log line
@@ -187,6 +195,8 @@ message QueryLogsResponse {
 // GetCacheStatusRequest queries cache statistics
 message GetCacheStatusRequest {
   // unused
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 1;
 }
 
 // CacheStatistics contains cache info
@@ -235,6 +245,8 @@ message ListCachedArtifactsRequest {
 
   // Pagination: limit
   uint32 limit = 5;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 6;
 }
 
 // CachedArtifact describes a single cached artifact
@@ -267,6 +279,8 @@ message ListCachedArtifactsResponse {
 // GetJobQueueRequest queries the job queue
 message GetJobQueueRequest {
   // unused
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 1;
 }
 
 // QueuedJobInfo describes a job in the queue
@@ -306,6 +320,8 @@ message GetJobHistoryRequest {
 
   // Filter by job status
   repeated string statuses = 3; // "RUNNING", "COMPLETED", "FAILED", etc.
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
 }
 
 // HistoricalJobInfo describes a completed/failed job

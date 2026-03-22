@@ -38,6 +38,8 @@ message AnnounceSelfRequest {
 
   // Peer metadata (protocol version, buildozer version, etc.)
   PeerMetadata metadata = 6;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 7;
 }
 
 // AnnounceSelfResponse confirms peer announcement
@@ -119,6 +121,8 @@ message QueryCapabilitiesRequest {
 
   // Include detailed statistics?
   bool include_stats = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // QueryCapabilitiesResponse returns peer capabilities and status

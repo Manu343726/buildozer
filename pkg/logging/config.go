@@ -38,27 +38,23 @@ type LoggingConfig struct {
 	Loggers     []LoggerConfig `json:"loggers" yaml:"loggers"`
 }
 
-// DefaultLoggingConfig returns a default logging configuration
+// DefaultLoggingConfig returns the default logging configuration for CLI client
+// It includes only stdout sink for interactive CLI usage
 func DefaultLoggingConfig() LoggingConfig {
 	return LoggingConfig{
-		GlobalLevel: "info",
+		GlobalLevel: "debug",
 		Sinks: []SinkConfig{
 			{
 				Name:  "stdout",
 				Type:  "stdout",
-				Level: "info",
-			},
-			{
-				Name:  "stderr",
-				Type:  "stderr",
-				Level: "error",
+				Level: "debug",
 			},
 		},
 		Loggers: []LoggerConfig{
 			{
 				Name:  "buildozer",
-				Level: "info",
-				Sinks: []string{"stdout", "stderr"},
+				Level: "debug",
+				Sinks: []string{"stdout"},
 			},
 		},
 	}
@@ -152,10 +148,15 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 	}
 
 	sink := &Sink{
-		Name:    config.Name,
-		Type:    config.Type,
-		Level:   level,
-		Handler: handler,
+		Name:       config.Name,
+		Type:       config.Type,
+		Level:      level,
+		Handler:    handler,
+		FilePath:   config.Path,
+		MaxSize:    config.MaxSizeB,
+		MaxBackups: int32(config.MaxFiles),
+		MaxAgeDays: int32(config.MaxAgeDays),
+		JSONFormat: config.JSONFormat,
 	}
 
 	if err := f.registry.RegisterSink(sink); err != nil {
@@ -178,7 +179,7 @@ func (f *Factory) InitializeFromConfig(config LoggingConfig) error {
 		}
 	}
 
-	// Configure loggers with their sinks
+	// Configure loggers with their sinks AND levels
 	for _, loggerCfg := range config.Loggers {
 		// Validate that all sinks exist
 		for _, sinkName := range loggerCfg.Sinks {
@@ -187,9 +188,15 @@ func (f *Factory) InitializeFromConfig(config LoggingConfig) error {
 			}
 		}
 
-		// Configure which sinks are used by this logger
+		// Configure which sinks are used by this logger (this creates the logger config entry)
 		if err := f.registry.SetLoggerSinks(loggerCfg.Name, loggerCfg.Sinks); err != nil {
 			return fmt.Errorf("failed to configure logger %q: %w", loggerCfg.Name, err)
+		}
+
+		// Now set the logger level from config (after the logger config entry exists)
+		level := ParseLevel(loggerCfg.Level)
+		if err := f.registry.SetLoggerLevel(loggerCfg.Name, level); err != nil {
+			return fmt.Errorf("failed to set logger %q level: %w", loggerCfg.Name, err)
 		}
 	}
 

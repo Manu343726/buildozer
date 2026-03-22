@@ -27,10 +27,17 @@ type NativeCppRuntime struct {
 // - workDir: The working directory for temporary files and compiler operations
 // Returns a fully initialized runtime ready for execution.
 func NewNativeCppRuntime(toolchain *Toolchain, workDir string) *NativeCppRuntime {
+	compilerName := "unknown"
+	switch toolchain.Compiler {
+	case CompilerGCC:
+		compilerName = "gcc"
+	case CompilerClang:
+		compilerName = "clang"
+	}
 	return &NativeCppRuntime{
 		toolchain: toolchain,
 		executor:  NewExecutor(toolchain.CompilerPath, workDir),
-		log:       logger.NewComponentLogger(fmt.Sprintf("cpp-native-%s", toolchain.Compiler)),
+		log:       logger.NewComponentLogger(fmt.Sprintf("cpp-native-%s", compilerName)),
 	}
 }
 

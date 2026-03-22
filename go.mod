@@ -5,8 +5,10 @@ go 1.24.3
 require (
 	connectrpc.com/connect v1.19.1
 	github.com/spf13/cobra v1.8.1
+	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.18.2
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
@@ -19,13 +21,9 @@ require (
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/samber/lo v1.52.0 // indirect
-	github.com/samber/slog-common v0.20.0 // indirect
-	github.com/samber/slog-multi v1.7.1 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
@@ -35,6 +33,5 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

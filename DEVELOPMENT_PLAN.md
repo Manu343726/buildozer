@@ -217,6 +217,69 @@ The buildozer protocol is organized into **four logically separate APIs**, all s
 | **Pure oneof pattern** | No redundant type enums; message types discriminated by oneof field alone for cleaner protocol |
 | **Vocabulary layer** | Reusable types (TimeStamp, TimeDuration, Hash, Size, ResourceUsage, etc.) across all protocol messages |
 
+### Component Logger Embedding Pattern
+
+**Pattern:** All components in Buildozer follow a consistent logging pattern using unnamed embedded loggers for cleaner code and automatic contextual tracking.
+
+**Rationale:**
+- **Reduced boilerplate:** Method promotion via unnamed embedding eliminates `c.logger.Method()` prefixes
+- **Automatic hierarchy:** Each component's logger is a child of its parent, creating natural hierarchical context visible in logs
+- **Consistent error handling:** All errors logged and returned uniformly via `Errorf()` method
+- **Remote observability:** Hierarchical structure enables filtering logs by component namespace (e.g., `daemon.httpServer.*`)
+- **Easy testing:** Components with embedded loggers easier to mock and verify logging behavior
+
+**Implementation Pattern:**
+```go
+type MyComponent struct {
+    *logging.Logger  // unnamed embedded field
+    config ConfigType
+    // ... other fields ...
+}
+
+func NewMyComponent(cfg ConfigType) *MyComponent {
+    return &MyComponent{
+        Logger: daemon.Log().Child("MyComponent"),  // parent is daemon logger
+        config: cfg,
+    }
+}
+
+func (c *MyComponent) Operation() error {
+    c.Debug("starting operation", "param", value)
+    // ... do work ...
+    if err != nil {
+        return c.Errorf("operation failed: %w", err)  // logs AND returns
+    }
+    c.Debug("operation completed")
+    return nil
+}
+```
+
+**Logging Hierarchy Example:**
+```
+root
+├── daemon
+│   ├── httpServer
+│   ├── scheduler
+│   └── jobExecutor
+└── client
+    ├── cacheManager
+    └── peerDiscovery
+```
+
+**Component Responsibilities:**
+- **Log entry and exit:** Use `Debug()` at operation start with relevant parameters
+- **Log errors:** Use `Errorf()` for all error paths; this both logs and returns the error
+- **Log completion:** Use `Debug()` or `Info()` on successful completion with results
+- **Structured attributes:** Include relevant context as key-value pairs: `c.Debug("message", "key1", val1, "key2", val2, ...)`
+
+**All components implement this pattern, including:**
+- Daemon HTTP server and services
+- CLI command handlers
+- Job executors and schedulers
+- Cache managers
+- Peer discovery and coordination
+- Runtime detectors and executors
+
 ---
 
 ## Implementation Plan
@@ -1204,6 +1267,53 @@ Total: ~26 weeks (~6 months)
 
 ---
 
+## Development Policy
+
+### Backwards Compatibility
+- **Default:** Do NOT maintain backwards compatibility. Remove deprecated APIs and functions without hesitation.
+- **Exception:** Only maintain backwards compatibility if explicitly requested by the user in the task description.
+- **Rationale:** Clean code, reduced maintenance burden, no duplicate deprecated implementations. Clear migration path is better than legacy compatibility.
+
+### Logger Hierarchy
+- **Root logger:** `logging.Log()` returns the main `"buildozer"` logger, set as default slog logger.
+- **Package loggers:** Every package must have a `logger.go` file with a `Log()` function.
+- **Hierarchy rule:** Package loggers are created as children of the root logger (or parent package logger if applicable):
+  - Top-level packages: `logging.Log().Child("package_name")`
+  - Nested packages: Build full path from root: `logging.Log().Child("parent").Child("child")`
+  - Example: `pkg/runtimes/cpp/native/Log()` → `logging.Log().Child("runtimes").Child("cpp").Child("native")`
+- **Component loggers:** Each component (struct, service, handler) within a package should have its own logger as a child of the package logger:
+  - Component loggers are **embedded unnamed** in component structs for direct method access
+  - Embed as `*logging.Logger` so methods are promoted to component type
+  - Components can call logging methods directly: `.Debug()`, `.Info()`, `.Error()`
+  - Components return errors using `.Errorf(format, args...)` which both logs AND returns the error (like `fmt.Errorf()`)
+  - Example:
+    ```go
+    type httpServer struct {
+        *logging.Logger  // unnamed embedded field
+        config DaemonConfig
+        // other fields...
+    }
+    
+    func newHTTPServer(config DaemonConfig) *httpServer {
+        return &httpServer{
+            Logger: daemon.Log().Child("httpServer"),  // or use field name if not embedded
+            config: config,
+        }
+    }
+    
+    // Now httpServer can call logging and error methods directly:
+    func (hs *httpServer) start() error {
+        hs.Info("starting HTTP server")  // promoted method
+        if err := listen(); err != nil {
+            return hs.Errorf("failed to listen: %w", err)  // logs error and returns it
+        }
+    }
+    ```
+- **Rationale:** Maintains proper logger hierarchy for structured logging and remote log queries by component path. Embedding provides clean, direct access to logging methods without verbose `.logger.` prefixes, and `.Errorf()` integration ensures all errors are logged.
+
+---
+
 **Plan Version:** 2.0  
 **Status:** Ready for implementation  
-**Last Updated:** 2026-03-17
+**Last Updated:** 2026-03-17  
+**Policy Updates:** 2026-03-22 (Backwards compatibility, Logger hierarchy with component loggers)

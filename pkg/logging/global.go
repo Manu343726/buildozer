@@ -9,34 +9,97 @@ import (
 var (
 	globalRegistry *Registry
 	globalFactory  *Factory
-	mu             sync.Once
+	mu             sync.Mutex
+	initialized    bool
 )
 
-// InitializeGlobal initializes the global logging system
+// InitializeGlobal initializes the global logging system.
+// Must be called before any loggers are created to ensure correct configuration is used.
+// If already initialized, this call is a no-op and returns nil.
 func InitializeGlobal(config LoggingConfig) error {
-	var initErr error
-	mu.Do(func() {
-		globalRegistry = NewRegistry()
-		globalFactory = NewFactory(globalRegistry)
-		initErr = globalFactory.InitializeFromConfig(config)
-	})
-	return initErr
+	mu.Lock()
+	// If already initialized, do nothing
+	if initialized {
+		mu.Unlock()
+		return nil
+	}
+
+	// Check if we need to initialize
+	needsInit := globalRegistry == nil
+	mu.Unlock()
+
+	if needsInit {
+		// Do initialization without holding the lock
+		// (initialization may trigger logger calls which would deadlock)
+		registry := NewRegistry()
+		factory := NewFactory(registry)
+		if err := factory.InitializeFromConfig(config); err != nil {
+			return err
+		}
+
+		// Now lock to store and mark as initialized
+		mu.Lock()
+		// Double-check that it wasn't initialized by another goroutine
+		if !initialized {
+			globalRegistry = registry
+			globalFactory = factory
+			slog.SetDefault(registry.GetLogger("buildozer").Logger)
+			initialized = true
+		}
+		mu.Unlock()
+	}
+
+	return nil
 }
 
-// GetRegistry returns the global logger registry
+// GetRegistry returns the global logger registry.
+// If not yet initialized by InitializeGlobal(), initializes with default config.
 func GetRegistry() *Registry {
-	if globalRegistry == nil {
-		// Initialize with default config if not yet initialized
-		globalRegistry = NewRegistry()
-		globalFactory = NewFactory(globalRegistry)
-		globalFactory.InitializeFromConfig(DefaultLoggingConfig())
+	// First check without lock (read-only check)
+	if globalRegistry != nil {
+		return globalRegistry
 	}
+
+	// Need to initialize - do it without holding the lock
+	mu.Lock()
+	// Double-check pattern: verify again under lock
+	if globalRegistry != nil {
+		mu.Unlock()
+		return globalRegistry
+	}
+
+	// Unlock before initialization (to avoid deadlock when code calls GetLogger)
+	mu.Unlock()
+
+	registry := NewRegistry()
+	factory := NewFactory(registry)
+	if err := factory.InitializeFromConfig(DefaultLoggingConfig()); err != nil {
+		panic("failed to initialize global logging: " + err.Error())
+	}
+
+	// Lock again to store
+	mu.Lock()
+	// Double-check: another goroutine might have already initialized
+	if globalRegistry == nil {
+		globalRegistry = registry
+		globalFactory = factory
+		slog.SetDefault(registry.GetLogger("buildozer").Logger)
+		initialized = true
+	}
+	mu.Unlock()
+
 	return globalRegistry
 }
 
 // GetLogger returns a logger from the global registry
 func GetLogger(name string) *Logger {
 	return GetRegistry().GetLogger(name)
+}
+
+// Log returns the main "buildozer" logger
+// This is the root logger for the application and is set as the default slog logger
+func Log() *Logger {
+	return GetLogger("buildozer")
 }
 
 // SetLoggerLevel sets the level for a logger globally

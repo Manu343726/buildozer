@@ -1,7 +1,9 @@
 package cmd
 
 import (
-"github.com/spf13/cobra"
+	"github.com/Manu343726/buildozer/pkg/cli"
+	pkgconfig "github.com/Manu343726/buildozer/pkg/config"
+	"github.com/spf13/cobra"
 )
 
 // NewConfigCommand creates the 'config' subcommand
@@ -17,7 +19,9 @@ func NewConfigCommand() *cobra.Command {
 
 This helps verify that configuration is being loaded correctly from all sources.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			PrintConfigSummary()
+			configMgr := pkgconfig.ConfigManager()
+			configCmd := cli.NewConfigCommands(configMgr)
+			configCmd.ShowConfig()
 			return nil
 		},
 	}

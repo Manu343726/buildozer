@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Client Daemon",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/buildozer-client",
+      "args": ["daemon"],
+      "env": {
+        "BUILDOZER_LOG_LEVEL": "debug"
+      },
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "go: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug Client Daemon (Network)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/buildozer-client",
+      "args": ["daemon"],
+      "env": {
+        "BUILDOZER_LOG_LEVEL": "debug",
+        "BUILDOZER_DAEMON_PORT": "6789"
+      },
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "go: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug Client CLI",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/buildozer-client",
+      "args": ["status"],
+      "env": {
+        "BUILDOZER_LOG_LEVEL": "debug"
+      },
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "go: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug Logs Command (set-global-level)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/buildozer-client",
+      "args": ["logs", "set-global-level", "debug"],
+      "env": {
+        "BUILDOZER_LOG_LEVEL": "debug"
+      },
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "go: build",
+      "logOutput": "rpc"
+    }
+  ]
+}

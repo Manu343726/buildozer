@@ -109,6 +109,10 @@ func JSONFileSink(path string, maxSizeMB int, maxAgeDays int) (slog.Handler, err
 		MaxFiles:   5,
 		MaxAgeDays: maxAgeDays,
 		JSONFormat: true,
+		HandlerOpts: &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		},
 	})
 }
 
@@ -122,6 +126,10 @@ func TextFileSink(path string, maxSizeMB int, maxAgeDays int) (slog.Handler, err
 		MaxFiles:   5,
 		MaxAgeDays: maxAgeDays,
 		JSONFormat: false,
+		HandlerOpts: &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		},
 	})
 }
 
@@ -133,7 +141,7 @@ type OrderedTextHandler struct {
 	underlying io.Writer
 	opts       *slog.HandlerOptions
 	attrs      []slog.Attr // Accumulated attributes
-	group      string       // Current group
+	group      string      // Current group
 }
 
 // NewOrderedTextHandler creates a new handler with custom attribute ordering
@@ -155,14 +163,14 @@ func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) err
 	if h.opts.Level != nil && record.Level < h.opts.Level.Level() {
 		return nil
 	}
-	
+
 	// Collect all attributes: accumulated + record attributes
 	var loggerName string
 	var otherAttrs []slog.Attr
-	
+
 	// Add accumulated attributes first
 	otherAttrs = append(otherAttrs, h.attrs...)
-	
+
 	// Add record attributes
 	record.Attrs(func(a slog.Attr) bool {
 		if a.Key == "logger" {
@@ -172,20 +180,20 @@ func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) err
 		}
 		return true
 	})
-	
+
 	// Build output with desired order: time, level, logger, msg, other attributes
 	output := fmt.Sprintf("time=%s level=%s", record.Time.Format(time.RFC3339Nano), record.Level)
-	
+
 	if loggerName != "" {
 		output += fmt.Sprintf(" logger=%s", loggerName)
 	}
-	
+
 	output += fmt.Sprintf(" msg=%q", record.Message)
-	
+
 	for _, attr := range otherAttrs {
 		output += fmt.Sprintf(" %s=%v", attr.Key, attr.Value.Any())
 	}
-	
+
 	output += "\n"
 	_, err := io.WriteString(h.underlying, output)
 	return err

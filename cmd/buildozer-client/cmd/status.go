@@ -33,7 +33,7 @@ Use --standalone to run without needing a separate daemon process (in-process mo
 				return nil
 			}
 
-			// TODO: Connect to daemon at GetConfig().Daemon.Host:GetConfig().Daemon.Port
+			// TODO: Connect to daemon at pkgconfig.Get().Daemon.Host:pkgconfig.Get().Daemon.Port
 			// and call IntrospectionService.GetClientStatus()
 			fmt.Println("Client Status:")
 			fmt.Println("==============")

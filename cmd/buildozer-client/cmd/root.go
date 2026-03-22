@@ -3,36 +3,15 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 
+	pkgconfig "github.com/Manu343726/buildozer/pkg/config"
 	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// Config holds the effective configuration from all sources (flags, env vars, config file)
-type Config struct {
-	Daemon struct {
-		Host              string
-		Port              int
-		Listen            string
-		MaxConcurrentJobs int
-		MaxRAMMB          int
-		EnableMPOS        bool
-	}
-	Logging logging.LoggingConfig
-	Cache   struct {
-		Dir           string
-		MaxSizeGB     int
-		RetentionDays int
-	}
-	PeerDiscovery struct {
-		Enabled          bool
-		MDNSIntervalSecs int
-	}
-}
-
-// NewRootCommand creates and returns the root command with viper integration
+// NewRootCommand creates and returns the root command with config manager integration
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "buildozer-client",
@@ -54,13 +33,12 @@ Global flag --standalone enables in-process daemon mode for interactive commands
 avoiding the need to run a separate daemon process. Not compatible with the daemon
 subcommand or --host/--port flags.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			return initializeViper(cmd)
+			return initializeConfig(cmd)
 		},
 	}
 
 	// Global flags
-	root.PersistentFlags().String("config", "", "config file path (default: ~/.config/buildozer/config.yaml)")
-	root.PersistentFlags().Bool("debug", false, "enable debug logging")
+	root.PersistentFlags().String("settings", "", "custom settings file path (default: ~/.config/buildozer/buildozer.yaml)")
 	root.PersistentFlags().String("log-level", "info", "logging level: error/warn/info/debug/trace")
 	root.PersistentFlags().Bool("standalone", false, "run in standalone mode (in-process daemon for interactive commands)")
 	root.PersistentFlags().String("host", "localhost", "daemon host address (not used with --standalone)")
@@ -77,152 +55,84 @@ subcommand or --host/--port flags.`,
 	root.AddCommand(NewConfigCommand())
 	root.AddCommand(NewCancelCommand())
 
-	// Validate that daemon command can't be used with --standalone
-	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if err := initializeViper(cmd); err != nil {
-			return err
-		}
-		// Check if --standalone is set and user is trying to run 'daemon' command
-		standalone, _ := cmd.Flags().GetBool("standalone")
-		if standalone && cmd.Name() != "help" && cmd.Name() != "completion" {
-			// Get the actual subcommand being run
-			if len(args) > 0 && args[0] == "daemon" {
-				return fmt.Errorf("cannot use 'daemon' subcommand with --standalone flag. --standalone enables in-process daemon for interactive commands")
-			}
-		}
-		return nil
-	}
-
 	return root
 }
 
-// initializeViper sets up viper configuration management with priority order:
-// CLI flags > Environment variables > Config file > Defaults
-func initializeViper(cmd *cobra.Command) error {
-	// Set env prefix
-	viper.SetEnvPrefix("BUILDOZER")
+// initializeConfig sets up configuration from all sources using the config manager
+// and initializes logging with the appropriate config for this command.
+func initializeConfig(cmd *cobra.Command) error {
+	// Get the settings file path from the --settings flag
+	settingsFile, _ := cmd.Flags().GetString("settings")
 
-	// Use GetEnv to read env variables
-	// This allows nested keys like "daemon.port" to map to "BUILDOZER_DAEMON_PORT"
-	viper.BindEnv("daemon.host", "BUILDOZER_DAEMON_HOST")
-	viper.BindEnv("daemon.port", "BUILDOZER_DAEMON_PORT")
-	viper.BindEnv("daemon.listen", "BUILDOZER_DAEMON_LISTEN")
-	viper.BindEnv("daemon.max_concurrent_jobs", "BUILDOZER_DAEMON_MAX_CONCURRENT_JOBS")
-	viper.BindEnv("daemon.max_ram_mb", "BUILDOZER_DAEMON_MAX_RAM_MB")
-	viper.BindEnv("daemon.enable_mpos", "BUILDOZER_DAEMON_ENABLE_MPOS")
+	// Initialize the global config manager with the settings file
+	configMgr := pkgconfig.ConfigManager()
+	if err := configMgr.Initialize(settingsFile); err != nil {
+		return err
+	}
 
-	viper.BindEnv("logging.level", "BUILDOZER_LOGGING_LEVEL")
-	viper.BindEnv("logging.format", "BUILDOZER_LOGGING_FORMAT")
+	// Define which flags map to which config values
+	// The CLI owns this decision about what flags override what config keys
+	flagMappings := map[string]string{
+		"log-level":  "logging.global_level",
+		"host":       "daemon.host",
+		"port":       "daemon.port",
+		"standalone": "standalone",
+	}
 
-	viper.BindEnv("cache.dir", "BUILDOZER_CACHE_DIR")
-	viper.BindEnv("cache.max_size_gb", "BUILDOZER_CACHE_MAX_SIZE_GB")
-	viper.BindEnv("cache.retention_days", "BUILDOZER_CACHE_RETENTION_DAYS")
+	// Bind the selected flags to viper (highest priority)
+	if err := configMgr.BindFlags(cmd.Flags(), flagMappings); err != nil {
+		return err
+	}
 
-	viper.BindEnv("peer_discovery.enabled", "BUILDOZER_PEER_DISCOVERY_ENABLED")
-	viper.BindEnv("peer_discovery.mDNS_interval_seconds", "BUILDOZER_PEER_DISCOVERY_MDNS_INTERVAL_SECONDS")
+	// Get the effective configuration
+	cfg := pkgconfig.Get()
 
-	// Set config file paths
-	viper.SetConfigName("buildozer")
-	viper.SetConfigType("yaml")
+	// Determine if we're running the daemon command by checking os.Args
+	// (Look for "daemon" in the command line, skipping flag names and values)
+	isDaemonCommand := isDaemonBeingRun()
 
-	// Config file search paths
-	configPath, _ := cmd.Flags().GetString("config")
-	if configPath != "" {
-		// Explicit config path from --config flag
-		viper.SetConfigFile(configPath)
+	// Initialize logging with appropriate config for this command
+	var loggingConfig logging.LoggingConfig
+	if isDaemonCommand {
+		// Daemon uses its own logging config (may have file sinks, etc)
+		loggingConfig = cfg.Daemon.Logging
 	} else {
-		// Standard locations
-		viper.AddConfigPath(filepath.Join(os.Getenv("HOME"), ".config", "buildozer"))
-		viper.AddConfigPath("/etc/buildozer")
-		viper.AddConfigPath(".")
+		// Client commands use the general logging config
+		loggingConfig = cfg.Logging
 	}
 
-	// Read config file (non-fatal if missing)
-	if err := viper.ReadInConfig(); err != nil {
-		// Config file is optional
-		_ = err
+	if err := logging.InitializeGlobal(loggingConfig); err != nil {
+		return err
 	}
-
-	// Bind CLI flags to viper - these are HIGHEST priority
-	// This MUST happen AFTER reading config file so flags override everything
-	viper.BindPFlag("debug", cmd.Flags().Lookup("debug"))
-	viper.BindPFlag("logging.level", cmd.Flags().Lookup("log-level"))
-	viper.BindPFlag("daemon.host", cmd.Flags().Lookup("host"))
-	viper.BindPFlag("daemon.port", cmd.Flags().Lookup("port"))
 
 	return nil
 }
 
-// GetConfig returns the effective configuration from viper
-// using defaults only when values are not found in any source
-func GetConfig() *Config {
-	cfg := &Config{}
-
-	// Daemon - get from viper with inline defaults
-	cfg.Daemon.Host = getStringOrDefault("daemon.host", "localhost")
-	cfg.Daemon.Port = getIntOrDefault("daemon.port", 6789)
-	cfg.Daemon.Listen = getStringOrDefault("daemon.listen", "0.0.0.0")
-	cfg.Daemon.MaxConcurrentJobs = getIntOrDefault("daemon.max_concurrent_jobs", 4)
-	cfg.Daemon.MaxRAMMB = getIntOrDefault("daemon.max_ram_mb", 8192)
-	cfg.Daemon.EnableMPOS = getBoolOrDefault("daemon.enable_mpos", true)
-
-	// Logging - get from viper, or use defaults
-	if viper.IsSet("logging") {
-		if err := viper.UnmarshalKey("logging", &cfg.Logging); err != nil {
-			// Fall back to default if unmarshal fails
-			cfg.Logging = logging.DefaultLoggingConfig()
+// isDaemonBeingRun checks if the "daemon" subcommand is being executed
+// by looking for "daemon" in the command line arguments
+func isDaemonBeingRun() bool {
+	for _, arg := range os.Args[1:] {
+		// Skip flag names and their values
+		if strings.HasPrefix(arg, "-") {
+			continue
 		}
-	} else {
-		cfg.Logging = logging.DefaultLoggingConfig()
+		// First non-flag argument should be the subcommand
+		return arg == "daemon"
 	}
-
-	// Cache
-	cacheDir := getStringOrDefault("cache.dir", filepath.Join(os.Getenv("HOME"), ".cache", "buildozer"))
-	cfg.Cache.Dir = cacheDir
-	cfg.Cache.MaxSizeGB = getIntOrDefault("cache.max_size_gb", 100)
-	cfg.Cache.RetentionDays = getIntOrDefault("cache.retention_days", 30)
-
-	// Peer Discovery
-	cfg.PeerDiscovery.Enabled = getBoolOrDefault("peer_discovery.enabled", true)
-	cfg.PeerDiscovery.MDNSIntervalSecs = getIntOrDefault("peer_discovery.mDNS_interval_seconds", 30)
-
-	return cfg
-}
-
-// Helper functions to get values with fallback defaults
-func getStringOrDefault(key, defaultVal string) string {
-	if viper.IsSet(key) {
-		return viper.GetString(key)
-	}
-	return defaultVal
-}
-
-func getIntOrDefault(key string, defaultVal int) int {
-	if viper.IsSet(key) {
-		return viper.GetInt(key)
-	}
-	return defaultVal
-}
-
-func getBoolOrDefault(key string, defaultVal bool) bool {
-	if viper.IsSet(key) {
-		return viper.GetBool(key)
-	}
-	return defaultVal
+	return false
 }
 
 // PrintConfigSummary prints the effective configuration (useful for debugging)
 func PrintConfigSummary() {
-	cfg := GetConfig()
+	cfg := pkgconfig.Get()
 	fmt.Println("Effective Configuration:")
 	fmt.Println("======================")
 	fmt.Printf("Daemon:\n")
 	fmt.Printf("  Host: %s\n", cfg.Daemon.Host)
 	fmt.Printf("  Port: %d\n", cfg.Daemon.Port)
-	fmt.Printf("  Listen: %s\n", cfg.Daemon.Listen)
 	fmt.Printf("  Max Concurrent Jobs: %d\n", cfg.Daemon.MaxConcurrentJobs)
 	fmt.Printf("  Max RAM: %d MB\n", cfg.Daemon.MaxRAMMB)
-	fmt.Printf("  Enable MPOS: %v\n", cfg.Daemon.EnableMPOS)
+	fmt.Printf("  Enable mDNS: %v\n", cfg.Daemon.EnableMDNS)
 	fmt.Printf("\nLogging:\n")
 	fmt.Printf("  Global Level: %s\n", cfg.Logging.GlobalLevel)
 	fmt.Printf("  Sinks: %d\n", len(cfg.Logging.Sinks))
@@ -245,12 +155,6 @@ func PrintConfigSummary() {
 	if viper.ConfigFileUsed() != "" {
 		fmt.Printf("\nConfig file used: %s\n", viper.ConfigFileUsed())
 	}
-}
-
-// InitializeLogging initializes the logging system from the current configuration
-func InitializeLogging() error {
-	cfg := GetConfig()
-	return logging.InitializeGlobal(cfg.Logging)
 }
 
 // IsStandaloneMode returns true if --standalone flag is set globally

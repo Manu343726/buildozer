@@ -35,6 +35,8 @@ message SubmitJobRequest {
 
   // Optional: Client metadata (correlation ID, deadline, priority hints)
   buildozer.proto.v1.RequestMetadata metadata = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // SubmitJobResponse confirms job submission
@@ -71,6 +73,8 @@ message GetJobStatusRequest {
 
   // Optional: only return if status changed since this timestamp
   buildozer.proto.v1.TimeStamp since = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // GetJobStatusResponse returns the job status
@@ -89,6 +93,8 @@ message WatchJobStatusRequest {
 
   // Optional: only return updates after this timestamp
   buildozer.proto.v1.TimeStamp since = 2;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // WatchJobStatusResponse is streamed back with each status change
@@ -110,6 +116,8 @@ message CancelJobRequest {
 
   // Should dependent jobs also be cancelled? (if job A depends on job B, cancel both)
   bool cancel_dependents = 3;
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 4;
 }
 
 // CancelJobResponse confirms job cancellation
