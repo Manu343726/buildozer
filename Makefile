@@ -55,13 +55,6 @@ clean:
 all: generate build test
 	@echo "✓ All targets completed successfully"
 
-# Build without tests (faster for development)
-build-only: generate
-	@echo "Building CLI binaries (no tests)..."
-	mkdir -p ./bin
-	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
-	@echo "✓ Build complete: ./bin/buildozer-client"
-
 # Verify project builds and passes basic checks
 check: generate
 	@echo "Checking project..."
