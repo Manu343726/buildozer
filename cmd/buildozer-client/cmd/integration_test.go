@@ -124,11 +124,11 @@ peer_discovery:
 	require.NoError(t, err)
 
 	h.daemonProcess = exec.Command(
-"go", "run", "./cmd/buildozer-client/main.go",
-"daemon",
-"--settings", h.tempConfigFile,
-"--log-level", "debug",
-)
+		"go", "run", "./cmd/buildozer-client/main.go",
+		"daemon",
+		"--settings", h.tempConfigFile,
+		"--log-level", "debug",
+	)
 	h.daemonProcess.Dir = h.cliDriver.projectRoot
 	h.daemonProcess.Stdout = &h.daemonStdoutBuf
 	h.daemonProcess.Stderr = &h.daemonStderrBuf
@@ -211,8 +211,7 @@ func (h *TestHelper) StopDaemon(t *testing.T) {
 	select {
 	case <-done:
 		return
-	case <-time.After(2 * time.Second):
-		t.Log("daemon did not stop gracefully, killing forcefully")
+	case <-time.After(5 * time.Second):
 		if h.daemonProcess.Process != nil {
 			h.daemonProcess.Process.Kill()
 			select {
@@ -394,7 +393,7 @@ func TestIntegrationDaemonPortRandomization(t *testing.T) {
 	defer helper2.StopDaemon(t)
 
 	assert.NotEqual(t, helper1.daemonPort, helper2.daemonPort,
-"random ports should be different")
+		"random ports should be different")
 
 	helper1.StartDaemon(t)
 	helper2.StartDaemon(t)
