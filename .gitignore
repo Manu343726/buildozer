@@ -33,4 +33,3 @@ go.work.sum
 
 __debug_bin*
 *.log
-buildozer-client
