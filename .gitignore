@@ -33,3 +33,13 @@ go.work.sum
 
 __debug_bin*
 *.log
+
+# Build output directories
+/bin/
+/dist/
+/build/
+
+# Binary files (CLI tools, compiled binaries, etc.)
+/buildozer-client
+buildozer-daemon
+*.app
