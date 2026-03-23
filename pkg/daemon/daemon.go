@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Manu343726/buildozer/pkg/logging"
+	"github.com/Manu343726/buildozer/pkg/runtimes"
 )
 
 // httpServer encapsulates the low-level HTTP/Connect server infrastructure.
@@ -186,6 +187,7 @@ type Daemon struct {
 
 	httpServer           *httpServer
 	loggingConfigManager logging.ConfigManager
+	runtimeManager       *runtimes.Manager
 }
 
 // NewDaemon creates a new Daemon with all standard services configured.
@@ -234,8 +236,14 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	httpSrv.registerHandler(loggingPath, loggingHandler)
 	Log().Debug("Logging service registered", "path", loggingPath)
 
+	// Create and register runtime service
+	runtimeMgr := runtimes.NewManager()
+	runtimePath, runtimeHandler := runtimes.RegisterService(runtimeMgr)
+	httpSrv.registerHandler(runtimePath, runtimeHandler)
+	Log().Debug("Runtime service registered", "path", runtimePath)
+
 	// TODO: Register other services
-	// - Runtime/Job service
+	// - Job execution service
 	// - Peer discovery service
 	// - Cache service
 	// - Queue/Scheduler service
@@ -244,6 +252,7 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 		Logger:               Log(),
 		httpServer:           httpSrv,
 		loggingConfigManager: loggingConfigMgr,
+		runtimeManager:       runtimeMgr,
 	}, nil
 }
 

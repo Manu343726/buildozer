@@ -3,6 +3,8 @@ package native
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/internal/logger"
@@ -101,6 +103,12 @@ func (r *NativeCppRuntime) Available(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// GetToolchain returns the internal Toolchain configuration for this runtime.
+// This is used for protocol serialization and detailed inspection.
+func (r *NativeCppRuntime) GetToolchain() *Toolchain {
+	return r.toolchain
+}
+
 // Metadata returns runtime.Metadata describing this C/C++ runtime.
 // The metadata includes:
 // - RuntimeID: Unique identifier for this runtime
@@ -137,12 +145,28 @@ func (r *NativeCppRuntime) Metadata(ctx context.Context) (*runtime.Metadata, err
 }
 
 // RuntimeID returns a unique identifier for this runtime instance.
+// Format: native-<language>-<compiler>-<version>-<cruntime>-<cruntimeVersion>-[<stdlib>-]<arch>
 // The ID is deterministic and includes:
-// - The compiler name (gcc, clang, or unknown)
-// - The compiler version
-// - The target architecture
-// Format: "native-cpp-<compiler>-<version>-<arch>"
+// - Language: "c" or "cpp"
+// - Compiler name: "gcc", "clang"
+// - Compiler version (e.g., "10.2.1")
+// - C runtime: "glibc", "musl"
+// - C runtime version (e.g., "2.31")
+// - C++ stdlib (only for C++): "libstdc++", "libc++"
+// - Target architecture: "x86_64", "aarch64", "arm"
+// Examples:
+//
+//	native-c-gcc-10.2.1-glibc-2.31-x86_64 (C with GCC)
+//	native-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64 (C++ with GCC)
+//	native-cpp-clang-11.0.1-glibc-2.31-libc++-x86_64 (C++ with Clang)
 func (r *NativeCppRuntime) RuntimeID() string {
+	// Language: "c" or "cpp"
+	languageName := "c"
+	if r.toolchain.Language == LanguageCpp {
+		languageName = "cpp"
+	}
+
+	// Compiler name: "gcc" or "clang"
 	compilerName := "unknown"
 	switch r.toolchain.Compiler {
 	case CompilerGCC:
@@ -150,7 +174,40 @@ func (r *NativeCppRuntime) RuntimeID() string {
 	case CompilerClang:
 		compilerName = "clang"
 	}
-	return fmt.Sprintf("native-cpp-%s-%s-%s", compilerName, r.toolchain.CompilerVersion, r.toolchain.Architecture)
+
+	// C runtime name: "glibc" or "musl"
+	cruntimeName := "unknown"
+	switch r.toolchain.CRuntime {
+	case CRuntimeGlibc:
+		cruntimeName = "glibc"
+	case CRuntimeMusl:
+		cruntimeName = "musl"
+	}
+
+	// Build the ID: native-<language>-<compiler>-<version>-<cruntime>-<cruntimeVersion>
+	id := fmt.Sprintf("native-%s-%s-%s-%s-%s",
+		languageName,
+		compilerName,
+		r.toolchain.CompilerVersion,
+		cruntimeName,
+		r.toolchain.CRuntimeVersion)
+
+	// For C++, include the C++ stdlib before architecture
+	if r.toolchain.Language == LanguageCpp {
+		stdlibName := "unknown"
+		switch r.toolchain.CppStdlib {
+		case CppStdlibLibstdcxx:
+			stdlibName = "libstdc++"
+		case CppStdlibLibcxx:
+			stdlibName = "libc++"
+		}
+		id = fmt.Sprintf("%s-%s", id, stdlibName)
+	}
+
+	// Finally, append architecture
+	id = fmt.Sprintf("%s-%s", id, r.toolchain.Architecture)
+
+	return id
 }
 
 // protoCompileJobToConcrete converts a protocol buffer CppCompileJob to a concrete CompileJob.
@@ -195,4 +252,142 @@ func (r *NativeCppRuntime) protoLinkJobToConcrete(proto *v1.CppLinkJob) *LinkJob
 		OutputFile:    proto.OutputFile,
 		SharedLibrary: proto.IsSharedLibrary,
 	}
+}
+
+// ProtoLanguage converts internal Language to protocol buffer enum
+func (r *NativeCppRuntime) ProtoLanguage() v1.CppLanguage {
+	switch r.toolchain.Language {
+	case LanguageC:
+		return v1.CppLanguage_CPP_LANGUAGE_C
+	case LanguageCpp:
+		return v1.CppLanguage_CPP_LANGUAGE_CPP
+	default:
+		return v1.CppLanguage_CPP_LANGUAGE_UNSPECIFIED
+	}
+}
+
+// ProtoCompiler converts internal Compiler to protocol buffer enum
+func (r *NativeCppRuntime) ProtoCompiler() v1.CppCompiler {
+	switch r.toolchain.Compiler {
+	case CompilerGCC:
+		return v1.CppCompiler_CPP_COMPILER_GCC
+	case CompilerClang:
+		return v1.CppCompiler_CPP_COMPILER_CLANG
+	default:
+		return v1.CppCompiler_CPP_COMPILER_UNSPECIFIED
+	}
+}
+
+// ProtoArchitecture converts internal Architecture to protocol buffer enum
+func (r *NativeCppRuntime) ProtoArchitecture() v1.CpuArchitecture {
+	switch r.toolchain.Architecture {
+	case ArchitectureX86_64:
+		return v1.CpuArchitecture_CPU_ARCHITECTURE_X86_64
+	case ArchitectureAArch64:
+		return v1.CpuArchitecture_CPU_ARCHITECTURE_AARCH64
+	case ArchitectureARM:
+		return v1.CpuArchitecture_CPU_ARCHITECTURE_ARM
+	default:
+		return v1.CpuArchitecture_CPU_ARCHITECTURE_UNSPECIFIED
+	}
+}
+
+// ProtoCRuntime converts internal CRuntime to protocol buffer enum
+func (r *NativeCppRuntime) ProtoCRuntime() v1.CRuntime {
+	switch r.toolchain.CRuntime {
+	case CRuntimeGlibc:
+		return v1.CRuntime_C_RUNTIME_GLIBC
+	case CRuntimeMusl:
+		return v1.CRuntime_C_RUNTIME_MUSL
+	default:
+		return v1.CRuntime_C_RUNTIME_UNSPECIFIED
+	}
+}
+
+// ProtoCppStdlib converts internal CppStdlib to protocol buffer enum
+func (r *NativeCppRuntime) ProtoCppStdlib() v1.CppStdlib {
+	switch r.toolchain.CppStdlib {
+	case CppStdlibLibstdcxx:
+		return v1.CppStdlib_CPP_STDLIB_LIBSTDCXX
+	case CppStdlibLibcxx:
+		return v1.CppStdlib_CPP_STDLIB_LIBCXX
+	default:
+		return v1.CppStdlib_CPP_STDLIB_UNSPECIFIED
+	}
+}
+
+// ProtoCppAbi converts internal CppAbi to protocol buffer enum
+func (r *NativeCppRuntime) ProtoCppAbi() v1.CppAbi {
+	switch r.toolchain.CppAbi {
+	case CppAbiItanium:
+		return v1.CppAbi_CPP_ABI_ITANIUM
+	default:
+		return v1.CppAbi_CPP_ABI_UNSPECIFIED
+	}
+}
+
+// ParseVersionString parses a version string like "10.2.1" into a proto Version message
+func ParseVersionString(versionStr string) *v1.Version {
+	// Handle empty or unknown versions
+	if versionStr == "" || versionStr == "unknown" {
+		return &v1.Version{Major: 0}
+	}
+
+	pv := &v1.Version{}
+
+	// Split by dots and dashes
+	// Examples: "10.2.1", "11.0.1-2", "10.2.1-rc1"
+	parts := strings.FieldsFunc(versionStr, func(r rune) bool {
+		return r == '.' || r == '-'
+	})
+
+	// Parse major version
+	if len(parts) > 0 {
+		if major, err := strconv.ParseUint(parts[0], 10, 32); err == nil {
+			pv.Major = uint32(major)
+		}
+	}
+
+	// Parse minor version
+	if len(parts) > 1 {
+		if isNumeric(parts[1]) {
+			if minor, err := strconv.ParseUint(parts[1], 10, 32); err == nil {
+				m := uint32(minor)
+				pv.Minor = &m
+			}
+		} else {
+			// Non-numeric part is prerelease
+			pv.Prerelease = &parts[1]
+		}
+	}
+
+	// Parse patch version
+	if len(parts) > 2 {
+		if isNumeric(parts[2]) {
+			if patch, err := strconv.ParseUint(parts[2], 10, 32); err == nil {
+				p := uint32(patch)
+				pv.Patch = &p
+			}
+		} else {
+			// Non-numeric part is prerelease or metadata
+			if parts[2] != "" {
+				pv.Prerelease = &parts[2]
+			}
+		}
+	}
+
+	return pv
+}
+
+// isNumeric returns true if the string contains only digits
+func isNumeric(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

@@ -5,7 +5,9 @@ build: generate
 	@echo "Building CLI binaries..."
 	mkdir -p ./bin
 	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
-	@echo "✓ Build complete: ./bin/buildozer-client"
+	go build -o ./bin/gcc ./cmd/gcc
+	go build -o ./bin/g++ ./cmd/g++
+	@echo "✓ Build complete: ./bin/buildozer-client ./bin/gcc ./bin/g++"
 
 # Download module dependencies
 deps:

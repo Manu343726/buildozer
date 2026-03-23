@@ -54,6 +54,7 @@ subcommand or --host/--port flags.`,
 	root.AddCommand(NewQueueCommand())
 	root.AddCommand(NewConfigCommand())
 	root.AddCommand(NewCancelCommand())
+	root.AddCommand(NewRuntimeCommand())
 
 	return root
 }

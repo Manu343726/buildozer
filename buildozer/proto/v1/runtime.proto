@@ -236,3 +236,47 @@ message Runtime {
   // Current load and utilization of the runtime
   RuntimeLoad load = 25;
 }
+
+// RuntimeService provides RPC methods for querying runtimes available on the daemon
+service RuntimeService {
+  // ListRuntimes returns all runtimes available on this daemon
+  rpc ListRuntimes(ListRuntimesRequest) returns (ListRuntimesResponse);
+
+  // GetRuntime returns details about a specific runtime
+  rpc GetRuntime(GetRuntimeRequest) returns (GetRuntimeResponse);
+}
+
+// ListRuntimesRequest requests the list of available runtimes
+message ListRuntimesRequest {
+  // Optional: filter by toolchain type (e.g., "cpp", "go", "rust")
+  // If empty, returns all runtimes
+  optional string toolchain_filter = 1;
+
+  // If true, only return runtimes available on this daemon
+  // If false (default), include runtimes from peer daemons in the network
+  bool local_only = 2;
+}
+
+// ListRuntimesResponse returns the list of available runtimes
+message ListRuntimesResponse {
+  // All detected runtimes matching the filter
+  repeated Runtime runtimes = 1;
+
+  // Human-readable notes about detection (e.g., "Detected 16 C/C++ toolchains")
+  string detection_notes = 2;
+}
+
+// GetRuntimeRequest requests details about a specific runtime
+message GetRuntimeRequest {
+  // Runtime ID to query
+  string runtime_id = 1;
+}
+
+// GetRuntimeResponse returns details about a specific runtime
+message GetRuntimeResponse {
+  // The requested runtime, or empty if not found
+  optional Runtime runtime = 1;
+
+  // Error message if runtime not found
+  optional string error = 2;
+}
