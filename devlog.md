@@ -13,8 +13,9 @@
 **Objective:**
 Reduce default verbosity of drivers by changing default log level from `info` to `warn`.
 
-**Change:**
-Updated [pkg/drivers/flagparser.go](pkg/drivers/flagparser.go#L400) line 400:
+**Changes:**
+
+1. **Flagparser default** ([pkg/drivers/flagparser.go](pkg/drivers/flagparser.go#L400) line 400):
 ```go
 // Before:
 LogLevelPtr = StandardDriverFlags.String("log-level", "info", "Log level: debug, info, warn, error")
@@ -23,10 +24,49 @@ LogLevelPtr = StandardDriverFlags.String("log-level", "info", "Log level: debug,
 LogLevelPtr = StandardDriverFlags.String("log-level", "warn", "Log level: debug, info, warn, error")
 ```
 
+2. **Driver log level application** - Fixed drivers to actually apply the log level:
+   - Updated `RunGcc()` and `ListCompatibleRuntimes()` in [pkg/drivers/cpp/gcc/driver.go](pkg/drivers/cpp/gcc/driver.go)
+   - Updated `RunGxx()` and `ListCompatibleRuntimes()` in [pkg/drivers/cpp/gxx/driver.go](pkg/drivers/cpp/gxx/driver.go)
+   - Added logging import in both files
+   - Now calls `logging.ParseLevel()` and `logging.SetGlobalLevel()` to apply the configured log level
+
+**Before Implementation Issue:**
+- Changed default in flagparser but drivers received LogLevel value without actually using it
+- Code checked `if buildCtx.LogLevel != ""` but only logged about it
+- Logging was still at info/debug level showing verbose output
+
+**After Implementation Fix:**
+- Drivers now parse the LogLevel string with `logging.ParseLevel(buildCtx.LogLevel)`
+- Global slog level set with `logging.SetGlobalLevel(level)`
+- Logging output respects the configured level
+
+**Test Results:**
+```bash
+# Test 1: Default (warn) - No logs shown
+$ gcc --buildozer-list-runtimes
+Compatible C/C++ runtimes for GCC:
+  native-c-gcc-10.2.1-glibc-2.31-x86_64
+  native-c-gcc-10.2.1-musl-unknown-x86_64
+Total: 2 runtimes available
+
+# Test 2: Explicit info - INFO messages shown  
+$ gcc --buildozer-log-level info --buildozer-list-runtimes
+time=... level=INFO logger=buildozer.drivers.gcc msg="GCC list-runtimes mode started"
+time=... level=INFO logger=buildozer.RuntimeResolver msg="Querying daemon for available runtimes" ...
+...
+
+# Test 3: Explicit debug - DEBUG and INFO messages shown
+$ gcc --buildozer-log-level debug --buildozer-list-runtimes
+time=... level=DEBUG logger=buildozer.drivers.gcc msg="Created RuntimeResolver" ...
+time=... level=INFO logger=buildozer.drivers.gcc msg="GCC list-runtimes mode started"
+...
+```
+
 **Rationale:**
-- Drivers should be quiet by default; developers only see warnings and errors
-- Info/debug messages now only shown when explicitly requested: `--buildozer-log-level info`
+- Drivers are quiet by default with warn level; only warnings and errors shown
+- Info/debug messages available when explicitly requested: `--buildozer-log-level info/debug`
 - Cleaner build output while still surfacing important issues
+- All log levels work correctly: error, warn (default), info, debug, trace
 
 **Impact:**
 - **Default behavior:** GCC/G++ drivers now less verbose

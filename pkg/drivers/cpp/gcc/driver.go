@@ -8,6 +8,7 @@ import (
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
+	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
 // BuildContext is an alias to the shared gcc_common BuildContext
@@ -27,7 +28,9 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 
 	// Set log level if specified
 	if buildCtx.LogLevel != "" {
-		Log().DebugContext(ctx, "Log level specified", "level", buildCtx.LogLevel)
+		level := logging.ParseLevel(buildCtx.LogLevel)
+		logging.SetGlobalLevel(level)
+		Log().DebugContext(ctx, "Log level set", "level", buildCtx.LogLevel)
 	}
 
 	// Handle --version flag
@@ -116,6 +119,12 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 // ListCompatibleRuntimes queries the daemon for available runtimes and displays
 // only those compatible with GCC (i.e., those supporting C language).
 func ListCompatibleRuntimes(ctx context.Context, buildCtx *BuildContext) int {
+	// Set log level if specified
+	if buildCtx.LogLevel != "" {
+		level := logging.ParseLevel(buildCtx.LogLevel)
+		logging.SetGlobalLevel(level)
+	}
+
 	Log().InfoContext(ctx, "GCC list-runtimes mode started")
 
 	// Create the RuntimeResolver using daemon address from context
