@@ -6,6 +6,58 @@
 
 ---
 
+## Daemon Host/Port Parsing Refactoring (2026-03-23)
+
+### Moved CLI Flag Parsing to Common Layer
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Remove redundant daemon host/port parsing from driver-specific code. The common CLI framework should handle all flag parsing and BuildContext construction, allowing drivers to focus only on domain logic.
+
+**Problem Identified:**
+- Daemon host and port were parsed from command-line flags in `main.go`
+- Concatenated into a single `DaemonAddr` string in `BuildContext`
+- Then parsed back apart in both `gcc/driver.go` and `gxx/driver.go`
+- Result: Redundant string parsing logic duplicated in each driver
+
+**Solution Implemented:**
+
+1. **Modified `BuildContext` Structure** (`pkg/drivers/cpp/gcc_common/types.go`)
+   - Changed from: `DaemonAddr string`
+   - Changed to: `DaemonHost string` + `DaemonPort int`
+   - Pre-parsed values now available directly to drivers
+
+2. **Updated Common CLI Code** (`cmd/drivers/cpp/gcc/main.go`, `cmd/drivers/cpp/gxx/main.go`)
+   - Extracts daemon host and port from `StandardDriverFlags`
+   - Passes them as separate fields in `BuildContext`
+   - No longer performs string concatenation/parsing
+
+3. **Cleaned Up Driver-Specific Code**
+   - Removed daemon address string parsing from `gcc/driver.go`
+   - Removed daemon address string parsing from `gxx/driver.go`
+   - Drivers now use values directly: `resolver := drivers.NewRuntimeResolver(buildCtx.DaemonHost, buildCtx.DaemonPort)`
+   - Removed unused `strings` import from both drivers
+
+**Architectural Result:**
+- **Common CLI layer (main.go):** Handles flag parsing, builds BuildContext
+- **Driver code:** Only handles domain logic (runtime resolution, compilation)
+- **Separation of concerns:** Clear boundary between CLI infrastructure and driver logic
+- **Reduced duplication:** Flag parsing logic exists in only one place
+- **Extensibility:** Future drivers automatically get clean daemon address values
+
+**Files Modified:**
+- `pkg/drivers/cpp/gcc_common/types.go` - Split DaemonAddr into separate fields
+- `cmd/drivers/cpp/gcc/main.go` - Pass separate host/port to BuildContext
+- `cmd/drivers/cpp/gxx/main.go` - Pass separate host/port to BuildContext
+- `pkg/drivers/cpp/gcc/driver.go` - Use pre-parsed values, remove parsing logic
+- `pkg/drivers/cpp/gxx/driver.go` - Use pre-parsed values, remove parsing logic
+
+**Build Status:** ✅ SUCCESS - All binaries compile without errors
+
+**Git Commit:** `875d809` - "refactor: move daemon host/port parsing to common CLI layer"
+
+---
+
 ## C/C++ Driver Integration with RuntimeResolver Framework (2026-03-23)
 
 ### Refactored gcc/g++ Drivers to Use Generic Runtime Resolution
