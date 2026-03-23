@@ -122,42 +122,46 @@ func isVersion(s string) bool {
 
 // ModifyRuntimeIDWithFlags takes a base runtime ID and compiler flag details,
 // and returns a modified runtime ID that includes the extracted flag values.
-// Example: "gcc-glibc-x86_64" + version "11" + arch "armv7-a" = "gcc-9-glibc-armv7-a"
-func ModifyRuntimeIDWithFlags(baseRuntime string, flags *CompilerFlagDetails) string {
-	if baseRuntime == "" {
-		baseRuntime = "gcc-default"
-	}
+// baseRuntime is guaranteed to be non-empty (checked by RuntimeResolver).
+// Returns an error only if the enhanced runtime ID is invalid.
+// Example: "gcc-glibc-x86_64" + version "11" + arch "armv7-a" = "gcc-11-glibc-armv7-a"
+func ModifyRuntimeIDWithFlags(baseRuntime string, flags *CompilerFlagDetails) (string, error) {
+	// baseRuntime is guaranteed to be non-empty by RuntimeResolver
+	// so we don't need to create one from scratch
 
 	// Parse the base runtime ID structure: "compiler-version-cruntime-architecture"
-	// Examples: "gcc-default", "gcc-9-glibc-x86_64", "clang-10-glibc-libstdcxx-x86_64"
+	// Examples: "gcc-9-glibc-x86_64", "clang-10-glibc-libstdcxx-x86_64"
 
-	// If flags specify version or architecture, inject them into the runtime ID
-	if flags.Version != "" || flags.Architecture != "" {
-		// Split the base runtime into parts
-		parts := strings.Split(baseRuntime, "-")
-
-		// Handle default case
-		if len(parts) == 2 && parts[1] == "default" {
-			// Start fresh with just the compiler
-			if flags.Version != "" {
-				baseRuntime = parts[0] + "-" + flags.Version
-			}
-			if flags.Architecture != "" {
-				baseRuntime = baseRuntime + "-default-" + flags.Architecture
-			}
-		} else if len(parts) >= 2 {
-			// Modify existing runtime ID
-			if flags.Version != "" {
-				// Replace version component (parts[1])
-				parts[1] = flags.Version
-			}
-			if flags.Architecture != "" && len(parts) > 0 {
-				// Replace or add architecture component (last element)
-				parts[len(parts)-1] = flags.Architecture
-			}
-			baseRuntime = strings.Join(parts, "-")
-		}
+	// If flags don't specify version or architecture, return base as-is
+	if flags.Version == "" && flags.Architecture == "" {
+		return baseRuntime, nil
 	}
 
-	return baseRuntime
+	// Split the base runtime into parts
+	parts := strings.Split(baseRuntime, "-")
+
+	// Handle simple compiler name (e.g., "gcc")
+	if len(parts) == 1 {
+		// Just compiler name, build full runtime ID from flags
+		result := parts[0]
+		if flags.Version != "" {
+			result = result + "-" + flags.Version
+		}
+		if flags.Architecture != "" {
+			result = result + "-unknown-" + flags.Architecture
+		}
+		return result, nil
+	}
+
+	// Modify existing runtime ID
+	if flags.Version != "" && len(parts) > 1 {
+		// Replace version component (parts[1])
+		parts[1] = flags.Version
+	}
+	if flags.Architecture != "" && len(parts) > 0 {
+		// Replace or add architecture component (last element)
+		parts[len(parts)-1] = flags.Architecture
+	}
+
+	return strings.Join(parts, "-"), nil
 }

@@ -42,11 +42,11 @@ type ParsedArgs struct {
 
 // BuildContext holds the execution context for GCC/G++ drivers
 type BuildContext struct {
-	Config       *config.Config
-	Standalone   bool
-	DaemonHost   string // Buildozer daemon hostname or IP address
-	DaemonPort   int    // Buildozer daemon port number
-	StartDir     string
-	LogLevel     string // Log level: debug, info, warn, error
-	ConfigPath   string // Explicit path to .buildozer config file
+	Config     *config.Config
+	Standalone bool
+	DaemonHost string // Buildozer daemon hostname or IP address
+	DaemonPort int    // Buildozer daemon port number
+	StartDir   string
+	LogLevel   string // Log level: debug, info, warn, error
+	ConfigPath string // Explicit path to .buildozer config file
 }

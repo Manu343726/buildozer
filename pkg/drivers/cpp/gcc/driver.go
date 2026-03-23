@@ -65,7 +65,11 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 			"optimization", flags.Optimization)
 
 		// Modify the base runtime ID based on extracted flags
-		modifiedRuntime := gcc_common.ModifyRuntimeIDWithFlags(baseRuntime, flags)
+		modifiedRuntime, err := gcc_common.ModifyRuntimeIDWithFlags(baseRuntime, flags)
+		if err != nil {
+			Log().ErrorContext(ctx, "Failed to modify runtime ID", "error", err)
+			return "", err
+		}
 		Log().DebugContext(ctx, "Modified runtime ID", "original", baseRuntime, "modified", modifiedRuntime)
 
 		return modifiedRuntime, nil

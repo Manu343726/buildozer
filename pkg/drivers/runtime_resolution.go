@@ -71,10 +71,12 @@ func NewRuntimeResolver(daemonHost string, daemonPort int) *RuntimeResolver {
 
 // Resolve performs the complete runtime resolution workflow:
 // 1. Loads .buildozer config from cwd upward (or explicit path)
-// 2. Applies tool args via the provided callback to get final runtime ID
-// 3. Queries daemon for that runtime
-// 4. Classifies availability (native, remote, not found)
-// 5. Returns result with warnings or errors
+// 2. Extracts base runtime from config (driver-specific)
+// 3. Validates that a base runtime was found (required)
+// 4. Applies tool args via callback to enhance the runtime ID
+// 5. Queries daemon for final runtime
+// 6. Classifies availability (native, remote, not found)
+// 7. Returns result with warnings or errors
 //
 // configPath: explicit path to .buildozer file (empty = search from cwd)
 // startDir: directory to start upward search from (if configPath empty)
@@ -121,7 +123,17 @@ func (rr *RuntimeResolver) Resolve(
 		// For example, gcc driver would use cfg.Drivers.Gcc runtime settings.
 	}
 
-	// Step 3: Apply tool args to get final runtime
+	// Step 3: Check if we have an initial runtime to work with
+	// The applier is for enhancing/modifying an existing runtime, not creating one from scratch
+	if baseRuntime == "" {
+		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile)
+		return &RuntimeResolutionResult{
+			RequiredRuntime: "",
+			Error:           "unable to determine compiler runtime: no configuration file found and no explicit compiler version/architecture specified in command-line flags",
+		}
+	}
+
+	// Step 4: Apply tool args to enhance the runtime
 	rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime, "toolArgs", toolArgs)
 	requestedRuntime, applyErr := applier(ctx, baseRuntime, toolArgs)
 	if applyErr != nil {
@@ -134,7 +146,7 @@ func (rr *RuntimeResolver) Resolve(
 
 	rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime)
 
-	// Step 4: Query daemon
+	// Step 5: Query daemon
 	foundRuntime, isNative, daemonErr := rr.queryDaemon(ctx, requestedRuntime)
 	if daemonErr != nil {
 		rr.ErrorContext(ctx, "Failed to query daemon", "error", daemonErr)
