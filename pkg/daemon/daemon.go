@@ -259,7 +259,21 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 // Start starts the daemon and all registered services.
 //
 // Returns an error if the daemon fails to start.
+// Start starts the daemon and performs initial setup including runtime discovery.
+// Discovers runtimes on startup rather than lazily on first request.
 func (d *Daemon) Start() error {
+	ctx := context.Background()
+	
+	// Discover runtimes on startup
+	d.Info("discovering runtimes on startup")
+	runtimes, notes, err := d.runtimeManager.GetRuntimes(ctx)
+	if err != nil {
+		d.Error("failed to discover runtimes", "error", err)
+		// Don't fail startup - continue with partial or no runtimes available
+	} else {
+		d.Info("runtime discovery complete", "count", len(runtimes), "notes", notes)
+	}
+	
 	if err := d.httpServer.start(); err != nil {
 		return d.Errorf("Failed to start daemon: %w", err)
 	}
