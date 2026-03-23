@@ -92,6 +92,13 @@ func runGxx(cmd *cobra.Command, args []string) error {
 		InitialRuntime: *drivers.RuntimePtr,
 	}
 
+	// Handle --buildozer-list-runtimes flag
+	if *drivers.ListRuntimesPtr {
+		exitCode := gxxdriver.ListCompatibleRuntimes(cmd.Context(), buildCtx)
+		os.Exit(exitCode)
+		return nil
+	}
+
 	exitCode := gxxdriver.RunGxx(cmd.Context(), gxxArgs, buildCtx)
 	os.Exit(exitCode)
 	return nil

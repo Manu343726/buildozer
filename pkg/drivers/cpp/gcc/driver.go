@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
 )
@@ -109,5 +110,52 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 
 	// TODO: Execute the build job using the resolved runtime
 	Log().InfoContext(ctx, "Driver completed successfully (TODO: actual job execution not yet implemented)")
+	return 0
+}
+
+// ListCompatibleRuntimes queries the daemon for available runtimes and displays
+// only those compatible with GCC (i.e., those supporting C language).
+func ListCompatibleRuntimes(ctx context.Context, buildCtx *BuildContext) int {
+	Log().InfoContext(ctx, "GCC list-runtimes mode started")
+
+	// Create the RuntimeResolver using daemon address from context
+	resolver := drivers.NewRuntimeResolver(buildCtx.DaemonHost, buildCtx.DaemonPort)
+	Log().DebugContext(ctx, "Created RuntimeResolver", "daemonHost", buildCtx.DaemonHost, "daemonPort", buildCtx.DaemonPort)
+
+	// Create validator for C runtimes
+	validator := func(runtime *v1.Runtime) (bool, string) {
+		if runtime == nil {
+			return false, "runtime is nil"
+		}
+
+		// Delegate to gcc_common validation
+		compat := gcc_common.ValidateRuntimeForC(runtime)
+		return compat.IsCompatible, compat.Reason
+	}
+
+	// Query daemon and filter compatible runtimes
+	compatibleRuntimes, err := resolver.ListCompatibleRuntimes(ctx, validator, "gcc")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gcc: error: failed to list runtimes: %v\n", err)
+		return 1
+	}
+
+	if len(compatibleRuntimes) == 0 {
+		fmt.Println("No compatible runtimes found")
+		return 0
+	}
+
+	// Display compatible runtimes
+	fmt.Println("Compatible C/C++ runtimes for GCC:")
+	fmt.Println("")
+	for _, rt := range compatibleRuntimes {
+		fmt.Printf("  %s\n", rt.Id)
+		if rt.Description != nil && *rt.Description != "" {
+			fmt.Printf("    %s\n", *rt.Description)
+		}
+	}
+	fmt.Println("")
+	fmt.Printf("Total: %d runtimes available\n", len(compatibleRuntimes))
+	Log().InfoContext(ctx, "Listed compatible runtimes", "count", len(compatibleRuntimes))
 	return 0
 }

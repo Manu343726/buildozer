@@ -50,6 +50,7 @@ type FlagInfo struct {
 	Value       interface{}                 // pointer to the flag value
 	Parser      func(string) (any, error)   // Function to parse flag value from string
 	IsOptional  bool                        // True if this is an optional flag (no default)
+	IsBool      bool                        // True if this is a boolean flag (can be used without value)
 }
 
 // FlagSet manages typed driver flags and provides parsing similar to pflag.
@@ -166,8 +167,9 @@ func (fs *FlagSet) Bool(name string, defaultVal bool, description string) *bool 
 		Name:        name,
 		Description: description,
 		Value:       ptr,
+		IsBool:      true,
 		Parser: func(s string) (any, error) {
-			boolVal := s == "true" || s == "1" || s == "yes"
+			boolVal := s == "true" || s == "1" || s == "yes" || s == ""
 			return boolVal, nil
 		},
 	}
@@ -301,6 +303,7 @@ func EnumOpt[T fmt.Stringer](fs *FlagSet, name string, validValues []T, descript
 
 // Parse extracts buildozer-prefixed flags from command line arguments.
 // Handles both --buildozer-flag <value> and --buildozer-flag=<value> syntax.
+// For boolean flags, also handles --buildozer-flag without a value (sets to true).
 // Returns remaining arguments (tool flags).
 // The registered flag pointers are updated with parsed values.
 func (fs *FlagSet) Parse(args []string) []string {
@@ -317,11 +320,18 @@ func (fs *FlagSet) Parse(args []string) []string {
 			var val string
 			var found bool
 
-			if arg == flagPrefix && i+1 < len(args) {
-				// --buildozer-flag <value>
-				i++ // skip next arg
-				val = args[i]
-				found = true
+			if arg == flagPrefix {
+				// Check if this is a boolean flag (can be used without value)
+				if flagInfo.IsBool {
+					// Boolean flag without value - treat as "true"
+					val = "true"
+					found = true
+				} else if i+1 < len(args) {
+					// --buildozer-flag <value>
+					i++ // skip next arg
+					val = args[i]
+					found = true
+				}
 			} else if strings.HasPrefix(arg, flagPrefix+"=") {
 				// --buildozer-flag=<value>
 				val = arg[len(flagPrefix+"="):]
@@ -382,6 +392,7 @@ func (fs *FlagSet) Flags() map[string]*FlagInfo {
 //   --buildozer-log-level (default: info)
 //   --buildozer-config (default: empty)
 //   --buildozer-runtime (default: empty, use config value)
+//   --buildozer-list-runtimes (default: false)
 //   --buildozer-daemon-host (default: localhost)
 //   --buildozer-daemon-port (default: 6789)
 var (
@@ -389,6 +400,7 @@ var (
 	LogLevelPtr         = StandardDriverFlags.String("log-level", "info", "Log level: debug, info, warn, error")
 	ConfigPathPtr       = StandardDriverFlags.String("config", "", "Explicit path to .buildozer config file")
 	RuntimePtr          = StandardDriverFlags.String("runtime", "", "Initial runtime ID (overrides config)")
+	ListRuntimesPtr     = StandardDriverFlags.Bool("list-runtimes", false, "List available runtimes compatible with this driver and exit")
 	DaemonHostPtr       = StandardDriverFlags.StringOpt("daemon-host", "Buildozer daemon host (default: localhost)")
 	DaemonPortPtr       = StandardDriverFlags.IntOpt("daemon-port", "Buildozer daemon port (default: 6789)")
 )

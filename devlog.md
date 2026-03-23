@@ -6,6 +6,156 @@
 
 ---
 
+## Robust Runtime Validation & List-Runtimes Feature (2026-03-23)
+
+### Added Runtime Validation and --buildozer-list-runtimes CLI Flag
+
+**Status:** ✅ COMPLETED
+
+**Objective:** 
+1. Implement robust runtime validation to check if a runtime ID is compatible with a specific driver
+2. Add `--buildozer-list-runtimes` flag to discover and display compatible runtimes
+3. Allow users to see which runtimes their driver can use before attempting to build
+
+**Components Implemented:**
+
+### 1. Runtime Validation Module (`pkg/drivers/cpp/gcc_common/runtime_validation.go`)
+
+**New file** - Provides reusable validation functions:
+
+```go
+type RuntimeCompatibility struct {
+    IsCompatible bool
+    Reason string
+}
+
+// ValidateRuntimeForC - checks if runtime supports C language
+// ValidateRuntimeForCxx - checks if runtime supports C++ language
+```
+
+**Validation Logic:**
+- Checks runtime has C/C++ toolchain metadata (via proto CppToolchain)
+- Validates language support:
+  - GCC (ValidateRuntimeForC): accepts only CPP_LANGUAGE_C
+  - G++ (ValidateRuntimeForCxx): accepts only CPP_LANGUAGE_CPP
+- Currently requires native runtime (extensible for Docker/remote)
+- Provides clear reason for rejection if incompatible
+
+### 2. RuntimeResolver Enhancement (`pkg/drivers/runtime_resolution.go`)
+
+**New type:** `RuntimeValidator` function signature
+```go
+type RuntimeValidator func(runtime *v1.Runtime) (bool, string)
+```
+
+**New method:** `ListCompatibleRuntimes(ctx, validator, driverName)`
+- Queries daemon for all available runtimes (via ListRuntimes RPC)
+- Filters using provided validator function
+- Returns list of compatible runtimes
+- Logs discovery and filtering results
+
+### 3. Flag Parser Enhancement (`pkg/drivers/flagparser.go`)
+
+**Boolean flag support improvements:**
+- Added `IsBool` field to FlagInfo
+- Updated Bool() method to mark flags as boolean
+- Enhanced Parse() method to handle boolean flags without values:
+  - `--buildozer-list-runtimes` (no value) → sets to true
+  - Allows cleaner CLI usage for toggle flags
+
+**New flag:** `ListRuntimesPtr = StandardDriverFlags.Bool("list-runtimes", false, "...")`
+
+### 4. Driver Integration (gcc & g++)
+
+**Updated main.go** (both `cmd/drivers/cpp/gcc/main.go` and `cmd/drivers/cpp/gxx/main.go`):
+```go
+// Handle --buildozer-list-runtimes flag before normal execution
+if *drivers.ListRuntimesPtr {
+    exitCode := gccdriver.ListCompatibleRuntimes(cmd.Context(), buildCtx)
+    os.Exit(exitCode)
+    return nil
+}
+```
+
+**Updated driver.go** (new functions):
+```go
+// ListCompatibleRuntimes(ctx, buildCtx) -> int
+// - Creates RuntimeResolver
+// - Creates validator function (gcc_common.ValidateRuntimeForC for gcc, ValidateRuntimeForCxx for g++)
+// - Calls resolver.ListCompatibleRuntimes()
+// - Formats and displays results
+```
+
+**Output Format:**
+```
+Compatible C/C++ runtimes for GCC:
+
+  native-c-clang-11.0.1-2-glibc-2.31-x86_64
+    Native clang 11.0.1-2 (x86_64)
+  native-c-gcc-10.2.1-glibc-2.31-x86_64
+    Native gcc 10.2.1 (x86_64)
+
+Total: 4 runtimes available
+```
+
+**Test Results:**
+
+✅ Test 1: GCC list-runtimes filtering
+```bash
+$ buildozer-gcc --buildozer-list-runtimes
+→ Daemon returned 8 total runtimes
+→ Filtered to 4 C-compatible runtimes (2 gcc, 2 clang)
+→ Displayed with full runtime IDs
+```
+
+✅ Test 2: G++ list-runtimes filtering
+```bash
+$ buildozer-g++ --buildozer-list-runtimes
+→ Daemon returned 8 total runtimes
+→ Filtered to 4 C++-compatible runtimes (2 gcc, 2 clang)
+→ Correctly rejected C-only runtimes
+```
+
+**Key Architecture Benefits:**
+
+1. **Robustness:** Explicit validation before attempting to use a runtime
+2. **User Discoverability:** Users can explore available runtimes without trial-and-error
+3. **Clear Filtering:** Each driver only shows runtimes it actually supports
+4. **Extensible:** RuntimeValidator callback pattern allows custom filtering logic
+5. **Diagnostic:** Logging shows which runtimes passed/failed validation and why
+
+**Example Usage Flow:**
+
+```bash
+# User discovers what runtimes are available
+$ gcc --buildozer-list-runtimes
+Compatible C/C++ runtimes for GCC:
+  native-c-gcc-10.2.1-glibc-2.31-x86_64
+  native-c-clang-11.0.1-2-glibc-2.31-x86_64
+
+# User selects a runtime from the list
+$ gcc --buildozer-runtime native-c-gcc-10.2.1-glibc-2.31-x86_64 -c main.c -o main.o
+→ Runtime resolved successfully
+→ Proceeds with build
+
+# User tries unsupported runtime (G++ only)
+$ gcc --buildozer-runtime native-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64 -c main.c
+→ GCC driver rejects it (doesn't support C++ runtimes for C compilation)
+```
+
+**Files Modified:**
+- `pkg/drivers/cpp/gcc_common/runtime_validation.go` (new)
+- `pkg/drivers/runtime_resolution.go` (RuntimeValidator type, ListCompatibleRuntimes method)
+- `pkg/drivers/flagparser.go` (IsBool field, enhanced Parse method)
+- `pkg/drivers/cpp/gcc/driver.go` (ListCompatibleRuntimes function)
+- `pkg/drivers/cpp/gxx/driver.go` (ListCompatibleRuntimes function)
+- `cmd/drivers/cpp/gcc/main.go` (handle list-runtimes flag)
+- `cmd/drivers/cpp/gxx/main.go` (handle list-runtimes flag)
+
+**Git Commit:** (To be committed after this devlog update)
+
+---
+
 ## Standard Runtime Flag Support (2026-03-23)
 
 ### Added --buildozer-runtime CLI Flag for Initial Runtime Specification

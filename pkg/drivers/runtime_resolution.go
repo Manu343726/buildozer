@@ -47,6 +47,14 @@ type RuntimeResolutionResult struct {
 // return: the final runtime ID to request from daemon, or error if invalid args
 type ToolArgsApplier func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error)
 
+// RuntimeValidator is a callback function that driver-specific code implements.
+// It checks if a given runtime (returned from daemon) is compatible with the driver.
+// For example, gcc driver only accepts C/C++ toolchains that support C language.
+//
+// runtime: the runtime to validate
+// return: (isCompatible, reason)
+type RuntimeValidator func(runtime *v1.Runtime) (bool, string)
+
 // RuntimeResolver handles the driver-agnostic aspects of runtime resolution:
 // 1. Load config from .buildozer file (upward search)
 // 2. Merge config runtime + tool-args-modified runtime
@@ -244,6 +252,43 @@ func (rr *RuntimeResolver) queryDaemon(
 	rr.DebugContext(ctx, "Daemon returned runtime", "runtimeID", runtimeID, "isNative", isNative)
 
 	return runtime, isNative, nil
+}
+
+// ListCompatibleRuntimes queries the daemon for all available runtimes and filters them
+// based on the provided validator function. Returns only runtimes compatible with the driver.
+func (rr *RuntimeResolver) ListCompatibleRuntimes(
+	ctx context.Context,
+	validator RuntimeValidator,
+	driverName string,
+) ([]*v1.Runtime, error) {
+	daemonURL := fmt.Sprintf("http://%s:%d", rr.daemonHost, rr.daemonPort)
+	client := protov1connect.NewRuntimeServiceClient(http.DefaultClient, daemonURL)
+
+	rr.InfoContext(ctx, "Querying daemon for available runtimes", "driver", driverName)
+
+	resp, err := client.ListRuntimes(ctx, connect.NewRequest(&v1.ListRuntimesRequest{}))
+	if err != nil {
+		rr.ErrorContext(ctx, "Failed to query daemon for runtimes", "error", err)
+		return nil, fmt.Errorf("daemon RPC failed: %w", err)
+	}
+
+	allRuntimes := resp.Msg.Runtimes
+	rr.InfoContext(ctx, "Daemon returned runtimes", "count", len(allRuntimes), "notes", resp.Msg.DetectionNotes)
+
+	// Filter runtimes based on validator
+	var compatibleRuntimes []*v1.Runtime
+	for _, runtime := range allRuntimes {
+		isCompatible, reason := validator(runtime)
+		if isCompatible {
+			compatibleRuntimes = append(compatibleRuntimes, runtime)
+			rr.DebugContext(ctx, "Runtime compatible", "runtimeID", runtime.Id)
+		} else {
+			rr.DebugContext(ctx, "Runtime incompatible", "runtimeID", runtime.Id, "reason", reason)
+		}
+	}
+
+	rr.InfoContext(ctx, "Filtered compatible runtimes", "driver", driverName, "compatible", len(compatibleRuntimes), "total", len(allRuntimes))
+	return compatibleRuntimes, nil
 }
 
 // isNativeRuntime determines if a runtime is native (not Docker, not remote peer)
