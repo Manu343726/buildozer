@@ -6,6 +6,72 @@
 
 ---
 
+## Runtime Resolution Error Handling Refactoring (2026-03-23)
+
+### Moved Empty Runtime Validation to RuntimeResolver
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Clarify error handling responsibility: RuntimeResolver checks if initial runtime exists, applier callbacks only enhance existing runtimes.
+
+**Problem Identified:**
+- Driver applier callback had to check both for empty baseRuntime AND validate flag-based enhancement
+- Duplicate logic: RuntimeResolver and applier both checking for missing config
+- Unclear contract: What was the applier supposed to do with empty baseRuntime?
+- Result: Confusing error messages and redundant validation code
+
+**Solution Implemented:**
+
+1. **RuntimeResolver Validation** (`pkg/drivers/runtime_resolution.go`)
+   - Added explicit check after loading config: is baseRuntime empty?
+   - If yes: immediately return error with clear message (no applier call)
+   - If no: proceed to call applier to enhance the runtime
+   - Simplified workflow:
+     ```
+     Step 1: Load config
+     Step 2: Extract base runtime
+     Step 3: Validate base runtime is non-empty [NEW CHECK]
+     Step 4: Call applier to enhance runtime only if base exists
+     Step 5: Query daemon
+     Step 6: Classify result
+     ```
+
+2. **Simplified Applier Contract** (`pkg/drivers/cpp/gcc_common/compiler_flags.go`)
+   - Removed error handling for empty baseRuntime (RuntimeResolver handles it)
+   - Applier now has clear job: "enhance an existing runtime with tool-specific flags"
+   - ModifyRuntimeIDWithFlags() simplified:
+     - No empty baseRuntime check
+     - Returns base runtime as-is if no flags to apply
+     - Only modifies if version/architecture flags provided
+
+3. **Updated Driver Appliers** (`gcc/driver.go`, `gxx/driver.go`)
+   - Removed null check and error generation for empty baseRuntime
+   - Simplified applier callbacks (3 fewer lines each)
+   - Error message now comes from RuntimeResolver with full context
+
+**Benefits Achieved:**
+- **Clear responsibility:** RuntimeResolver validates existence, applier validates enhancement
+- **No redundant checks:** Empty runtime error only checked in one place
+- **Better error messages:** Full context about what's required
+- **Simpler applier code:** Drivers only handle domain logic, not infrastructure validation
+- **Easier to test:** RuntimeResolver logic independent from applier behavior
+
+**Files Modified:**
+- `pkg/drivers/runtime_resolution.go` - Added baseRuntime validation before applier call
+- `pkg/drivers/cpp/gcc_common/compiler_flags.go` - Simplified ModifyRuntimeIDWithFlags
+- `pkg/drivers/cpp/gcc/driver.go` - Simplified applier callback
+- `pkg/drivers/cpp/gxx/driver.go` - Simplified applier callback
+
+**Build Status:** ✅ SUCCESS - All binaries compile without errors
+
+**Tested Behavior:**
+- Without config and without explicit flags: RuntimeResolver returns error BEFORE calling applier ✅
+- With config or explicit flags: Applier called and works correctly ✅
+
+**Git Commit:** `6ca1e6d` - "refactor: move empty runtime check to RuntimeResolver"
+
+---
+
 ## Daemon Host/Port Parsing Refactoring (2026-03-23)
 
 ### Moved CLI Flag Parsing to Common Layer
