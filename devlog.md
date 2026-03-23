@@ -6,6 +6,35 @@
 
 ---
 
+## Default Driver Log Level Changed to Warning (2026-03-23)
+
+**Status:** ✅ COMPLETED
+
+**Objective:**
+Reduce default verbosity of drivers by changing default log level from `info` to `warn`.
+
+**Change:**
+Updated [pkg/drivers/flagparser.go](pkg/drivers/flagparser.go#L400) line 400:
+```go
+// Before:
+LogLevelPtr = StandardDriverFlags.String("log-level", "info", "Log level: debug, info, warn, error")
+
+// After:
+LogLevelPtr = StandardDriverFlags.String("log-level", "warn", "Log level: debug, info, warn, error")
+```
+
+**Rationale:**
+- Drivers should be quiet by default; developers only see warnings and errors
+- Info/debug messages now only shown when explicitly requested: `--buildozer-log-level info`
+- Cleaner build output while still surfacing important issues
+
+**Impact:**
+- **Default behavior:** GCC/G++ drivers now less verbose
+- **Opt-in verbosity:** Users can still get info/debug output: `gcc --buildozer-log-level debug ...`
+- **No breaking changes:** Users who want info level can explicitly set it
+
+---
+
 ## Enhanced Runtime Validator with Compiler Checking (2026-03-23 - IMPROVEMENT)
 
 **Status:** ✅ COMPLETED
