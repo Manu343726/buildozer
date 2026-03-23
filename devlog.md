@@ -6,6 +6,51 @@
 
 ---
 
+## Enhanced Runtime Validator with Compiler Checking (2026-03-23 - IMPROVEMENT)
+
+**Status:** ✅ COMPLETED
+
+**Objective:**
+Improve runtime validation to check compiler compatibility in addition to language support. Prevents gcc/g++ drivers from listing or accepting clang-based runtimes.
+
+**Change:**
+Updated `ValidateRuntimeForC()` and `ValidateRuntimeForCxx()` functions in `pkg/drivers/cpp/gcc_common/runtime_validation.go`:
+
+**Before:**
+- Validation only checked: language support (C vs C++)
+- Result: GCC driver would list both GCC and Clang C runtimes ✗
+
+**After:**
+- Validation now checks: compiler type (via proto CppCompiler enum) AND language support
+- GCC/G++ drivers only accept `CPP_COMPILER_GCC` runtimes
+- Result: GCC driver lists only native-c-gcc runtimes ✓
+
+**Implementation Details:**
+```go
+// Check if it uses GCC compiler (ADDED)
+compiler := cppToolchain.Compiler
+if compiler != v1.CppCompiler_CPP_COMPILER_GCC {
+    return RuntimeCompatibility{
+        IsCompatible: false,
+        Reason: fmt.Sprintf("runtime '%s' does not use GCC compiler (compiler: %v)",
+            runtime.Id, compiler),
+    }
+}
+
+// Then check language as before
+```
+
+**Test Results:**
+✅ GCC --buildozer-list-runtimes: Now shows 2 runtimes (down from 4)
+- Accepts: native-c-gcc-* runtimes only
+- Rejects: native-c-clang-* with reason "does not use GCC compiler"
+
+✅ G++ --buildozer-list-runtimes: Now shows 2 runtimes (down from 4)  
+- Accepts: native-cpp-gcc-* runtimes only
+- Rejects: native-cpp-clang-* with reason "does not use GCC compiler"
+
+---
+
 ## Robust Runtime Validation & List-Runtimes Feature (2026-03-23)
 
 ### Added Runtime Validation and --buildozer-list-runtimes CLI Flag

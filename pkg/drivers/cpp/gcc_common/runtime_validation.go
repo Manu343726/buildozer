@@ -16,6 +16,7 @@ type RuntimeCompatibility struct {
 // A runtime is compatible if:
 // - It has C/C++ toolchain metadata
 // - It supports C language
+// - It uses the GCC compiler
 // - It is native
 func ValidateRuntimeForC(runtime *v1.Runtime) RuntimeCompatibility {
 	if runtime == nil {
@@ -34,6 +35,16 @@ func ValidateRuntimeForC(runtime *v1.Runtime) RuntimeCompatibility {
 		}
 	}
 
+	// Check if it uses GCC compiler
+	compiler := cppToolchain.Compiler
+	if compiler != v1.CppCompiler_CPP_COMPILER_GCC {
+		return RuntimeCompatibility{
+			IsCompatible: false,
+			Reason: fmt.Sprintf("runtime '%s' does not use GCC compiler (compiler: %v)",
+				runtime.Id, compiler),
+		}
+	}
+
 	// Check if it supports C language
 	language := cppToolchain.Language
 	if language != v1.CppLanguage_CPP_LANGUAGE_C {
@@ -49,7 +60,7 @@ func ValidateRuntimeForC(runtime *v1.Runtime) RuntimeCompatibility {
 
 	return RuntimeCompatibility{
 		IsCompatible: true,
-		Reason:       "runtime supports C language",
+		Reason:       "runtime supports C language with GCC compiler",
 	}
 }
 
@@ -57,6 +68,7 @@ func ValidateRuntimeForC(runtime *v1.Runtime) RuntimeCompatibility {
 // A runtime is compatible if:
 // - It has C/C++ toolchain metadata
 // - It supports C++ language
+// - It uses the GCC compiler
 // - It is native
 func ValidateRuntimeForCxx(runtime *v1.Runtime) RuntimeCompatibility {
 	if runtime == nil {
@@ -75,6 +87,16 @@ func ValidateRuntimeForCxx(runtime *v1.Runtime) RuntimeCompatibility {
 		}
 	}
 
+	// Check if it uses GCC compiler
+	compiler := cppToolchain.Compiler
+	if compiler != v1.CppCompiler_CPP_COMPILER_GCC {
+		return RuntimeCompatibility{
+			IsCompatible: false,
+			Reason: fmt.Sprintf("runtime '%s' does not use GCC compiler (compiler: %v)",
+				runtime.Id, compiler),
+		}
+	}
+
 	// Check if it supports C++ language
 	language := cppToolchain.Language
 	if language != v1.CppLanguage_CPP_LANGUAGE_CPP {
@@ -90,6 +112,6 @@ func ValidateRuntimeForCxx(runtime *v1.Runtime) RuntimeCompatibility {
 
 	return RuntimeCompatibility{
 		IsCompatible: true,
-		Reason:       "runtime supports C++ language",
+		Reason:       "runtime supports C++ language with GCC compiler",
 	}
 }
