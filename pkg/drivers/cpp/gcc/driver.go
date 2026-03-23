@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/Manu343726/buildozer/pkg/config"
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
 )
@@ -16,95 +16,111 @@ type BuildContext = gcc_common.BuildContext
 // RunGcc executes the GCC driver with the given arguments and build context.
 // Returns exit code (0 for success, non-zero for failure).
 func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
-	Log().Info("GCC driver started", "args", args)
+	Log().InfoContext(ctx, "GCC driver started", "numArgs", len(args))
 
 	parsed := gcc_common.ParseCommandLine(args)
-	Log().Debug("Parsed command line",
-		"sourceFiles", parsed.SourceFiles,
-		"objectFiles", parsed.ObjectFiles,
+	Log().DebugContext(ctx, "Parsed command line",
+		"sourceFiles", len(parsed.SourceFiles),
+		"objectFiles", len(parsed.ObjectFiles),
 		"outputFile", parsed.OutputFile,
-		"compilerFlags", parsed.CompilerFlags,
 		"mode", parsed.Mode)
 
 	// Set log level if specified
 	if buildCtx.LogLevel != "" {
-		Log().Debug("Setting log level", "level", buildCtx.LogLevel)
+		Log().DebugContext(ctx, "Log level specified", "level", buildCtx.LogLevel)
 	}
 
 	// Handle --version flag
 	if len(parsed.CompilerFlags) > 0 && parsed.CompilerFlags[0] == "--version" {
-		Log().Debug("Handling --version flag")
 		fmt.Println("gcc version 11.2.0 (Buildozer distributed compiler)")
 		return 0
 	}
 
 	// Check for input files
 	if len(parsed.SourceFiles) == 0 && len(parsed.ObjectFiles) == 0 {
-		Log().Error("No input files specified")
-		fmt.Fprintf(os.Stderr, "error: no input files specified\n")
+		fmt.Fprintf(os.Stderr, "gcc: error: no input files specified\n")
 		return 1
 	}
 
-	Log().Debug("Input validation passed",
-		"sourceFiles", len(parsed.SourceFiles),
-		"objectFiles", len(parsed.ObjectFiles))
+	// Extract daemon address, default to localhost:6789 if not specified
+	daemonHost := "localhost"
+	daemonPort := 6789
 
-	// Load configuration from .buildozer file or use provided config
-	var cfg *config.Config
-	if buildCtx.Config != nil {
-		Log().Debug("Using provided config")
-		cfg = buildCtx.Config
-	} else if buildCtx.ConfigPath != "" {
-		// Load from explicit config path
-		Log().Debug("Loading config from explicit path", "path", buildCtx.ConfigPath)
-		cfg, _, _ = config.LoadDriverConfig(buildCtx.ConfigPath)
-	} else {
-		// Search for config starting from current directory
-		Log().Debug("Searching for config from start directory", "startDir", buildCtx.StartDir)
-		cfg, _, _ = config.LoadDriverConfig(buildCtx.StartDir)
-	}
-
-	if cfg != nil {
-		Log().Debug("Config loaded successfully")
-	} else {
-		Log().Warn("No config found, using defaults")
-	}
-
-	// Resolve the requested toolchain based on configuration
-	Log().Debug("Resolving GCC toolchain", "numArgs", len(args))
-	toolchainResolution := drivers.ResolveGccToolchain(ctx, &cfg.Drivers.Gcc, args)
-	Log().Debug("Toolchain resolved", "resolution", toolchainResolution)
-
-	// Query daemon for available runtimes if address provided
-	if buildCtx.DaemonAddr != "" {
-		Log().Debug("Querying daemon for runtimes", "address", buildCtx.DaemonAddr)
-		daemonClient, err := drivers.NewDaemonClient(ctx, buildCtx.DaemonAddr)
-		if err != nil {
-			Log().Warn("Failed to connect to daemon", "error", err)
-		} else {
-			Log().Debug("Connected to daemon")
-			runtimes, err := daemonClient.ListRuntimes(ctx, true)
-			if err != nil {
-				Log().Warn("Failed to list runtimes", "error", err)
-			} else if len(runtimes) > 0 {
-				Log().Debug("Runtimes available", "count", len(runtimes))
-				// Try to find matching runtime
-				matching, _ := daemonClient.FindMatchingRuntime(ctx, toolchainResolution, runtimes)
-				if matching == nil {
-					Log().Error("No matching runtime found")
-					// No runtime found
-					return 1
-				}
-				Log().Debug("Found matching runtime")
-			} else {
-				Log().Warn("No runtimes available from daemon")
-			}
+	if strings.Contains(buildCtx.DaemonAddr, ":") {
+		// Address already includes port
+		parts := strings.Split(buildCtx.DaemonAddr, ":")
+		if len(parts) == 2 {
+			daemonHost = parts[0]
+			// Parse port
+			fmt.Sscanf(parts[1], "%d", &daemonPort)
 		}
-	} else {
-		Log().Debug("No daemon address provided, running in standalone mode")
+	} else if buildCtx.DaemonAddr != "" {
+		daemonHost = buildCtx.DaemonAddr
 	}
 
-	// TODO: Execute the build job
-	Log().Info("Driver completed successfully (TODO: actual execution not yet implemented)")
+	// Determine working directory for config search
+	workDir := buildCtx.StartDir
+	if workDir == "" {
+		workDir, _ = os.Getwd()
+	}
+
+	// Create the RuntimeResolver
+	resolver := drivers.NewRuntimeResolver(daemonHost, daemonPort)
+	Log().DebugContext(ctx, "Created RuntimeResolver", "daemonHost", daemonHost, "daemonPort", daemonPort)
+
+	// Create the ToolArgsApplier callback for GCC-specific flag handling
+	gccApplier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
+		Log().DebugContext(ctx, "GCC ToolArgsApplier invoked", "baseRuntime", baseRuntime, "toolArgsCount", len(toolArgs))
+
+		// Extract compiler flags from tool arguments
+		flags := gcc_common.ExtractCompilerFlags(toolArgs)
+		Log().DebugContext(ctx, "Extracted compiler flags",
+			"version", flags.Version,
+			"architecture", flags.Architecture,
+			"cStandard", flags.CStandard,
+			"cppStandard", flags.CppStandard,
+			"optimization", flags.Optimization)
+
+		// Modify the base runtime ID based on extracted flags
+		modifiedRuntime := gcc_common.ModifyRuntimeIDWithFlags(baseRuntime, flags)
+		Log().DebugContext(ctx, "Modified runtime ID", "original", baseRuntime, "modified", modifiedRuntime)
+
+		return modifiedRuntime, nil
+	}
+
+	// Resolve runtime using the generic framework
+	configPath := buildCtx.ConfigPath
+	if configPath == "" {
+		// Let RuntimeResolver search for config
+		configPath = workDir
+	}
+
+	resolutionResult := resolver.Resolve(ctx, configPath, workDir, args, gccApplier, "gcc")
+	Log().DebugContext(ctx, "Runtime resolution result",
+		"hasError", resolutionResult.Error != "",
+		"hasWarning", resolutionResult.Warning != "",
+		"isNative", resolutionResult.IsNative,
+		"foundRuntime", resolutionResult.FoundRuntime != nil)
+
+	// Handle errors
+	if resolutionResult.Error != "" {
+		fmt.Fprintf(os.Stderr, "gcc: error: %s\n", resolutionResult.Error)
+		return 1
+	}
+
+	// Handle warnings
+	if resolutionResult.Warning != "" {
+		fmt.Fprintf(os.Stderr, "gcc: warning: %s\n", resolutionResult.Warning)
+	}
+
+	// Runtime was found and validated
+	if resolutionResult.FoundRuntime != nil {
+		Log().InfoContext(ctx, "Runtime resolved successfully",
+			"runtimeID", resolutionResult.FoundRuntime.GetId(),
+			"isNative", resolutionResult.IsNative)
+	}
+
+	// TODO: Execute the build job using the resolved runtime
+	Log().InfoContext(ctx, "Driver completed successfully (TODO: actual job execution not yet implemented)")
 	return 0
 }

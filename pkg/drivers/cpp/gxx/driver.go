@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 
-	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
-	"github.com/Manu343726/buildozer/pkg/config"
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
 )
@@ -27,11 +25,18 @@ const ModeCompileOnly = gcc_common.ModeCompileOnly
 // RunGxx executes the G++ driver with the given arguments and build context.
 // Returns exit code (0 for success, non-zero for failure).
 func RunGxx(ctx context.Context, args []string, buildCtx *BuildContext) int {
+	Log().InfoContext(ctx, "G++ driver started", "numArgs", len(args))
+
 	parsed := gcc_common.ParseCommandLine(args)
+	Log().DebugContext(ctx, "Parsed command line",
+		"sourceFiles", len(parsed.SourceFiles),
+		"objectFiles", len(parsed.ObjectFiles),
+		"outputFile", parsed.OutputFile,
+		"mode", parsed.Mode)
 
 	// Set log level if specified
 	if buildCtx.LogLevel != "" {
-		Log().Debug("Setting log level", "level", buildCtx.LogLevel)
+		Log().DebugContext(ctx, "Log level specified", "level", buildCtx.LogLevel)
 	}
 
 	// Handle --version flag
@@ -42,169 +47,90 @@ func RunGxx(ctx context.Context, args []string, buildCtx *BuildContext) int {
 
 	// Check for input files
 	if len(parsed.SourceFiles) == 0 && len(parsed.ObjectFiles) == 0 {
-		fmt.Fprintln(os.Stderr, "error: no input files specified")
+		fmt.Fprintf(os.Stderr, "g++: error: no input files specified\n")
 		return 1
 	}
 
-	// Load configuration from .buildozer file (upward search) or use provided config
-	var cfg *config.Config
-	var configFile string
-	var err error
+	// Extract daemon address, default to localhost:6789 if not specified
+	daemonHost := "localhost"
+	daemonPort := 6789
 
-	if buildCtx.Config != nil {
-		cfg = buildCtx.Config
-	} else if buildCtx.ConfigPath != "" {
-		// Load from explicit config path
-		cfg, configFile, err = config.LoadDriverConfig(buildCtx.ConfigPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to load config file from %s: %v\n", buildCtx.ConfigPath, err)
-			defaultCfg := config.DefaultConfig()
-			cfg = &defaultCfg
-		} else if configFile != "" {
-			fmt.Printf("loaded config file: %s\n", configFile)
+	if strings.Contains(buildCtx.DaemonAddr, ":") {
+		// Address already includes port
+		parts := strings.Split(buildCtx.DaemonAddr, ":")
+		if len(parts) == 2 {
+			daemonHost = parts[0]
+			// Parse port
+			fmt.Sscanf(parts[1], "%d", &daemonPort)
 		}
-	} else {
-		// Search for config starting from current directory
-		cfg, configFile, err = config.LoadDriverConfig(buildCtx.StartDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to load config file: %v\n", err)
-			defaultCfg := config.DefaultConfig()
-			cfg = &defaultCfg
-		}
-		if configFile != "" {
-			fmt.Printf("loaded config file: %s\n", configFile)
-		}
+	} else if buildCtx.DaemonAddr != "" {
+		daemonHost = buildCtx.DaemonAddr
 	}
 
-	// Resolve the requested toolchain based on config and command-line arguments
-	toolchainResolution := drivers.ResolveGxxToolchain(ctx, &cfg.Drivers.Gxx, args)
-	fmt.Printf("resolved toolchain: %s\n", toolchainResolution.String())
-
-	// Query the daemon for available runtimes
-	daemonAddr := buildCtx.DaemonAddr
-	if daemonAddr == "" {
-		daemonAddr = "localhost:6789"
+	// Determine working directory for config search
+	workDir := buildCtx.StartDir
+	if workDir == "" {
+		workDir, _ = os.Getwd()
 	}
 
-	daemonClient, err := drivers.NewDaemonClient(ctx, daemonAddr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to connect to daemon: %v\n", err)
-		// Continue anyway - user may not have daemon running
-	} else {
-		runtimes, err := daemonClient.ListRuntimes(ctx, true)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to query daemon for runtimes: %v\n", err)
-		} else {
-			// Find a matching runtime
-			matchingRuntime, _ := daemonClient.FindMatchingRuntime(ctx, toolchainResolution, runtimes)
-			if matchingRuntime == nil {
-				// No matching runtime available
-				fmt.Fprint(os.Stderr, drivers.FormatUnavailableRuntimeWarning("g++", toolchainResolution, runtimes))
-				return 1
-			}
+	// Create the RuntimeResolver
+	resolver := drivers.NewRuntimeResolver(daemonHost, daemonPort)
+	Log().DebugContext(ctx, "Created RuntimeResolver", "daemonHost", daemonHost, "daemonPort", daemonPort)
 
-			fmt.Printf("found matching runtime: %s\n", matchingRuntime.GetId())
-		}
+	// Create the ToolArgsApplier callback for G++-specific flag handling
+	gxxApplier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
+		Log().DebugContext(ctx, "G++ ToolArgsApplier invoked", "baseRuntime", baseRuntime, "toolArgsCount", len(toolArgs))
+
+		// Extract compiler flags from tool arguments
+		flags := gcc_common.ExtractCompilerFlags(toolArgs)
+		Log().DebugContext(ctx, "Extracted compiler flags",
+			"version", flags.Version,
+			"architecture", flags.Architecture,
+			"cStandard", flags.CStandard,
+			"cppStandard", flags.CppStandard,
+			"stdLib", flags.StdLib,
+			"optimization", flags.Optimization)
+
+		// Modify the base runtime ID based on extracted flags
+		modifiedRuntime := gcc_common.ModifyRuntimeIDWithFlags(baseRuntime, flags)
+		Log().DebugContext(ctx, "Modified runtime ID", "original", baseRuntime, "modified", modifiedRuntime)
+
+		return modifiedRuntime, nil
 	}
 
-	// Create the job
-	job, err := createJob(parsed, toolchainResolution)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to create job: %v\n", err)
+	// Resolve runtime using the generic framework
+	configPath := buildCtx.ConfigPath
+	if configPath == "" {
+		// Let RuntimeResolver search for config
+		configPath = workDir
+	}
+
+	resolutionResult := resolver.Resolve(ctx, configPath, workDir, args, gxxApplier, "g++")
+	Log().DebugContext(ctx, "Runtime resolution result",
+		"hasError", resolutionResult.Error != "",
+		"hasWarning", resolutionResult.Warning != "",
+		"isNative", resolutionResult.IsNative,
+		"foundRuntime", resolutionResult.FoundRuntime != nil)
+
+	// Handle errors
+	if resolutionResult.Error != "" {
+		fmt.Fprintf(os.Stderr, "g++: error: %s\n", resolutionResult.Error)
 		return 1
 	}
 
-	// Execute the job
-	result, err := executeJob(ctx, job)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to execute job: %v\n", err)
-		return 1
+	// Handle warnings
+	if resolutionResult.Warning != "" {
+		fmt.Fprintf(os.Stderr, "g++: warning: %s\n", resolutionResult.Warning)
 	}
 
-	if len(result) > 0 {
-		os.Stdout.Write(result)
+	// Runtime was found and validated
+	if resolutionResult.FoundRuntime != nil {
+		Log().InfoContext(ctx, "Runtime resolved successfully",
+			"runtimeID", resolutionResult.FoundRuntime.GetId(),
+			"isNative", resolutionResult.IsNative)
 	}
 
+	// TODO: Execute the build job using the resolved runtime
+	Log().InfoContext(ctx, "Driver completed successfully (TODO: actual job execution not yet implemented)")
 	return 0
-}
-
-// createJob creates a protobuf Job from parsed arguments and resolved toolchain
-func createJob(parsed *ParsedArgs, resolution *drivers.ToolchainResolution) (*v1.Job, error) {
-	cppToolchain := drivers.CppToolchainForResolution(resolution, v1.CppLanguage_CPP_LANGUAGE_CPP)
-
-	runtime := &v1.Runtime{
-		Toolchain: &v1.Runtime_Cpp{Cpp: cppToolchain},
-	}
-
-	outputFile := parsed.OutputFile
-	if outputFile == "" {
-		if parsed.Mode == ModeCompileOnly && len(parsed.SourceFiles) == 1 {
-			outputFile = stripExtension(parsed.SourceFiles[0]) + ".o"
-		} else if parsed.Mode == ModeCompileOnly && len(parsed.SourceFiles) > 1 {
-			Log().Error("multiple source files with -c requires -o")
-			return nil, fmt.Errorf("multiple source files with -c requires -o")
-		} else {
-			outputFile = "a.out"
-		}
-	}
-
-	job := &v1.Job{
-		Id:      generateJobID(),
-		Runtime: runtime,
-		Timeout: &v1.TimeDuration{Count: 300, Unit: v1.TimeUnit_TIME_UNIT_SECOND},
-	}
-
-	if parsed.Mode == ModeCompileOnly || (len(parsed.ObjectFiles) == 0 && len(parsed.SourceFiles) > 0 && !parsed.IsSharedLibrary) {
-		job.JobSpec = &v1.Job_CppCompile{
-			CppCompile: &v1.CppCompileJob{
-				SourceFiles:  parsed.SourceFiles,
-				CompilerArgs: parsed.CompilerFlags,
-				IncludeDirs:  parsed.IncludeDirs,
-				Defines:      parsed.Defines,
-				OutputFile:   outputFile,
-			},
-		}
-	} else if parsed.IsSharedLibrary && len(parsed.SourceFiles) > 0 && len(parsed.ObjectFiles) == 0 {
-		// Shared library from sources: compile and link
-		// Add -shared flag to compiler args for linking phase
-		compilerArgs := append(parsed.CompilerFlags, parsed.LinkerFlags...)
-		job.JobSpec = &v1.Job_CppCompile{
-			CppCompile: &v1.CppCompileJob{
-				SourceFiles:  parsed.SourceFiles,
-				CompilerArgs: compilerArgs,
-				IncludeDirs:  parsed.IncludeDirs,
-				Defines:      parsed.Defines,
-				OutputFile:   outputFile,
-			},
-		}
-	} else if len(parsed.ObjectFiles) > 0 {
-		job.JobSpec = &v1.Job_CppLink{
-			CppLink: &v1.CppLinkJob{
-				ObjectFiles:     parsed.ObjectFiles,
-				Libraries:       parsed.Libraries,
-				LibraryDirs:     parsed.LibraryDirs,
-				LinkerArgs:      parsed.LinkerFlags,
-				OutputFile:      outputFile,
-				IsSharedLibrary: parsed.IsSharedLibrary,
-			},
-		}
-	} else {
-		return nil, fmt.Errorf("unable to determine job type")
-	}
-
-	return job, nil
-}
-
-func stripExtension(path string) string {
-	return path[:len(path)-len(filepath.Ext(path))]
-}
-
-func generateJobID() string {
-	return fmt.Sprintf("gxx-%d", os.Getpid())
-}
-
-func executeJob(ctx context.Context, job *v1.Job) ([]byte, error) {
-	fmt.Printf("executing job: %s\n", job.Id)
-	// TODO: Implement gRPC submission to buildozer-client daemon
-	return []byte(""), nil
 }
