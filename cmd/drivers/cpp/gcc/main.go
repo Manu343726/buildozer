@@ -111,7 +111,7 @@ func runGcc(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create build context and run driver
-	// Build daemon address from host and port flags
+	// Get daemon address from flags (already parsed by StandardDriverFlags)
 	daemonHost := "localhost"
 	daemonPort := 6789
 	
@@ -121,12 +121,11 @@ func runGcc(cmd *cobra.Command, args []string) error {
 	if drivers.DaemonPortPtr != nil && *drivers.DaemonPortPtr != nil {
 		daemonPort = **drivers.DaemonPortPtr
 	}
-	
-	daemonAddr := fmt.Sprintf("%s:%d", daemonHost, daemonPort)
 
 	buildCtx := &gccdriver.BuildContext{
 		Config:     nil,
-		DaemonAddr: daemonAddr,
+		DaemonHost: daemonHost,
+		DaemonPort: daemonPort,
 		Standalone: false,
 		StartDir:   "",
 		LogLevel:   *drivers.LogLevelPtr,

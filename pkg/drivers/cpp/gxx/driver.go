@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
@@ -51,31 +50,15 @@ func RunGxx(ctx context.Context, args []string, buildCtx *BuildContext) int {
 		return 1
 	}
 
-	// Extract daemon address, default to localhost:6789 if not specified
-	daemonHost := "localhost"
-	daemonPort := 6789
-
-	if strings.Contains(buildCtx.DaemonAddr, ":") {
-		// Address already includes port
-		parts := strings.Split(buildCtx.DaemonAddr, ":")
-		if len(parts) == 2 {
-			daemonHost = parts[0]
-			// Parse port
-			fmt.Sscanf(parts[1], "%d", &daemonPort)
-		}
-	} else if buildCtx.DaemonAddr != "" {
-		daemonHost = buildCtx.DaemonAddr
-	}
-
 	// Determine working directory for config search
 	workDir := buildCtx.StartDir
 	if workDir == "" {
 		workDir, _ = os.Getwd()
 	}
 
-	// Create the RuntimeResolver
-	resolver := drivers.NewRuntimeResolver(daemonHost, daemonPort)
-	Log().DebugContext(ctx, "Created RuntimeResolver", "daemonHost", daemonHost, "daemonPort", daemonPort)
+	// Create the RuntimeResolver using daemon address from context
+	resolver := drivers.NewRuntimeResolver(buildCtx.DaemonHost, buildCtx.DaemonPort)
+	Log().DebugContext(ctx, "Created RuntimeResolver", "daemonHost", buildCtx.DaemonHost, "daemonPort", buildCtx.DaemonPort)
 
 	// Create the ToolArgsApplier callback for G++-specific flag handling
 	gxxApplier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
