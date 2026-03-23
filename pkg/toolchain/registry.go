@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/Manu343726/buildozer/pkg/runtimes/cpp/native"
 )
 
@@ -16,8 +16,8 @@ import (
 // It provides query methods for both drivers and runtimes to determine what
 // compilation targets are available.
 type Registry struct {
+	*logging.Logger
 	mu          sync.RWMutex
-	log         *logger.ComponentLogger
 	detector    *native.Detector
 	toolchains  map[string]*native.Toolchain // keyed by compiler name + language
 	initialized bool
@@ -26,7 +26,7 @@ type Registry struct {
 // NewRegistry creates a new toolchain registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		log:        logger.NewComponentLogger("toolchain-registry"),
+		Logger:     Log().Child("Registry"),
 		detector:   native.NewDetector(),
 		toolchains: make(map[string]*native.Toolchain),
 	}
@@ -47,7 +47,7 @@ func (r *Registry) Initialize(ctx context.Context) error {
 		tc := &toolchains[i]
 		key := r.toolchainKey(tc)
 		r.toolchains[key] = tc
-		r.log.Info("registered toolchain", "key", key, "path", tc.CompilerPath, "version", tc.CompilerVersion)
+		r.Info("registered toolchain", "key", key, "path", tc.CompilerPath, "version", tc.CompilerVersion)
 	}
 
 	r.initialized = true

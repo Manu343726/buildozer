@@ -1,12 +1,12 @@
-.PHONY: help generate build test clean all install-tools deps
+.PHONY: help generate build build-tests test test-short test-verbose clean all install-tools deps check
 
 # Build CLI binaries - DEFAULT TARGET
-build: generate
+build: generate build-tests
 	@echo "Building CLI binaries..."
 	mkdir -p ./bin
 	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
-	go build -o ./bin/gcc ./cmd/gcc
-	go build -o ./bin/g++ ./cmd/g++
+	go build -o ./bin/gcc ./cmd/drivers/cpp/gcc
+	go build -o ./bin/g++ ./cmd/drivers/cpp/gxx
 	@echo "✓ Build complete: ./bin/buildozer-client ./bin/gcc ./bin/g++"
 
 # Download module dependencies
@@ -38,6 +38,7 @@ help:
 	@echo "  generate     - Run code generation (protobuf, etc.)"
 	@echo "  install-tools- Install development tools (buf, protoc plugins)"
 	@echo "  deps         - Download module dependencies"
+	@echo "  build-tests  - Compile all test files without running them"
 	@echo "  test         - Run unit tests for all packages"
 	@echo "  test-short   - Run unit tests in short mode (faster)"
 	@echo "  test-verbose - Run unit tests with verbose output"
@@ -45,20 +46,29 @@ help:
 	@echo "  clean        - Clean build artifacts and generated code"
 	@echo ""
 
+# Build all test files (compile tests without running them)
+build-tests: generate
+	@echo "Building test files..."
+	@for dir in $$(find . -name '*_test.go' -type f | xargs dirname | sort -u | grep -v vendor); do \
+		echo "  Testing $$dir..."; \
+		go test -c -o /dev/null $$dir || exit 1; \
+	done
+	@echo "✓ All test files compiled successfully"
+
 # Run unit tests for all packages
-test: generate
+test: generate build-tests
 	@echo "Running unit tests..."
 	go test -v ./...
 	@echo "✓ All tests passed"
 
 # Run unit tests in short mode (skip integration tests)
-test-short: generate
+test-short: generate build-tests
 	@echo "Running unit tests (short mode)..."
 	go test -short -v ./...
 	@echo "✓ Short tests passed"
 
 # Run unit tests with verbose output
-test-verbose: generate
+test-verbose: generate build-tests
 	@echo "Running unit tests (verbose)..."
 	go test -v -count=1 ./...
 	@echo "✓ Verbose tests passed"

@@ -2,7 +2,170 @@
 
 **Project:** Peer-to-Peer Distributed Build System  
 **Status:** Phase 1 - Core Abstractions & Local Foundation  
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23
+
+---
+
+## Generic Driver Runtime Resolution Framework (2026-03-23)
+
+### Driver-Agnostic Runtime Resolution Infrastructure
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Implement a generic, driver-agnostic runtime resolution framework that all drivers (gcc, g++, go, rust, etc.) can use. Separates driver-specific logic (how tool args affect runtime) from generic logic (config loading, daemon queries, availability classification).
+
+**Design Pattern:**
+- **Generic (shared):** Config loading, daemon queries, availability classification, error/warning handling
+- **Driver-specific:** How tool command-line arguments modify the requested runtime  
+- **Callback pattern:** Each driver implements `ToolArgsApplier` callback for their tool-specific logic
+
+**Implementation Complete:**
+
+1. **New File: `pkg/drivers/runtime_resolution.go`** (~220 lines)
+   - `RuntimeResolver` struct: Encapsulates daemon address + logger
+   - `RuntimeResolutionResult` struct: Complete resolution outcome (requested runtime, found runtime, native status, warnings/errors)
+   - `ToolArgsApplier` function type: Driver callback for tool arg → runtime ID transformation
+   - `Resolve()` method: Main workflow orchestration
+   - `queryDaemon()` method: Daemon RPC communication
+   - `isNativeRuntime()` helper: Determines if runtime is native vs remote/Docker
+
+2. **Workflow (Generic Layer)**
+   - ✅ Load `.buildozer` config file (upward search from cwd or explicit path)
+   - ✅ Merge config base runtime + tool-args-modified runtime via driver callback
+   - ✅ Query daemon for requested runtime ID
+   - ✅ Classify availability:
+     - Not found: Error exit with message
+     - Found & native: Success, proceed with job submission
+     - Found & remote/Docker: Warn but continue (runtime available on peer/Docker)
+
+3. **Logging Integration**
+   - Embedded `*logging.Logger` in RuntimeResolver
+   - Uses hierarchical logger: `logging.Log().Child("RuntimeResolver")`
+   - Logs at appropriate levels:
+     - Info: Major milestones (resolution start, config loaded, runtime requested)
+     - Debug: Detailed operations (applying tool args, daemon query)
+     - Warn: Availability issues (config not found, runtime not native)
+     - Error: Resolution failures (tool args invalid, daemon error, runtime not found)
+   - All methods use context-aware logging (`InfoContext`, `DebugContext`, etc.)
+
+4. **Expected Driver Usage Pattern**
+   ```go
+   // In driver (e.g., gcc):
+   resolver := drivers.NewRuntimeResolver(daemonHost, daemonPort)
+   result := resolver.Resolve(ctx, configPath, cwd, toolArgs, func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
+       // Driver-specific: Parse tool args, modify runtime
+       return modifiedRuntimeID, nil
+   }, "gcc")
+   
+   if result.Error != "" {
+       fmt.Fprintf(os.Stderr, "error: %s\n", result.Error)
+       return 1
+   }
+   
+   if result.Warning != "" {
+       fmt.Fprintf(os.Stderr, "warning: %s\n", result.Warning)
+   }
+   
+   // result.FoundRuntime, result.IsNative available for job submission
+   ```
+
+5. **Extensibility**
+   - Framework works identically for any driver type (C/C++, Go, Rust, etc.)
+   - Each driver only needs to implement `ToolArgsApplier` callback
+   - Future: Support Go driver, Rust driver, etc. with minimal additional code
+   - Future: Add per-driver configuration extraction from `cfg.Drivers` (currently TODO)
+
+**Design Principles Followed:**
+- ✅ Single Responsibility: Generic vs driver-specific concerns completely separated
+- ✅ Dependency Injection: Daemon address passed to constructor, logger embedded
+- ✅ Callback Pattern: Driver-specific logic via `ToolArgsApplier` interface
+- ✅ Structured Errors: Rich result object instead of bare error returns
+- ✅ Hierarchical Logging: Multiple levels with contextual information
+- ✅ Context-aware: All I/O operations accept and use context.Context
+
+**Build Status:** ✅ SUCCESS - All packages compile
+
+**Next Steps:**
+1. Refactor existing C/C++ drivers (gcc, g++) to use `RuntimeResolver`
+2. Add driver-specific `ToolArgsApplier` implementations for gcc (compiler flags) and g++ (compiler flags)
+3. Extract driver config from `cfg.Drivers.Gcc` and `cfg.Drivers.Gxx` in applier callbacks
+4. Test with daemon for end-to-end workflow validation
+5. Document in architecture guide for future drivers (Go, Rust, etc.)
+
+---
+
+## Logger Refactoring: Component Logger Removal (2026-03-23)
+
+### Removal of internal/logger ComponentLogger Pattern
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Refactor all usages of the old `internal/logger.ComponentLogger` to use the new `pkg/logging.Logger` pattern following the established package logger hierarchy.
+
+**Implementation Complete:**
+
+1. **Created Package-Level Logger Functions** (`logger.go` files)
+   - Each package now implements a `Log()` function returning a hierarchical logger
+   - Pattern: `func Log() *logging.Logger { return logging.Log().Child("packageName") }`
+   - Created for packages:
+     - `pkg/drivers/logger.go` → `logging.Log().Child("drivers")`
+     - `pkg/drivers/gcc/logger.go` → `logging.Log().Child("drivers").Child("gcc")`
+     - `pkg/drivers/gxx/logger.go` → `logging.Log().Child("drivers").Child("gxx")`
+     - `pkg/toolchain/logger.go` → `logging.Log().Child("toolchain")`
+     - `cmd/gcc/logger.go` → `logging.Log().Child("cmd").Child("gcc")`
+     - `cmd/g++/logger.go` → `logging.Log().Child("cmd").Child("g++")`
+   - Updated existing `pkg/runtimes/cpp/native/logger.go` to full hierarchy: `.Child("runtimes").Child("cpp").Child("native")`
+
+2. **Refactored Embedded Loggers in Structs**
+   - Pattern: Embed `*logging.Logger` field (not `*logger.ComponentLogger`)
+   - Initialize with `Logger: Log().Child("ComponentName")` in constructor
+   - Components refactored:
+     - `pkg/daemon/runtime_manager.go` → embeds Logger, initializes with `Log().Child("RuntimeManager")`
+     - `pkg/daemon/runtime_service.go` → embeds Logger, initializes with `Log().Child("RuntimeServiceHandler")`
+     - `pkg/runtimes/cpp/native/cpp_runtime.go` → embeds Logger, initializes with `Log().Child(compiler-name)`
+     - `pkg/toolchain/registry.go` → embeds Logger, initializes with `Log().Child("Registry")`
+
+3. **Updated Logging Calls**
+   - Removed global `var log = logger.NewComponentLogger(...)` declarations
+   - Replaced all `log.Method()` calls with `Log().Method()` or embedded logger method calls
+   - Driver packages (gcc, gxx): Updated 11 logging calls each to use `Log().` 
+   - Daemon components: Updated to use embedded Logger directly
+
+4. **Import Cleanup**
+   - Removed all `internal/logger` imports
+   - No longer using `ComponentLogger` type anywhere
+   - All logging now goes through `pkg/logging` package
+
+**Logger Hierarchy Achieved:**
+```
+buildozer
+├── cmd.gcc
+├── cmd.g++
+├── drivers
+│   ├── gcc
+│   ├── gxx
+│   └── (runtime_resolver utilities)
+├── daemon
+│   ├── RuntimeManager
+│   └── RuntimeServiceHandler
+├── toolchain
+│   └── Registry
+├── runtimes
+│   └── cpp
+│       └── native
+│           ├── cpp-native-gcc
+│           └── cpp-native-clang
+```
+
+**Design Principles Followed:**
+- ✅ Package-level loggers (each package has `Log()` function)
+- ✅ Component loggers are children of their package's logger
+- ✅ Embedded Logger pattern for structs
+- ✅ Hierarchical naming enables filtered log querying
+- ✅ Proper cleanup via logger finalizers
+- ✅ All internal logging removed, unified on `pkg/logging`
+
+**Build Status:** ✅ SUCCESS - All packages compile without errors
 
 ---
 

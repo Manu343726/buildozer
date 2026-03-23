@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/Manu343726/buildozer/pkg/runtime"
 )
 
@@ -15,12 +15,11 @@ import (
 // It provides job execution capabilities by delegating to an Executor with a concrete Toolchain configuration.
 // This type acts as a bridge between the generic Runtime interface and concrete C/C++ compilation operations.
 type NativeCppRuntime struct {
+	*logging.Logger
 	// toolchain contains the specific C/C++ compiler configuration (compiler type, version, architecture, etc.).
 	toolchain *Toolchain
 	// executor handles the actual compilation and linking operations.
 	executor *Executor
-	// log is the logger for runtime operations.
-	log *logger.ComponentLogger
 }
 
 // NewNativeCppRuntime creates and returns a new NativeCppRuntime instance.
@@ -37,9 +36,9 @@ func NewNativeCppRuntime(toolchain *Toolchain, workDir string) *NativeCppRuntime
 		compilerName = "clang"
 	}
 	return &NativeCppRuntime{
+		Logger:    Log().Child(fmt.Sprintf("cpp-native-%s", compilerName)),
 		toolchain: toolchain,
 		executor:  NewExecutor(toolchain.CompilerPath, workDir),
-		log:       logger.NewComponentLogger(fmt.Sprintf("cpp-native-%s", compilerName)),
 	}
 }
 
@@ -52,7 +51,7 @@ func NewNativeCppRuntime(toolchain *Toolchain, workDir string) *NativeCppRuntime
 // Returns an error if the request is nil or an unsupported job type is encountered.
 func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRequest) (*runtime.ExecutionResult, error) {
 	if req == nil {
-		return nil, r.log.Errorf("execution request is nil")
+		return nil, r.Errorf("execution request is nil")
 	}
 
 	var stdout, stderr []byte
@@ -61,7 +60,7 @@ func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRe
 
 	switch job := req.Job.(type) {
 	case *v1.CppCompileJob:
-		r.log.Info("executing C/C++ compile job", "sources", len(job.SourceFiles), "output", job.OutputFile)
+		r.Info("executing C/C++ compile job", "sources", len(job.SourceFiles), "output", job.OutputFile)
 		compileJob := r.protoCompileJobToConcrete(job)
 		stdout, stderr, exitCode, err = r.executor.ExecuteCompileJob(ctx, compileJob, req.ProgressCallback)
 		if err != nil {
@@ -69,7 +68,7 @@ func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRe
 		}
 
 	case *v1.CppLinkJob:
-		r.log.Info("executing C/C++ link job", "objects", len(job.ObjectFiles), "output", job.OutputFile)
+		r.Info("executing C/C++ link job", "objects", len(job.ObjectFiles), "output", job.OutputFile)
 		linkJob := r.protoLinkJobToConcrete(job)
 		stdout, stderr, exitCode, err = r.executor.ExecuteLinkJob(ctx, linkJob, req.ProgressCallback)
 		if err != nil {
@@ -77,7 +76,7 @@ func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRe
 		}
 
 	default:
-		return nil, r.log.Errorf("unsupported job type: %T", job)
+		return nil, r.Errorf("unsupported job type: %T", job)
 	}
 
 	return &runtime.ExecutionResult{
@@ -99,7 +98,7 @@ func (r *NativeCppRuntime) Available(ctx context.Context) (bool, error) {
 	if err != nil || exitCode != 0 {
 		return false, nil
 	}
-	r.log.Debug("compiler available", "compiler", r.toolchain.Compiler)
+	r.Debug("compiler available", "compiler", r.toolchain.Compiler)
 	return true, nil
 }
 

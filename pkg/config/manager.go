@@ -143,3 +143,90 @@ func (m *Manager) Get() *Config {
 func Get() *Config {
 	return ConfigManager().Get()
 }
+
+// FindConfigFile searches for a .buildozer configuration file starting from startDir
+// and searching up through parent directories until finding the file or reaching the root.
+// This mimics the behavior of .clang-format file discovery.
+//
+// Returns:
+//   - The path to the .buildozer file if found
+//   - Empty string if not found
+//   - An error if there's a filesystem issue
+//
+// Search order:
+//  1. startDir/.buildozer
+//  2. startDir/../.buildozer
+//  3. Continue up the directory tree until root is reached
+func FindConfigFile(startDir string) (string, error) {
+	if startDir == "" {
+		var err error
+		startDir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory: %w", err)
+		}
+	}
+
+	// Normalize the path
+	absDir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Search up the directory tree
+	currentDir := absDir
+	for {
+		configPath := filepath.Join(currentDir, ".buildozer")
+		if _, err := os.Stat(configPath); err == nil {
+			// File found
+			return configPath, nil
+		} else if !os.IsNotExist(err) {
+			// Some other error occurred
+			return "", fmt.Errorf("failed to check for config file at %s: %w", configPath, err)
+		}
+
+		// Move to parent directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			// Reached filesystem root
+			break
+		}
+		currentDir = parentDir
+	}
+
+	// Not found
+	return "", nil
+}
+
+// LoadDriverConfig loads the .buildozer config file from cwd or parent directories
+// and returns the parsed configuration. If no config file is found, returns an
+// empty/default config.
+func LoadDriverConfig(startDir string) (*Config, string, error) {
+	configFile, err := FindConfigFile(startDir)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if configFile == "" {
+		// No config file found, return defaults
+		cfg := DefaultConfig()
+		return &cfg, "", nil
+	}
+
+	// Load config from the found file
+	// Create a fresh viper instance for this specific config file
+	v := viper.New()
+	v.SetConfigFile(configFile)
+	v.SetConfigType("yaml")
+
+	if err := v.ReadInConfig(); err != nil {
+		return nil, configFile, fmt.Errorf("failed to read config file %s: %w", configFile, err)
+	}
+
+	// Parse into Config structure
+	cfg := DefaultConfig()
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, configFile, fmt.Errorf("failed to parse config file %s: %w", configFile, err)
+	}
+
+	return &cfg, configFile, nil
+}

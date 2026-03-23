@@ -6,13 +6,13 @@ import (
 	"time"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
 // RuntimeManager handles detection, caching, and querying of available runtimes.
 // It lazy-loads runtimes on first request and caches the results.
 type RuntimeManager struct {
-	log *logger.ComponentLogger
+	*logging.Logger
 
 	mu               sync.RWMutex
 	runtimes         []*v1.Runtime
@@ -25,7 +25,7 @@ type RuntimeManager struct {
 // NewRuntimeManager creates a new runtime manager with lazy detection.
 func NewRuntimeManager() *RuntimeManager {
 	return &RuntimeManager{
-		log: logger.NewComponentLogger("RuntimeManager"),
+		Logger: Log().Child("RuntimeManager"),
 	}
 }
 
@@ -37,14 +37,14 @@ func (rm *RuntimeManager) ListRuntimes(ctx context.Context, filter string) ([]*v
 	// If already detected, return cached results
 	if rm.detectedAt != nil {
 		defer rm.mu.RUnlock()
-		rm.log.Debug("Returning cached runtimes", "count", len(rm.runtimes), "filter", filter)
+		rm.Debug("Returning cached runtimes", "count", len(rm.runtimes), "filter", filter)
 		return rm.filterRuntimes(rm.runtimes, filter), rm.detectionNotes, rm.lastDetectionErr
 	}
 
 	// Check if detection is already in progress
 	if rm.isDetecting {
 		rm.mu.RUnlock()
-		rm.log.Debug("Waiting for in-progress detection")
+		rm.Debug("Waiting for in-progress detection")
 		return rm.waitForDetection(ctx, filter)
 	}
 
@@ -66,7 +66,7 @@ func (rm *RuntimeManager) detectAndCache(ctx context.Context, filter string) ([]
 		rm.mu.Unlock()
 	}()
 
-	rm.log.Info("Starting runtime detection")
+	rm.Info("Starting runtime detection")
 
 	runtimes, detectionNotes, err := rm.detectRuntimes(ctx)
 
@@ -79,9 +79,9 @@ func (rm *RuntimeManager) detectAndCache(ctx context.Context, filter string) ([]
 	rm.mu.Unlock()
 
 	if err != nil {
-		rm.log.Error("Runtime detection failed", "error", err)
+		rm.Error("Runtime detection failed", "error", err)
 	} else {
-		rm.log.Info("Runtime detection complete", "count", len(runtimes), "notes", detectionNotes)
+		rm.Info("Runtime detection complete", "count", len(runtimes), "notes", detectionNotes)
 	}
 
 	return rm.filterRuntimes(runtimes, filter), detectionNotes, err
@@ -111,7 +111,7 @@ func (rm *RuntimeManager) waitForDetection(ctx context.Context, filter string) (
 func (rm *RuntimeManager) detectRuntimes(ctx context.Context) ([]*v1.Runtime, string, error) {
 	// For now, this is a placeholder that will call the cpp native discoverer
 	// when the daemon is properly integrated with runtime detection
-	rm.log.Debug("Detecting C/C++ runtimes")
+	rm.Debug("Detecting C/C++ runtimes")
 
 	// TODO: Integrate with pkg/runtimes/cpp/native discoverer
 	// This requires moving detector/registry logic from CLI to shared package

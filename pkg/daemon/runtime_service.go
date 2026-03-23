@@ -7,12 +7,12 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1/protov1connect"
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
 // runtimeServiceHandler implements the RuntimeService gRPC interface
 type runtimeServiceHandler struct {
-	log *logger.ComponentLogger
+	*logging.Logger
 
 	manager *RuntimeManager
 }
@@ -20,7 +20,7 @@ type runtimeServiceHandler struct {
 // newRuntimeServiceHandler creates a new runtime service handler
 func newRuntimeServiceHandler(manager *RuntimeManager) *runtimeServiceHandler {
 	return &runtimeServiceHandler{
-		log:     logger.NewComponentLogger("RuntimeServiceHandler"),
+		Logger:  Log().Child("RuntimeServiceHandler"),
 		manager: manager,
 	}
 }
@@ -44,7 +44,7 @@ func (rsh *runtimeServiceHandler) ListRuntimes(ctx context.Context, req *connect
 
 	runtimes, notes, err := rsh.manager.ListRuntimes(ctx, filter)
 	if err != nil {
-		rsh.log.Error("Runtime detection failed", "error", err)
+		rsh.Error("Runtime detection failed", "error", err)
 		// Return error but still include any runtimes that were detected before the error
 		return connect.NewResponse(&v1.ListRuntimesResponse{
 			Runtimes:       runtimes,
@@ -55,7 +55,7 @@ func (rsh *runtimeServiceHandler) ListRuntimes(ctx context.Context, req *connect
 	// TODO: If local_only is false, query peer daemons and merge results
 	if !req.Msg.LocalOnly {
 		// Peer discovery placeholder - will be implemented when peer coordination is ready
-		rsh.log.Debug("Peer runtime discovery not yet implemented", "local_only", req.Msg.LocalOnly)
+		rsh.Debug("Peer runtime discovery not yet implemented", "local_only", req.Msg.LocalOnly)
 	}
 
 	return connect.NewResponse(&v1.ListRuntimesResponse{
@@ -72,7 +72,7 @@ func (rsh *runtimeServiceHandler) GetRuntime(ctx context.Context, req *connect.R
 	// First, ensure we have detected all runtimes
 	_, _, err := rsh.manager.ListRuntimes(ctx, "")
 	if err != nil {
-		rsh.log.Error("Runtime detection failed", "error", err)
+		rsh.Error("Runtime detection failed", "error", err)
 	}
 
 	rt, err := rsh.manager.GetRuntime(ctx, runtimeID)
