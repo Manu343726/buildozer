@@ -82,13 +82,14 @@ func runGxx(cmd *cobra.Command, args []string) error {
 	}
 
 	buildCtx := &gxxdriver.BuildContext{
-		Config:     nil,
-		DaemonHost: daemonHost,
-		DaemonPort: daemonPort,
-		Standalone: false,
-		StartDir:   "",
-		LogLevel:   *drivers.LogLevelPtr,
-		ConfigPath: *drivers.ConfigPathPtr,
+		Config:         nil,
+		DaemonHost:     daemonHost,
+		DaemonPort:     daemonPort,
+		Standalone:     false,
+		StartDir:       "",
+		LogLevel:       *drivers.LogLevelPtr,
+		ConfigPath:     *drivers.ConfigPathPtr,
+		InitialRuntime: *drivers.RuntimePtr,
 	}
 
 	exitCode := gxxdriver.RunGxx(cmd.Context(), gxxArgs, buildCtx)

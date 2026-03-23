@@ -82,7 +82,7 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 		configPath = workDir
 	}
 
-	resolutionResult := resolver.Resolve(ctx, configPath, workDir, args, gccApplier, "gcc")
+	resolutionResult := resolver.Resolve(ctx, configPath, workDir, buildCtx.InitialRuntime, args, gccApplier, "gcc")
 	Log().DebugContext(ctx, "Runtime resolution result",
 		"hasError", resolutionResult.Error != "",
 		"hasWarning", resolutionResult.Warning != "",

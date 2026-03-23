@@ -72,14 +72,16 @@ func NewRuntimeResolver(daemonHost string, daemonPort int) *RuntimeResolver {
 // Resolve performs the complete runtime resolution workflow:
 // 1. Loads .buildozer config from cwd upward (or explicit path)
 // 2. Extracts base runtime from config (driver-specific)
-// 3. Validates that a base runtime was found (required)
-// 4. Applies tool args via callback to enhance the runtime ID
-// 5. Queries daemon for final runtime
-// 6. Classifies availability (native, remote, not found)
-// 7. Returns result with warnings or errors
+// 3. Merges config runtime with CLI initialRuntime (CLI overrides config)
+// 4. Validates that a base runtime was found (required)
+// 5. Applies tool args via callback to enhance the runtime ID
+// 6. Queries daemon for final runtime
+// 7. Classifies availability (native, remote, not found)
+// 8. Returns result with warnings or errors
 //
 // configPath: explicit path to .buildozer file (empty = search from cwd)
 // startDir: directory to start upward search from (if configPath empty)
+// initialRuntime: CLI-provided initial runtime (overrides config)
 // toolArgs: driver-specific arguments that may affect runtime
 // applier: driver-specific callback to apply tool args to runtime spec
 // driverName: name of driver for logging (e.g., "gcc", "g++")
@@ -87,6 +89,7 @@ func (rr *RuntimeResolver) Resolve(
 	ctx context.Context,
 	configPath string,
 	startDir string,
+	initialRuntime string,
 	toolArgs []string,
 	applier ToolArgsApplier,
 	driverName string,
@@ -116,24 +119,36 @@ func (rr *RuntimeResolver) Resolve(
 	}
 
 	// Step 2: Get base runtime from config (depends on driver type)
+	// Note: The driver-specific code should extract the appropriate config.
+	// Here we pass empty string; driver-specific code handles config parsing.
+	// For example, gcc driver would use cfg.Drivers.Gcc runtime settings.
 	baseRuntime := ""
 	if cfg != nil {
-		// Note: The driver-specific code should extract the appropriate config.
-		// Here we pass empty string; driver-specific code handles config parsing.
-		// For example, gcc driver would use cfg.Drivers.Gcc runtime settings.
+		// Placeholder: driver-specific code extracts from config
+		// baseRuntime = cfg.Drivers.Gcc.Runtime (or similar)
 	}
 
-	// Step 3: Check if we have an initial runtime to work with
+	rr.DebugContext(ctx, "Base runtime from config",
+		"config", configFile, "baseRuntime", baseRuntime)
+
+	// Step 3: Apply CLI override if provided
+	// CLI initialRuntime takes precedence over config
+	if initialRuntime != "" {
+		rr.InfoContext(ctx, "Using CLI-provided initial runtime", "runtime", initialRuntime)
+		baseRuntime = initialRuntime
+	}
+
+	// Step 4: Check if we have an initial runtime to work with
 	// The applier is for enhancing/modifying an existing runtime, not creating one from scratch
 	if baseRuntime == "" {
-		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile)
+		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile, "cli", initialRuntime)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: "",
 			Error:           "unable to determine compiler runtime: no configuration file found and no explicit compiler version/architecture specified in command-line flags",
 		}
 	}
 
-	// Step 4: Apply tool args to enhance the runtime
+	// Step 5: Apply tool args to enhance the runtime
 	rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime, "toolArgs", toolArgs)
 	requestedRuntime, applyErr := applier(ctx, baseRuntime, toolArgs)
 	if applyErr != nil {
@@ -146,7 +161,7 @@ func (rr *RuntimeResolver) Resolve(
 
 	rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime)
 
-	// Step 5: Query daemon
+	// Step 6: Query daemon
 	foundRuntime, isNative, daemonErr := rr.queryDaemon(ctx, requestedRuntime)
 	if daemonErr != nil {
 		rr.ErrorContext(ctx, "Failed to query daemon", "error", daemonErr)
@@ -158,7 +173,7 @@ func (rr *RuntimeResolver) Resolve(
 		}
 	}
 
-	// Step 5: Classify result
+	// Step 7: Classify result
 	if foundRuntime == nil {
 		rr.ErrorContext(ctx, "Runtime not found", "runtime", requestedRuntime)
 		return &RuntimeResolutionResult{

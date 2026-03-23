@@ -92,7 +92,7 @@ func RunGxx(ctx context.Context, args []string, buildCtx *BuildContext) int {
 		configPath = workDir
 	}
 
-	resolutionResult := resolver.Resolve(ctx, configPath, workDir, args, gxxApplier, "g++")
+	resolutionResult := resolver.Resolve(ctx, configPath, workDir, buildCtx.InitialRuntime, args, gxxApplier, "g++")
 	Log().DebugContext(ctx, "Runtime resolution result",
 		"hasError", resolutionResult.Error != "",
 		"hasWarning", resolutionResult.Warning != "",

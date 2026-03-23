@@ -72,7 +72,7 @@ drivers:
 		return "gcc-9-glibc-x86_64", nil
 	}
 
-	result := resolver.Resolve(ctx, configPath, tmpDir, []string{"-march=x86-64"}, applier, "gcc")
+	result := resolver.Resolve(ctx, configPath, tmpDir, "", []string{"-march=x86-64"}, applier, "gcc")
 
 	// Result should have requested runtime set
 	if result.RequiredRuntime != "gcc-9-glibc-x86_64" {
@@ -96,7 +96,7 @@ func TestResolveApplierError(t *testing.T) {
 		return "", errors.New("invalid compiler flag")
 	}
 
-	result := resolver.Resolve(ctx, "", tmpDir, []string{"-invalid-flag"}, applier, "gcc")
+	result := resolver.Resolve(ctx, "", tmpDir, "", []string{"-invalid-flag"}, applier, "gcc")
 
 	// Should have error about invalid tool arguments
 	if result.Error == "" {
@@ -122,7 +122,7 @@ func TestResolveNoConfig(t *testing.T) {
 		return "gcc-default", nil
 	}
 
-	result := resolver.Resolve(ctx, "", tmpDir, []string{}, applier, "gcc")
+	result := resolver.Resolve(ctx, "", tmpDir, "", []string{}, applier, "gcc")
 
 	// Should handle missing config gracefully
 	if result.RequiredRuntime == "" {
@@ -148,7 +148,7 @@ func TestResolveWithDaemon(t *testing.T) {
 		return "test-runtime", nil
 	}
 
-	result := resolver.Resolve(ctx, "", t.TempDir(), []string{}, applier, "test")
+	result := resolver.Resolve(ctx, "", t.TempDir(), "", []string{}, applier, "test")
 
 	// If daemon is running, we'll get either success or "runtime not found"
 	// If daemon is not running, we'll get a connection error
@@ -214,7 +214,7 @@ func TestResolveMultipleToolArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := resolver.Resolve(ctx, "", tmpDir, tt.toolArgs, applier, "gcc")
+			result := resolver.Resolve(ctx, "", tmpDir, "", tt.toolArgs, applier, "gcc")
 			if result.RequiredRuntime != tt.wantRuntime {
 				t.Errorf("expected '%s', got '%s'", tt.wantRuntime, result.RequiredRuntime)
 			}
@@ -341,7 +341,7 @@ func TestApplierContract(t *testing.T) {
 	}
 
 	testArgs := []string{"-c", "-o", "output.o"}
-	resolver.Resolve(ctx, "", tmpDir, testArgs, applier, "test")
+	resolver.Resolve(ctx, "", tmpDir, "", testArgs, applier, "test")
 
 	// Verify applier was called with correct arguments
 	if len(receivedArgs) != len(testArgs) {

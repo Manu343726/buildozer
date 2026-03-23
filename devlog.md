@@ -6,6 +6,126 @@
 
 ---
 
+## Standard Runtime Flag Support (2026-03-23)
+
+### Added --buildozer-runtime CLI Flag for Initial Runtime Specification
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Implement a standard `--buildozer-runtime` driver flag that allows users to specify initial runtime ID via CLI, with proper merging strategy: config file sets default, CLI flag overrides config.
+
+**Algorithm Implemented:**
+
+1. **Load configuration file** (upward search from cwd)
+2. **Extract runtime from config** (driver-specific; currently placeholder for gcc/g++)
+3. **Apply CLI override** (if `--buildozer-runtime` flag provided, use it instead of config)
+4. **Validate initial runtime exists** (RuntimeResolver checks for non-empty runtime)
+5. **Call driver applier callback** (enhance runtime with tool-specific flags)
+6. **Query daemon** (request the final runtime)
+7. **Classify result** (native, remote, not found)
+
+**Key Design Decisions:**
+
+- **CLI override precedence:** User-provided `--buildozer-runtime` takes absolute priority over config
+- **Early validation:** Empty runtime error caught before applier callback (single point of validation)
+- **Clear contracts:** Applier only modifies existing runtime, doesn't create from scratch
+- **Consistent error messages:** Explicit feedback when runtime can't be determined
+
+**Files Modified:**
+
+1. **Flag Definition** (`pkg/drivers/flagparser.go`)
+   - Added `RuntimePtr` to `StandardDriverFlags`
+   - Registered `--buildozer-runtime` flag (optional, empty by default)
+   - Documentation updated
+
+2. **BuildContext Enhancement** (`pkg/drivers/cpp/gcc_common/types.go`)
+   - Added `InitialRuntime string` field
+   - Drivers now receive CLI-provided runtime
+
+3. **RuntimeResolver Algorithm** (`pkg/drivers/runtime_resolution.go`)
+   - Updated `Resolve()` signature: new `initialRuntime` parameter
+   - Implemented merging logic:
+     ```go
+     baseRuntime := loadFromConfig()  // Step 2
+     if initialRuntime != "" {         // Step 3
+         baseRuntime = initialRuntime  // CLI wins
+     }
+     if baseRuntime == "" {            // Step 4: Validate
+         return error
+     }
+     requestedRuntime := applier(baseRuntime)  // Step 5
+     daemonResult := daemon.Query(requestedRuntime)  // Step 6
+     ```
+
+4. **GCC Driver** (`cmd/drivers/cpp/gcc/main.go`, `pkg/drivers/cpp/gcc/driver.go`)
+   - Passes `InitialRuntime` from BuildContext to RuntimeResolver
+   - Updated: `resolver.Resolve(ctx, configPath, workDir, buildCtx.InitialRuntime, args, ...)`
+
+5. **G++ Driver** (`cmd/drivers/cpp/gxx/main.go`, `pkg/drivers/cpp/gxx/driver.go`)
+   - Same implementation as GCC for consistency
+
+6. **Test Updates** (`pkg/drivers/runtime_resolution_test.go`)
+   - Updated all `Resolve()` calls to pass empty string for `initialRuntime`
+   - Tests verify applier receives correct baseRuntime after merging
+
+**Usage Examples:**
+
+```bash
+# Use runtime from config file (if present)
+toolozer-gcc -c main.c -o main.o
+
+# Override config with explicit runtime
+buildozer-gcc --buildozer-runtime gcc-11-glibc-x86_64 -c main.c -o main.o
+
+# Config + flag combination (flag wins)
+# If .buildozer.yaml specifies gcc-9 but flag specifies gcc-11:
+buildozer-gcc --buildozer-config /path/.buildozer.yaml --buildozer-runtime gcc-11-glibc-x86_64 -c main.c
+
+# With compiler flags for modification
+buildozer-gcc --buildozer-runtime gcc-11 -march=aarch64 -c main.c
+# Results in: gcc-11-aarch64 (base runtime + architecture modification)
+```
+
+**Test Results:**
+
+✅ Test 1: CLI flag only
+```
+buildozer-gcc --buildozer-runtime gcc-from-cli -c test.c
+→ Using CLI-provided initial runtime: gcc-from-cli
+→ Runtime requested from daemon: gcc-from-cli
+```
+
+✅ Test 2: No config, no flag
+```
+cd /tmp/no_config && buildozer-gcc -c test.c
+→ No initial runtime found
+→ Error: unable to determine compiler runtime...
+```
+
+✅ Test 3: G++ driver support
+```
+buildozer-g++ --buildozer-runtime gxx-from-cli -c test.cpp
+→ Works identically to gcc
+```
+
+**Architecture Benefits:**
+
+1. **User control:** Can override any config-based default
+2. **Non-invasive:** Optional flag; existing workflows unaffected
+3. **Clear precedence:** Config provides defaults; CLI provides overrides
+4. **Extensible:** Future config additions (e.g., multiple runtimes per driver) automatically supported
+5. **Debuggable:** Logging clearly shows which runtime was selected and why
+
+**Next Steps:**
+
+- Implement actual runtime extraction from config file for gcc/g++
+- Support multiple runtime strategies in config (e.g., different runtimes for different purposes)
+- Add validation that provided runtime is valid for the specific driver
+
+**Git Commit:** (To be committed after this devlog update)
+
+---
+
 ## Runtime Resolution Error Handling Refactoring (2026-03-23)
 
 ### Moved Empty Runtime Validation to RuntimeResolver

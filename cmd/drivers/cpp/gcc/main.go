@@ -123,13 +123,14 @@ func runGcc(cmd *cobra.Command, args []string) error {
 	}
 
 	buildCtx := &gccdriver.BuildContext{
-		Config:     nil,
-		DaemonHost: daemonHost,
-		DaemonPort: daemonPort,
-		Standalone: false,
-		StartDir:   "",
-		LogLevel:   *drivers.LogLevelPtr,
-		ConfigPath: *drivers.ConfigPathPtr,
+		Config:         nil,
+		DaemonHost:     daemonHost,
+		DaemonPort:     daemonPort,
+		Standalone:     false,
+		StartDir:       "",
+		LogLevel:       *drivers.LogLevelPtr,
+		ConfigPath:     *drivers.ConfigPathPtr,
+		InitialRuntime: *drivers.RuntimePtr,
 	}
 
 	exitCode := gccdriver.RunGcc(cmd.Context(), gccArgs, buildCtx)
