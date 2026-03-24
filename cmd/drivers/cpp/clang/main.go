@@ -5,7 +5,7 @@ import (
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/pkg/drivers"
-	gccdriver "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc"
+	clangdriver "github.com/Manu343726/buildozer/pkg/drivers/cpp/clang"
 	"github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
 )
 
@@ -13,18 +13,18 @@ func main() {
 	drivers.StandardDriverFlags.Parse(nil)
 
 	driver := &drivers.SimpleDriver{
-		DriverName:           "gcc",
-		DriverVersion:        "10.2.1",
-		DriverShort:          "GCC C compiler",
-		DriverLong:           "GCC - the GNU Compiler Collection for C.",
-		DriverPrefix:         "gcc: error:",
-		DriverLanguageType:   drivers.GCC,
+		DriverName:           "clang",
+		DriverVersion:        "14.0.0",
+		DriverShort:          "Clang C compiler",
+		DriverLong:           "Clang - LLVM C compiler. Compatible with GCC flags.",
+		DriverPrefix:         "clang: error:",
+		DriverLanguageType:   drivers.Clang,
 		DriverSupportsStdlib: false,
 		DriverParseCommandLine: func(args []string) interface{} {
 			return gcc_common.ParseCommandLine(args)
 		},
 		DriverCreateJob: func(ctx context.Context, parsed interface{}, runtime *v1.Runtime, workDir string) (*v1.Job, error) {
-			return gccdriver.CreateJob(ctx, parsed.(*gcc_common.ParsedArgs), runtime, workDir)
+			return clangdriver.CreateJob(ctx, parsed.(*gcc_common.ParsedArgs), runtime, workDir)
 		},
 		DriverToolArgsApplier: func(ctx context.Context) drivers.ToolArgsApplier {
 			return func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {

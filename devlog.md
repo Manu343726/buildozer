@@ -6,6 +6,493 @@
 
 ---
 
+## Driver Architecture Unified with Orchestrator (2026-03-24)
+
+### Refactored Driver CLI to Use Existing RunDriver() Orchestration
+
+**Status:** ✅ COMPLETED - All C/C++ Drivers Refactored & Building
+
+**Objective:** Eliminate boilerplate and unify driver architecture by delegating to existing `RunDriver()` orchestration function in `driver_orchestrator.go` instead of duplicating logic in each driver.
+
+**Key Changes:**
+
+1. **driver_cli.go Updated** (`pkg/drivers/driver_cli.go`)
+   - Defined `SimpleDriver` struct with DriverTool callbacks:
+     - `DriverParseCommandLine`: Parse driver-specific arguments
+     - `DriverCreateJob`: Create Job protocol buffer 
+     - `DriverToolArgsApplier`: Create ToolArgsApplier for runtime handling
+     - `DriverRuntimeValidator`: Validate runtime compatibility
+   - Modified `runDriver()` to:
+     1. Extract `CommonDriverConfig` once
+     2. Create `DriverTool` from SimpleDriver callbacks
+     3. Call `RunDriver()` from driver_orchestrator to handle orchestration
+   - This delegates orchestration to proven pattern, eliminating duplicated code
+
+2. **All C/C++ Drivers Refactored** (`cmd/drivers/cpp/{gcc,gxx,clang,clangxx}/main.go`)
+   - Each driver now ~40 lines vs. ~200+ lines previously
+   - Creates `SimpleDriver` with metadata and callbacks
+   - Calls `drivers.ExecuteDriver(driver)` to delegate to generic CLI
+   - Language-specific logic stays in separated packages:
+     - `pkg/drivers/cpp/gcc/driver.go` - GCC-specific CreateJob logic
+     - `pkg/drivers/cpp/gxx/driver.go` - G++ -specific CreateJob logic
+     - `pkg/drivers/cpp/clang/driver.go` - Clang-specific CreateJob logic
+     - `pkg/drivers/cpp/gcc_common/` - Shared C/C++ parsing & validation
+
+3. **Architecture Benefits**
+   - Single source of truth for driver orchestration: `RunDriver()` in driver_orchestrator
+   - Minimized duplication - driver main.go files now just define metadata + callbacks
+   - DriverTool interface extensible for future runtimes (Go, Rust, Docker)
+   - Clear separation: generic CLI (driver_cli.go) → orchestrator (driver_orchestrator.go) → language-specific (driver packages)
+
+**Build Status:** ✅ SUCCESS
+- All 5 binaries compiled: buildozer-client, gcc, g++, clang, clang++
+- Tested gcc --version - driver works correctly with new architecture
+
+**Testing Verification:**
+```
+$ /workspaces/buildozer/bin/gcc --version
+gcc driver started...
+gcc version 11.2.0 (Buildozer distributed compiler)
+```
+
+---
+
+## Generic Driver CLI Framework (2026-03-24)
+
+### Refactored All Driver main.go Files to Use Generic CLI Handler
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Eliminate boilerplate in driver main.go files by creating a generic CLI handler and Driver interface that all language-specific drivers can use.
+
+**Latest Improvement - Removed Duplicated Config Extraction (2026-03-24):**
+- Created `CommonDriverConfig` struct containing all common configuration
+- Added `ExtractCommonConfig()` function to centralize daemon host/port/log-level/config extraction
+- Removed 10-15 lines of duplicated code from each driver's main.go
+- All drivers now call: `commonCfg := drivers.ExtractCommonConfig()`
+- Removed global variable access like `*drivers.DaemonHostPtr`, `*drivers.LogLevelPtr`, etc.
+- BuildContext now populated from CommonDriverConfig fields
+- Single source of truth for daemon configuration extraction
+
+**Architecture Created:**
+
+1. **Driver Interface** (`pkg/drivers/driver_cli.go`)
+   - Defines contract for all drivers: `Name()`, `Version()`, `Short()`, `Long()`, `ErrorPrefix()`
+   - Provides `CLIConfig()`, `BuildContext()`, `ToolArgsApplier()`, `RunDriver()`, `ListCompatibleRuntimes()`
+   - Language-agnostic - works for any driver (C/C++, Go, Rust, etc.)
+
+2. **CommonDriverConfig & ExtractCommonConfig**
+   - `CommonDriverConfig` struct holds DaemonHost, DaemonPort, Standalone, LogLevel, ConfigPath, InitialRuntime
+   - `ExtractCommonConfig()` reads parsed flags and returns populated CommonDriverConfig
+   - Eliminates code duplication across all driver main.go files
+
+3. **ExecuteDriver Generic Function**
+   - Single function that handles all cobra CLI setup
+   - Parses flags using `StandardDriverFlags`
+   - Validates arguments via `ValidateAndParseArgs`
+   - Delegates to driver-specific `RunDriver` or `ListCompatibleRuntimes` methods
+   - Handles `--buildozer-list-runtimes` flag automatically
+
+4. **CppDriver Helper** (`pkg/drivers/cpp_driver.go`)
+   - Concrete implementation of Driver interface for C/C++ compilers
+   - Uses `interface{}` for BuildContext to avoid circular imports
+   - Factory function: `NewCppDriver(name, version, short, long, buildCtx, cliConfig, applierFactory, runFunc, listFunc)`
+   - Each C/C++ driver passes wrapped versions of their run/list functions
+
+5. **Refactored Driver main.go Files**
+   - `cmd/drivers/cpp/gcc/main.go` - 90 lines → 35 lines
+   - `cmd/drivers/cpp/gxx/main.go` - 90 lines → 37 lines
+   - `cmd/drivers/cpp/clang/main.go` - 80 lines → 35 lines
+   - `cmd/drivers/cpp/clangxx/main.go` - 80 lines → 37 lines
+   - All follow same pattern: parse flags → extract common cfg → build context → create Driver → call ExecuteDriver
+
+**Before/After Code Size:**
+```
+Original:      Each driver had ~80-100 lines of custom main.go = ~320-400 LOC total
+With Driver Interface: ~60 lines each = ~240 LOC
+With ExtractCommonConfig: ~35-37 lines each = ~140 LOC
+Reduction: ~70% code reduction in driver main files from original
+```
+
+**Key Improvements:**
+- **DRY Principle:** All cobra setup AND daemon config extraction centralized
+- **Consistency:** All drivers follow identical CLI and config extraction flow
+- **Extensibility:** New drivers (Go, Rust, Docker) just implement Driver interface and call ExecuteDriver
+- **Testability:** Driver interface makes unit testing individual drivers easier
+- **Maintainability:** Changes to CLI flags or daemon config extraction apply to all drivers automatically
+- **Simplicity:** Each driver's main.go is now focused on what's unique (compiler-specific logic)
+
+**Design Pattern (Updated):**
+```
+driver.main.go (driver-specific):
+1. StandardDriverFlags.Parse(nil)           ← parse buildozer flags
+2. commonCfg := ExtractCommonConfig()       ← extract daemon config (CENTRALIZED)
+3. Create driver-specific BuildContext       ← populate from commonCfg
+4. Create CLIConfig
+5. Define ToolArgsApplier callback
+6. Create Driver via NewCppDriver
+7. ExecuteDriver(driver)                    ← all cobra setup happens here
+
+Centralized CommonDriverConfig extraction prevents duplication and ensures consistency.
+```
+
+**Build Status:** ✅ All 5 binaries compiled successfully
+- `./bin/buildozer-client`
+- `./bin/gcc`
+- `./bin/g++`
+- `./bin/clang`
+- `./bin/clang++`
+
+**Next Steps (Future Drivers):**
+When adding Go, Rust, Docker drivers:
+1. Create language-specific package in `pkg/drivers/` (e.g., `pkg/drivers/go/`)
+2. Implement language-specific logic (compiler detection, flag parsing, job creation)
+3. Create main.go that:
+   - Parses flags
+   - Creates language-specific BuildContext
+   - Implements Driver interface or uses a helper similar to CppDriver
+   - Calls ExecuteDriver(driver)
+4. No need to repeat CLI boilerplate
+
+---
+
+## Internal Logger Package Removal (2026-03-24)
+
+### Complete Deprecation of internal/logger Package
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Remove deprecated `internal/logger` package and migrate all usages to standardized `pkg/logging.Logger` hierarchy.
+
+**Changes Made:**
+
+1. **Deleted Deprecated Package**
+   - Removed `internal/logger/logger.go` via `git rm`
+   - Package contained old `ComponentLogger` type that has been superseded
+
+2. **Fixed All Package Imports**
+   - `pkg/drivers/cpp/gcc/driver.go` → Removed import, changed to `Log()`
+   - `pkg/drivers/cpp/gxx/driver.go` → Removed import, changed to `Log()`
+   - `pkg/drivers/driver_orchestrator.go` → Removed import, changed to `Log().Child(toolName)`
+   - `pkg/runtimes/cpp/native/executor.go` → Changed type to `*logging.Logger`, uses `Log()`
+   - `pkg/runtimes/cpp/native/detector.go` → Previously fixed in earlier session
+
+3. **Verified Build Success**
+   - `make clean && make build` → ✅ All targets compiled successfully
+   - All binaries built: `buildozer-client`, `gcc`, `g++`, `clang`, `clang++`
+   - No remaining references to `internal/logger` in active code
+
+**Impact:**
+- All logging now unified under `pkg/logging.Logger` hierarchy
+- Hierarchical logger structure enables proper component-level filtering and tracing
+- Code is cleaner and no longer depends on deprecated internal packages
+- Each driver and component uses `Log().Child("component-name")` pattern
+
+---
+
+## Generic Driver Framework Refactoring (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:**
+Extract generic driver orchestration logic from C/C++-specific code to enable reuse across all driver types (Go, Rust, Docker, etc.). Move algorithm steps that aren't language-specific to a shared framework in `pkg/drivers/`.
+
+**Problem Statement:**
+`pkg/drivers/cpp/gcc_common/driver_base.go` contained generic driver algorithm steps mixed with C/C++-specific logic:
+- `RunCppDriver()` - Generic orchestration (parse → resolve → submit → watch) with C/C++ callbacks
+- `ListCompatibleRuntimes*()` - Generic runtime listing with language-specific validation
+- Version strings, error messages - C/C++ specific
+
+Additionally, the initial job creation pattern used a C/C++-specific `JobSubmissionContext` type (with fields like `SourceFiles`, `CompilerFlags`, `IncludeDirs`, `Defines`, `IsLinkJob`) that wouldn't generalize to other languages.
+
+This prevented reuse for future driver types (Go, Rust, Docker, etc.) and violated separation of concerns.
+
+**Solution Implemented:**
+
+**1. New Generic Framework (pkg/drivers/driver_orchestrator.go)**
+
+Created three new public types and functions:
+
+- `DriverConfig` - Generic configuration struct (daemon address, log level, etc.)
+  - Replaces language-specific BuildContext for framework use
+
+- `DriverTool` - Driver metadata and callbacks:
+  - `Name`, `VersionString`, `ErrorPrefix` - Driver identity
+  - `ParseCommandLine()` - Driver-specific argument parsing (returns `interface{}`)
+  - **`CreateJob(ctx, parsed, runtime, workDir) → (*v1.Job, error)`** - Creates proto Job directly
+    - **Key improvement:** Drivers create the proto Job directly instead of using intermediate JobSubmissionContext
+    - Each language populates its own job spec type (CppCompile, GoCompile, RustCompile, etc.)
+    - Generic to all driver types since Job proto is generic
+  - `ApplierFactory()` - Factory for runtime-specific callbacks
+  - `RuntimeValidator()` - Optional validation function
+
+- `RunDriver(ctx, tool, args, config)` - Generic orchestration engine:
+  - Starts in-process daemon if standalone mode
+  - Parses command-line arguments (via callback)
+  - Sets log level
+  - Handles --version flag
+  - Resolves runtime
+  - Creates job directly via callback (no intermediary types)
+  - Submits job
+  - Watches progress
+  - Returns exit code
+  
+- `ListCompatibleRuntimes(ctx, toolName, validator, config)` - Generic runtime listing:
+  - Queries daemon
+  - Filters using custom validator (optional)
+  - Displays results
+
+**2. Refactored C/C++-Specific Code (pkg/drivers/cpp/gcc_common/driver_base.go)**
+
+- `RunCppDriver()` now creates `DriverTool` and delegates to `drivers.RunDriver()`
+  - `CreateJob` callback internally creates `JobSubmissionContext` (intermediate C/C++-specific type)
+  - Calls `jsc.CreateJob(ctx)` to get the proto Job
+  - This keeps C/C++ details isolated while conforming to the generic interface
+- `ListCompatibleRuntimesShared()` creates `DriverConfig` and calls `drivers.ListCompatibleRuntimes()`
+- `ListCompatibleRuntimesWithValidator()` creates `DriverConfig` and calls `drivers.ListCompatibleRuntimes()`
+- All C/C++-specific logic (LanguageType, validation) remains in gcc_common package
+- Reduced from ~400 lines of duplicated orchestration to ~100 lines of thin wrappers
+
+**3. Job Creation Pattern Evolution**
+
+Initial approach:
+```go
+tool.CreateJobSubmissionContext() → JobSubmissionContext
+jsc.CreateJob() → v1.Job
+```
+
+Final approach:
+```go
+tool.CreateJob() → v1.Job  (directly)
+```
+
+**Benefits of direct Job creation:**
+- No intermediary types that don't generalize
+- Each driver type creates appropriate job spec (CppCompile/CppLink, GoCompile, RustCompile, DockerRun, etc.)
+- Clearer separation: generic framework doesn't know about JobSubmissionContext
+- Easier for future drivers: just implement CreateJob callback
+
+**Files Created:**
+- `pkg/drivers/driver_orchestrator.go` (~280 lines) - Generic framework
+
+**Files Modified:**
+- `pkg/drivers/cpp/gcc_common/driver_base.go` - Refactored to use generic framework with direct job creation
+
+**Build Status:** ✅ All test files compiled, gcc and g++ binaries built successfully
+
+---
+│ - Job submission context factory                            │
+│ - ToolArgsApplier factory                                   │
+│ - Runtime validator (optional)                              │
+└──────────────────────┬──────────────────────────────────────┐
+                       │ Provides as DriverTool struct
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ pkg/drivers/driver_orchestrator.go                          │
+│ Generic Driver Framework (language/compiler agnostic)       │
+│                                                             │
+│ RunDriver():                                                │
+│  1. Start daemon if standalone                             │
+│  2. Parse args (via callback)                              │
+│  3. Resolve runtime                                        │
+│  4. Create job (via callback)                              │
+│  5. Submit job                                             │
+│  6. Watch progress                                         │
+│                                                             │
+│ ListCompatibleRuntimes():                                  │
+│  1. Query daemon                                           │
+│  2. Filter with custom validator                           │
+│  3. Display results                                        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ Uses (runtime resolver, job submission, etc.)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Shared Driver Infrastructure                                │
+│ - RuntimeResolver                                           │
+│ - JobSubmissionContext                                      │
+│ - SubmitJob                                                 │
+│ - WatchAndStreamJobProgress                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+
+1. **Reusability:** Go, Rust, Docker drivers can reuse same orchestration logic
+2. **Maintainability:** Bug fixes in orchestration benefit all drivers
+3. **Testability:** Generic framework can be tested independently
+4. **Extensibility:** New drivers only implement callbacks, not orchestration
+5. **Type Safety:** Go compiler ensures drivers implement required interfaces
+
+**Future Work:**
+
+When adding new driver types:
+1. Create `pkg/drivers/{lang}/driver.go` with language-specific implementation
+2. Implement `ParseCommandLine()` for language-specific flags
+3. Implement `CreateJobSubmissionContext()` to create appropriate job type
+4. Create `ApplierFactory()` for runtime validation
+5. Call `drivers.RunDriver()` with the `DriverTool` definition
+6. ~50 lines of boilerplate to get full driver implementation
+
+**Migration Notes:**
+
+- C/C++ drivers (gcc, g++, clang, clang++/gxx) unchanged externally
+- Internal orchestration moved to generic framework
+- No changes to CLI interface or job execution logic
+- BuildContext type remains in gcc_common for backward compatibility
+
+**Build Status:** ✅ All test files compiled, gcc and g++ binaries built successfully
+
+---
+
+## Clang/Clang++ Runtime Isolation (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:**
+Ensure clang/clang++ drivers only accept clang runtimes (not gcc/g++ runtimes) to maintain compiler isolation and prevent incompatibilities.
+
+**Problem:**
+Previously, clang and clang++ drivers would accept any C/cpp language runtime without checking the compiler type. This meant a user could potentially submit a job to a clang driver but have it execute on a gcc runtime, causing mismatches.
+
+**Solution Implemented:**
+
+**1. New Runtime Validators (pkg/drivers/cpp/gcc_common/runtime_validation.go)**
+- `ValidateRuntimeForClang()` - Validates that runtime uses `CPP_COMPILER_CLANG`, not GCC
+- `ValidateRuntimeForClangxx()` - Same validation for C++ language
+- Both check compiler type from proto: `runtime.GetCpp().GetCompiler() == CPP_COMPILER_CLANG`
+
+**2. Custom Runtime Listing (pkg/drivers/cpp/gcc_common/driver_base.go)**
+- `ListCompatibleRuntimesWithValidator()` - New function that accepts custom validator
+- Allows clang/clang++ to list ONLY clang runtimes via `--buildozer-list-runtimes`
+- Example output: only shows `native-c-clang-14-glibc-x86_64`, not gcc runtimes
+
+**3. Runtime Validation During Job Execution (pkg/drivers/cpp/clang/driver.go, clangxx/driver.go)**
+- Added `isClangRuntime()` check in ToolArgsApplier callbacks
+- Validates resolved runtime ID is clang before job submission
+- Returns error if user tries to use gcc runtime with clang driver:
+  ```
+  clang: error: runtime 'native-c-gcc-10.2.1-glibc-x86_64' is not a clang runtime; 
+  clang driver requires a clang compiler
+  ```
+
+**4. Runtime ID Pattern Matching**
+- Clang runtime IDs contain "clang" in their name:
+  - `native-c-clang-14-glibc-x86_64` (native C)
+  - `native-cpp-clang-14-libcxx-x86_64` (native C++)
+  - `clang-c-14-glibc` (simplified format)
+- Function validates both native-style and simplified naming schemes
+
+**Architecture:**
+
+- **Listing phase:** Clang drivers call `ListCompatibleRuntimesWithValidator(ValidateRuntimeForClang)`
+- **Execution phase:** ToolArgsApplier validates resolved runtime before job creation
+- **Error handling:** Clear error messages when runtime type mismatch detected
+
+**Compatibility:**
+
+- GCC/G++ drivers unaffected - continue using language-based validation only
+- Proto already supports `CPP_COMPILER_CLANG` enum value
+- Runtime detection (pkg/runtimes/cpp/native/detector.go) already sets compiler type based on binary name
+- All existing code paths preserved, new validation is additive
+
+**Testing:**
+
+✅ Build successful with all four compiler drivers
+✅ Clang/clang++ drivers properly reject gcc runtimes
+✅ List-runtimes filtering works correctly
+✅ Runtime validation enforced during execution
+
+---
+
+## LLVM/Clang Driver Support Added (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:**
+Extend Buildozer to support Clang and Clang++ compilers alongside existing GCC/G++ support. Leverage the existing gcc_common driver architecture to minimize code duplication and ensure feature parity.
+
+**Approach:**
+1. Generated comprehensive COMPILER_REFERENCE.md documenting CLI compatibility between gcc, g++, clang, and clang++
+2. Found that Clang accepts all GCC flags used by Buildozer drivers - no special handling needed
+3. Extended type system (CompilerType enum, CLIConfig) to recognize Clang and ClangCxx
+4. Updated CLI validation to support clang-specific flags and enable stdlib flag for clang++
+5. Created clang and clangxx driver packages following exact pattern of gcc/gxx
+6. Both drivers delegate to shared RunCppDriver function with LanguageC/LanguageCxx
+
+**Files Created:**
+
+#### Documentation
+- `pkg/drivers/cpp/COMPILER_REFERENCE.md` (310 lines) - Comprehensive analysis of compiler CLI interfaces showing Clang is fully GCC-compatible
+
+#### Clang (C) Driver
+- `cmd/drivers/cpp/clang/main.go` - CLI entry point
+- `pkg/drivers/cpp/clang/driver.go` - Implementation delegating to gcc_common.RunCppDriver(LanguageC, ...)
+- `pkg/drivers/cpp/clang/logger.go` - Component logger for "clang"
+
+#### Clang++ (C++) Driver  
+- `cmd/drivers/cpp/clangxx/main.go` - CLI entry point
+- `pkg/drivers/cpp/clangxx/driver.go` - Implementation delegating to gcc_common.RunCppDriver(LanguageCxx, ...)
+- `pkg/drivers/cpp/clangxx/logger.go` - Component logger for "clang++"
+
+**Files Modified:**
+
+1. `pkg/drivers/cli.go`
+   - Extended `CompilerType` enum: Added `Clang` and `ClangCxx` constants
+   - Updated `IsValidCompilerFlag()` to recognize clang/clang++ flags and enable stdlib support for clang++
+   - Updated `ValidateAndParseArgs()` to accept new compiler types
+
+2. `Makefile`
+   - Added clang and clang++ build targets to compile both new drivers
+
+**Key Findings:**
+
+From COMPILER_REFERENCE.md analysis:
+- Clang uses GCC-compatible command-line interface
+- All flags used by Buildozer (standard compilation, -march, -std, etc.) work identically
+- No special compilation flags or feature detection needed
+- Clang and GCC produce compatible object files for same architecture
+- Clang++ supports -stdlib flag just like G++
+
+**Architecture:**
+
+Following the existing pattern established for gcc/gxx:
+- `BuildContext` is alias: `type BuildContext = gcc_common.BuildContext`
+- `RunClang()` creates ToolArgsApplier factory then calls: `gcc_common.RunCppDriver(ctx, gcc_common.LanguageC, args, buildCtx, applierFactory)`
+- `RunClangxx()` creates ToolArgsApplier factory then calls: `gcc_common.RunCppDriver(ctx, gcc_common.LanguageCxx, args, buildCtx, applierFactory)`
+- Both ListCompatibleRuntimes() functions delegate to `gcc_common.ListCompatibleRuntimesShared()`
+- Zero code duplication - all driver-specific logic in gcc_common is reused
+
+**Build Verification:**
+
+✅ Build successful:
+- All four compilers compiled: gcc, g++, clang, clang++
+- Binary sizes: ~21MB each for drivers, ~22MB for buildozer-client
+- Drivers respond correctly to --help and --version flags
+- Both clang and clang++ main entry points functional
+
+**Runtime Integration:**
+
+- Clang/clang++ automatically detected by pkg/runtimes/cpp/native/detector.go
+- Existing runtime discovery finds clang and clang++ via -v output parsing
+- Full toolchain variant matrix support (versions, architectures, C runtime, C++ stdlib)
+- No additional runtime code needed - detector already handles multiple compiler names
+
+**Design Principles Followed:**
+
+1. **Code Deduplication:** Clang drivers use exact same pattern as GCC - only ~50 lines each for driver.go
+2. **Separation of Concerns:** CLI entry point (cmd/) vs driver logic (pkg/)
+3. **Component Logging:** Consistent "clang" and "clang++" component names in logs
+4. **Feature Parity:** Both clang and clang++ support standalone mode, runtime listing, all driver flags
+5. **Architecture Extensibility:** Pattern ready for future compilers (gcc-arm, clang-15, etc.)
+
+**Next Steps (Future):**
+
+- Cross-compiler support (arm-linux-gcc, aarch64-linux-g++, etc.)
+- Additional LLVM-based compilers (flang for Fortran)
+- Ensure network tests include all four compiler drivers
+
+---
+
 ## Driver Code Consolidation & Runtime Refactoring (2026-03-24)
 
 **Status:** ✅ PHASE 1 COMPLETE (Driver consolidation) | 🚀 PHASE 2 STARTED (Runtime helpers)

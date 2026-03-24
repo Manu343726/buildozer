@@ -11,6 +11,8 @@ type CompilerType int
 const (
 	GCC CompilerType = iota
 	GXX
+	Clang
+	ClangCxx
 )
 
 // CLIConfig holds configuration for compiler CLI drivers
@@ -59,8 +61,8 @@ func ValidateAndParseArgs(args []string, cfg *CLIConfig) (*ParsedCLIArgs, error)
 			}
 		}
 
-		// Extract stdlib from -stdlib flag (G++ only)
-		if cfg.SupportsStdlib && (arg == "-stdlib" || strings.HasPrefix(arg, "-stdlib=")) && i+1 < len(args) {
+		// Extract stdlib from -stdlib flag (G++/Clang++ only)
+		if (cfg.SupportsStdlib || cfg.Type == ClangCxx) && (arg == "-stdlib" || strings.HasPrefix(arg, "-stdlib=")) && i+1 < len(args) {
 			if arg == "-stdlib" {
 				parsed.StdLib = args[i+1]
 				i++
@@ -86,8 +88,8 @@ func IsValidCompilerFlag(flag string, ct CompilerType) bool {
 		return true
 	}
 
-	// G++ specific flags
-	if ct == GXX && (flag == "-stdlib") {
+	// G++/Clang++ specific flags
+	if (ct == GXX || ct == ClangCxx) && (flag == "-stdlib") {
 		return true
 	}
 
