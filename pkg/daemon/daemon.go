@@ -188,6 +188,7 @@ type Daemon struct {
 	httpServer           *httpServer
 	loggingConfigManager logging.ConfigManager
 	runtimeManager       *runtimes.Manager
+	jobManager           *JobManager
 }
 
 // NewDaemon creates a new Daemon with all standard services configured.
@@ -242,8 +243,13 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	httpSrv.registerHandler(runtimePath, runtimeHandler)
 	Log().Debug("Runtime service registered", "path", runtimePath)
 
+	// Create and register job service
+	jobManager := NewJobManager("local-daemon", runtimeMgr)
+	jobPath, jobHandler := RegisterJobService(jobManager)
+	httpSrv.registerHandler(jobPath, jobHandler)
+	Log().Debug("Job service registered", "path", jobPath)
+
 	// TODO: Register other services
-	// - Job execution service
 	// - Peer discovery service
 	// - Cache service
 	// - Queue/Scheduler service
@@ -253,6 +259,7 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 		httpServer:           httpSrv,
 		loggingConfigManager: loggingConfigMgr,
 		runtimeManager:       runtimeMgr,
+		jobManager:           jobManager,
 	}, nil
 }
 

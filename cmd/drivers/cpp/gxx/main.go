@@ -73,6 +73,7 @@ func runGxx(cmd *cobra.Command, args []string) error {
 	// Get daemon address from flags (already parsed by StandardDriverFlags)
 	daemonHost := "localhost"
 	daemonPort := 6789
+	standalone := *drivers.StandalonePtr
 	
 	if drivers.DaemonHostPtr != nil && *drivers.DaemonHostPtr != nil {
 		daemonHost = **drivers.DaemonHostPtr
@@ -85,7 +86,7 @@ func runGxx(cmd *cobra.Command, args []string) error {
 		Config:         nil,
 		DaemonHost:     daemonHost,
 		DaemonPort:     daemonPort,
-		Standalone:     false,
+		Standalone:     standalone,
 		StartDir:       "",
 		LogLevel:       *drivers.LogLevelPtr,
 		ConfigPath:     *drivers.ConfigPathPtr,

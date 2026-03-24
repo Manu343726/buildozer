@@ -389,18 +389,20 @@ func (fs *FlagSet) Flags() map[string]*FlagInfo {
 }
 
 // Exposes standard driver flags:
-//   --buildozer-log-level (default: info)
+//   --buildozer-log-level (default: warn)
 //   --buildozer-config (default: empty)
 //   --buildozer-runtime (default: empty, use config value)
 //   --buildozer-list-runtimes (default: false)
 //   --buildozer-daemon-host (default: localhost)
 //   --buildozer-daemon-port (default: 6789)
+//   --buildozer-standalone (default: false, runs in-process daemon)
 var (
 	StandardDriverFlags = NewFlagSet()
 	LogLevelPtr         = StandardDriverFlags.String("log-level", "warn", "Log level: debug, info, warn, error")
 	ConfigPathPtr       = StandardDriverFlags.String("config", "", "Explicit path to .buildozer config file")
 	RuntimePtr          = StandardDriverFlags.String("runtime", "", "Initial runtime ID (overrides config)")
 	ListRuntimesPtr     = StandardDriverFlags.Bool("list-runtimes", false, "List available runtimes compatible with this driver and exit")
+	StandalonePtr       = StandardDriverFlags.Bool("standalone", false, "Run in standalone mode (in-process daemon)")
 	DaemonHostPtr       = StandardDriverFlags.StringOpt("daemon-host", "Buildozer daemon host (default: localhost)")
 	DaemonPortPtr       = StandardDriverFlags.IntOpt("daemon-port", "Buildozer daemon port (default: 6789)")
 )

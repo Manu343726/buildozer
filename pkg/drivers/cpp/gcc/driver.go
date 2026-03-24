@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
+	"github.com/Manu343726/buildozer/pkg/daemon"
 	"github.com/Manu343726/buildozer/pkg/drivers"
 	gcc_common "github.com/Manu343726/buildozer/pkg/drivers/cpp/gcc_common"
 	"github.com/Manu343726/buildozer/pkg/logging"
@@ -17,7 +19,47 @@ type BuildContext = gcc_common.BuildContext
 // RunGcc executes the GCC driver with the given arguments and build context.
 // Returns exit code (0 for success, non-zero for failure).
 func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
-	Log().InfoContext(ctx, "GCC driver started", "numArgs", len(args))
+	Log().InfoContext(ctx, "GCC driver started", "numArgs", len(args), "standalone", buildCtx.Standalone)
+
+	// If standalone mode, start an in-process daemon
+	var d *daemon.Daemon
+	if buildCtx.Standalone {
+		// Create default daemon config
+		daemonCfg := daemon.DefaultConfig()
+		
+		// Use the daemon host/port from buildCtx if they differ from defaults
+		if buildCtx.DaemonHost != "localhost" {
+			daemonCfg.Host = buildCtx.DaemonHost
+		}
+		if buildCtx.DaemonPort != 6789 {
+			daemonCfg.Port = buildCtx.DaemonPort
+		}
+
+		var err error
+		d, err = daemon.NewDaemon(daemonCfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gcc: error: failed to create in-process daemon: %v\n", err)
+			return 1
+		}
+
+		// Start daemon in background
+		if err := d.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "gcc: error: failed to start in-process daemon: %v\n", err)
+			return 1
+		}
+
+		Log().DebugContext(ctx, "Started in-process daemon", "host", daemonCfg.Host, "port", daemonCfg.Port)
+
+		// Give daemon time to register handlers
+		time.Sleep(100 * time.Millisecond)
+
+		// Defer daemon cleanup
+		defer func() {
+			if err := d.Stop(context.Background()); err != nil {
+				Log().ErrorContext(ctx, "Error stopping in-process daemon", "error", err)
+			}
+		}()
+	}
 
 	parsed := gcc_common.ParseCommandLine(args)
 	Log().DebugContext(ctx, "Parsed command line",
@@ -109,11 +151,58 @@ func RunGcc(ctx context.Context, args []string, buildCtx *BuildContext) int {
 		Log().InfoContext(ctx, "Runtime resolved successfully",
 			"runtimeID", resolutionResult.FoundRuntime.GetId(),
 			"isNative", resolutionResult.IsNative)
+
+		// Create job submission context
+		jsc := &drivers.JobSubmissionContext{
+			Runtime:       resolutionResult.FoundRuntime,
+			SourceFiles:   parsed.SourceFiles,
+			CompilerFlags: parsed.CompilerFlags,
+			IncludeDirs:   parsed.IncludeDirs,
+			Defines:       parsed.Defines,
+			OutputFile:    parsed.OutputFile,
+			IsLinkJob:     false, // GCC compile job
+			Timeout:       5 * time.Minute,
+			WorkDir:       workDir,
+		}
+
+		// Create and submit job
+		job, err := jsc.CreateJob(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gcc: error: failed to create job: %v\n", err)
+			return 1
+		}
+
+		submitResp, err := drivers.SubmitJob(ctx, buildCtx.DaemonHost, buildCtx.DaemonPort, job)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gcc: error: failed to submit job: %v\n", err)
+			return 1
+		}
+
+		if !submitResp.Accepted {
+			fmt.Fprintf(os.Stderr, "gcc: error: job rejected by daemon: %s\n", submitResp.ErrorMessage)
+			return 1
+		}
+
+		Log().InfoContext(ctx, "Job submitted, watching for progress", "jobID", job.Id)
+
+		// Watch job progress and stream output to stdout
+		result, exitCode, err := drivers.WatchAndStreamJobProgress(ctx, buildCtx.DaemonHost, buildCtx.DaemonPort, job.Id)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gcc: error: failed to watch job progress: %v\n", err)
+			return 1
+		}
+
+		if result != nil {
+			Log().DebugContext(ctx, "Job completed with result", "jobID", job.Id, "exitCode", result.ExitCode)
+			return int(result.ExitCode)
+		}
+
+		return exitCode
 	}
 
-	// TODO: Execute the build job using the resolved runtime
-	Log().InfoContext(ctx, "Driver completed successfully (TODO: actual job execution not yet implemented)")
-	return 0
+	// No runtime found and no error was reported - unexpected state
+	fmt.Fprintf(os.Stderr, "gcc: error: unable to resolve compiler runtime\n")
+	return 1
 }
 
 // ListCompatibleRuntimes queries the daemon for available runtimes and displays
