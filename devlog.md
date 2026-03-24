@@ -6,6 +6,160 @@
 
 ---
 
+## Driver Code Consolidation & Runtime Refactoring (2026-03-24)
+
+**Status:** ✅ PHASE 1 COMPLETE (Driver consolidation) | 🚀 PHASE 2 STARTED (Runtime helpers)
+
+**Objective:**
+Clean up driver and runtime code following architectural guidelines:
+- Drivers package contains only common features (no specific implementation)
+- Driver-specific code in driver-specific packages  
+- Similar drivers (gcc/g++) share maximum code with minimal duplication
+- Runtime packages follow same pattern - common in parent, specific in subpackages
+- C and C++ runtimes share code since they're almost identical
+
+---
+
+### Phase 1: GCC/G++ Driver Consolidation ✅ COMPLETED
+
+**Problem Identified:**
+- GCC driver: ~245 lines of code
+- G++ driver: ~270 lines of code  
+- **90%+ duplication** between them
+- **Critical bug:** G++ driver missing standalone mode support that GCC had
+
+**Solution Implemented:**
+
+#### Created `pkg/drivers/cpp/gcc_common/driver_base.go`
+New shared driver execution framework:
+
+**LanguageType Enum** - Abstracts C vs C++ differences:
+```go
+type LanguageType int // LanguageC or LanguageCxx
+
+// Methods that encapsulate language-specific behavior:
+- String() → "C" or "C++"
+- ToolName() → "gcc" or "g++"  
+- VersionString() → version output for --version flag
+- ErrorPrefix() → "gcc: error:" or "g++: error:"
+- GetValidator() → ValidateRuntimeForC or ValidateRuntimeForCxx
+```
+
+**RunCppDriver Function** - Shared execution path:
+```go
+func RunCppDriver(ctx context.Context, langType LanguageType, args []string,
+    buildCtx *BuildContext, applierFactory func(...) drivers.ToolArgsApplier) int
+```
+
+Handles all common driver logic:
+- Standalone mode daemon startup (FIXES missing G++ support)
+- Command-line argument parsing
+- Log level configuration
+- Runtime resolution
+- Job submission and progress watching
+- Error/warning handling
+- Exit code propagation
+
+**ListCompatibleRuntimesShared Function** - Shared listing logic:
+- Language-specific runtime validation
+- Daemon communication for runtime enumeration
+- Pretty-printing compatible runtimes
+
+#### Refactored GCC/G++ Drivers
+
+**GCC Driver** `pkg/drivers/cpp/gcc/driver.go`:
+- **Before:** 245 lines + logger.go
+- **After:** ~45 lines
+- Now creates ToolArgsApplier factory with GCC-specific flag handling
+- Delegates all execution to `RunCppDriver(LanguageC, ...)`
+
+**G++ Driver** `pkg/drivers/cpp/gxx/driver.go`:
+- **Before:** 270 lines + logger.go
+- **After:** ~45 lines  
+- Creates ToolArgsApplier factory with G++-specific flag handling
+- Delegates all execution to `RunCppDriver(LanguageCxx, ...)`
+
+**Benefits:**
+
+✅ **90% Code Reduction** - Eliminated ~400 lines of duplication
+✅ **Feature Parity** - G++ now has standalone mode support (was missing)
+✅ **Single Source of Truth** - Driver logic in one place
+✅ **Easier to Maintain** - Bug fixes apply to both drivers automatically
+✅ **Extensible** - Adding new drivers (clang, gcc-arm, etc.) is trivial
+
+**Implementation Principles Followed:**
+
+✅ Driver-specific algorithms in driver packages (gcc/, gxx/)
+✅ Common driver infrastructure in common packages (gcc_common/)
+✅ Language-specific callbacks passed as parameters (factory pattern)
+✅ No C/C++ specific code in generic driver packages
+✅ CLI creates drivers that delegate to shared logic
+
+---
+
+### Phase 2: Runtime Variant Detection Helpers 🚀 IN PROGRESS
+
+**Problem Identified:**
+- Runtime detection code has ~60% duplication between C and C++ detection
+- Functions like `testCRuntime`, `testCppStdlib`, `testArchitecture` follow identical patterns
+- Variant collection loops (load test program → test each → collect → default) repeated
+- Makes maintenance harder and prevents code reuse
+
+**Solution Created:**
+
+#### New `pkg/runtimes/cpp/native/variant_detector.go`
+
+Provides generic helpers for variant detection patterns:
+
+**testCompilerVariant** - Generic variant testing:
+```go
+func testCompilerVariant(ctx context.Context, compilerPath, testProgram, 
+    compileFlag string, language Language) bool
+```
+- Eliminates duplication in testCRuntime, testCppStdlib, testArchitecture
+- Handles language-specific compilation flags
+- stdin-based test program injection
+
+**testCompilerVariantWithLink** - Tests with linking:
+```go
+func testCompilerVariantWithLink(ctx context.Context, compilerPath, 
+    testProgram, compileFlag, linkFlag string, language Language, libs ...string) bool
+```
+- For C runtime detection (needs libc, musl linking)
+- Linker flags and library linking support
+
+**CollectVariants** - Generic variant collection:
+```go
+func CollectVariants[V comparable](candidates []V, 
+    tester func(v V) bool, defaultVariant V) []V
+```
+- Replaces duplicated loops in detectCRuntimeVariants, detectCppStdlibVariantsForArch
+- Tests each candidate variant
+- Falls back to default if none available
+- Type-generic using Go 1.18+ generics
+
+**VariantCombinator** - Matrix generation helper:
+```go
+type VariantCombinator struct { ... }
+- AddDimension(variants...interface{}) *VariantCombinator
+- GenerateCombinations() [][]interface{}
+```
+- Builds all combinations of detector dimensions
+- Example: C runtimes × C++ stdlibs × architectures
+- Makes it easy to generate full variant matrices without nested loops
+
+**Status & Next Steps:**
+
+✅ Helpers created and compiling
+🔄 Ready to apply to detector.go
+⏭️ Can refactor detectCRuntimeVariants to use CollectVariants
+⏭️ Can refactor detectCppStdlibVariantsForArch similarly
+⏭️ Can replace nested architecture testing with helpers
+
+**Build Status:** ✅ All tests pass, all binaries compile successfully
+
+---
+
 ## Standalone Driver Flag Implementation (2026-03-24)
 
 **Status:** ✅ COMPLETED & VERIFIED
