@@ -10,48 +10,13 @@ option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/prot
 // DiscoveryService handles peer discovery and capability advertisement
 // This is the P2P service used by clients to discover each other and exchange capabilities
 service DiscoveryService {
-  // AnnounceSelf registers a peer on the network
-  // Used by clients to periodically announce their presence and capabilities (for mDNS/peer discovery)
-  rpc AnnounceSelf(AnnounceSelfRequest) returns (AnnounceSelfResponse);
+  // ListPeers returns all known peers discovered via mDNS
+  // Used by CLI to display network topology
+  rpc ListPeers(ListPeersRequest) returns (ListPeersResponse);
 
-  // QueryCapabilities retrieves the capabilities and status of a specific peer
-  // Used by scheduling clients to determine if a peer can execute a particular job
-  rpc QueryCapabilities(QueryCapabilitiesRequest) returns (QueryCapabilitiesResponse);
-}
-
-// AnnounceSelfRequest announces peer presence and capabilities to the network
-message AnnounceSelfRequest {
-  // Unique peer identifier
-  string peer_id = 1;
-
-  // Peer hostname
-  string hostname = 2;
-
-  // gRPC API endpoint of this peer
-  buildozer.proto.v1.ApiUri grpc_uri = 3;
-
-  // Optional: REST API endpoint of this peer
-  buildozer.proto.v1.ApiUri rest_api_uri = 4;
-
-  // Current peer capabilities
-  PeerCapabilities capabilities = 5;
-
-  // Peer metadata (protocol version, buildozer version, etc.)
-  PeerMetadata metadata = 6;
-  // Metadata about the requester making this request
-  RequesterInfo requester_info = 7;
-}
-
-// AnnounceSelfResponse confirms peer announcement
-message AnnounceSelfResponse {
-  // Was announcement successful?
-  bool success = 1;
-
-  // Error message if unsuccessful
-  string error_message = 2;
-
-  // List of other known peers (bootstrap info)
-  repeated PeerInfo other_peers = 3;
+  // TriggerDiscovery triggers an immediate peer discovery cycle
+  // Used by CLI to force network discovery
+  rpc TriggerDiscovery(TriggerDiscoveryRequest) returns (TriggerDiscoveryResponse);
 }
 
 // PeerCapabilities describes what a peer can do
@@ -112,33 +77,44 @@ message PeerInfo {
 
   // Is this peer currently online/responsive?
   bool is_online = 6;
+
+  // Available runtimes on this peer
+  repeated buildozer.proto.v1.Runtime available_runtimes = 7;
 }
 
-// QueryCapabilitiesRequest queries a peer's capabilities
-message QueryCapabilitiesRequest {
-  // Peer to query (by peer ID or URL)
-  string peer_id = 1;
-
-  // Include detailed statistics?
-  bool include_stats = 2;
+// ListPeersRequest requests the list of known peers
+message ListPeersRequest {
   // Metadata about the requester making this request
-  RequesterInfo requester_info = 3;
+  RequesterInfo requester_info = 1;
 }
 
-// QueryCapabilitiesResponse returns peer capabilities and status
-message QueryCapabilitiesResponse {
-  // Peer ID
-  string peer_id = 1;
+// ListPeersResponse returns all discovered peers
+message ListPeersResponse {
+  // List of discovered peers
+  repeated PeerInfo peers = 1;
 
-  // Current capabilities
-  PeerCapabilities capabilities = 2;
+  // Number of peers in the list
+  int32 count = 2;
+}
 
-  // Peer metadata
-  PeerMetadata metadata = 3;
+// TriggerDiscoveryRequest triggers an immediate discovery cycle
+message TriggerDiscoveryRequest {
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 1;
+}
 
-  // Time this capability info was captured
-  buildozer.proto.v1.TimeStamp timestamp = 4;
+// TriggerDiscoveryResponse confirms discovery was triggered
+message TriggerDiscoveryResponse {
+  // Status of the discovery trigger
+  enum Status {
+    SUCCESS = 0;
+    ALREADY_RUNNING = 1;
+    FAILED = 2;
+  }
 
-  // Is the peer responsive?
-  bool is_responsive = 5;
+  // Status message
+  string message = 1;
+
+  // Status code
+  Status status = 2;
 }

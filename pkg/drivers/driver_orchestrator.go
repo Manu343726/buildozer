@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/pkg/daemon"
+	"github.com/Manu343726/buildozer/pkg/driver"
 	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
@@ -31,30 +31,6 @@ type DriverConfig struct {
 	InitialRuntime string
 }
 
-// DriverTool contains driver-specific callbacks and metadata.
-// Each driver (gcc, g++, clang, go, rust, etc.) provides these to customize behavior.
-type DriverTool struct {
-	// Name: tool name for logging and identification (e.g., "gcc", "clang", "rustc")
-	Name string
-	// VersionString: version string displayed with --version flag
-	VersionString string
-	// ErrorPrefix: prefix for error messages (e.g., "gcc: error:")
-	ErrorPrefix string
-	// ParseCommandLine: parses driver-specific command-line arguments
-	// Returns parsed arguments (type varies by driver)
-	ParseCommandLine func(args []string) interface{}
-	// CreateJob: creates a Job proto from parsed args and resolved runtime
-	// This is driver-specific: C/C++ drivers populate CppCompile/CppLink specs,
-	// Go drivers populate GoCompile/GoLink specs, etc.
-	// The Job proto itself is generic (defined in the protocol buffer).
-	CreateJob func(ctx context.Context, parsed interface{}, runtime *v1.Runtime, workDir string) (*v1.Job, error)
-	// ApplierFactory: creates the ToolArgsApplier callback for runtime-specific handling
-	ApplierFactory func(context.Context) ToolArgsApplier
-	// RuntimeValidator: validates if a runtime is compatible with this tool
-	// This is optional - if nil, all runtimes are accepted
-	RuntimeValidator func(runtime *v1.Runtime) (bool, string)
-}
-
 // RunDriver is the generic driver orchestration function.
 // It handles the common algorithm steps for any driver type:
 // - Starting standalone daemon if needed
@@ -68,17 +44,17 @@ type DriverTool struct {
 //
 // Parameters:
 //   - ctx: context for cancellation
-//   - tool: driver-specific callbacks and metadata
+//   - d: the driver implementation
 //   - args: command-line arguments passed to the driver
 //   - config: driver configuration (daemon address, log level, etc.)
 //
 // Returns the exit code (0 for success, non-zero for failure)
-func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *DriverConfig) int {
-	log := Log().Child(tool.Name)
-	log.Info(fmt.Sprintf("%s driver started", tool.Name), "numArgs", len(args), "standalone", config.Standalone)
+func RunDriver(ctx context.Context, d driver.Driver, args []string, config *DriverConfig) int {
+	log := Log().Child(d.Name())
+	log.Info(fmt.Sprintf("%s driver started", d.Name()), "numArgs", len(args), "standalone", config.Standalone)
 
 	// If standalone mode, start an in-process daemon
-	var d *daemon.Daemon
+	var dm *daemon.Daemon
 	if config.Standalone {
 		log.Debug("Standalone mode enabled, starting in-process daemon")
 
@@ -94,15 +70,15 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 		}
 
 		var err error
-		d, err = daemon.NewDaemon(daemonCfg)
+		dm, err = daemon.NewDaemon(daemonCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to create in-process daemon: %v\n", tool.ErrorPrefix, err)
+			fmt.Fprintf(os.Stderr, "%s failed to create in-process daemon: %v\n", d.ErrorPrefix(), err)
 			return 1
 		}
 
 		// Start daemon in background
-		if err := d.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to start in-process daemon: %v\n", tool.ErrorPrefix, err)
+		if err := dm.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "%s failed to start in-process daemon: %v\n", d.ErrorPrefix(), err)
 			return 1
 		}
 
@@ -113,14 +89,14 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 
 		// Defer daemon cleanup
 		defer func() {
-			if err := d.Stop(context.Background()); err != nil {
+			if err := dm.Stop(context.Background()); err != nil {
 				log.Error("Error stopping in-process daemon", "error", err)
 			}
 		}()
 	}
 
 	// Parse command line arguments (driver-specific)
-	parsed := tool.ParseCommandLine(args)
+	parsed := d.ParseCommandLine(args)
 	log.Debug("Parsed command line")
 
 	// Set log level if specified
@@ -132,7 +108,7 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 
 	// Handle --version flag
 	if isVersionFlag(args) {
-		fmt.Println(tool.VersionString)
+		fmt.Println(d.Version())
 		return 0
 	}
 
@@ -146,9 +122,6 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 	resolver := NewRuntimeResolver(config.DaemonHost, config.DaemonPort)
 	log.Debug("Created RuntimeResolver", "daemonHost", config.DaemonHost, "daemonPort", config.DaemonPort)
 
-	// Create the ToolArgsApplier callback (driver-specific handling)
-	applier := tool.ApplierFactory(ctx)
-
 	// Resolve runtime using the generic framework
 	configPath := config.ConfigPath
 	if configPath == "" {
@@ -156,7 +129,7 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 		configPath = workDir
 	}
 
-	resolutionResult := resolver.Resolve(ctx, configPath, workDir, config.InitialRuntime, args, applier, tool.Name)
+	resolutionResult := resolver.Resolve(ctx, configPath, workDir, config.InitialRuntime, args, d)
 	log.Debug("Runtime resolution result",
 		"hasError", resolutionResult.Error != "",
 		"hasWarning", resolutionResult.Warning != "",
@@ -165,20 +138,20 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 
 	// Handle errors
 	if resolutionResult.Error != "" {
-		fmt.Fprintf(os.Stderr, "%s %s\n", tool.ErrorPrefix, resolutionResult.Error)
+		fmt.Fprintf(os.Stderr, "%s %s\n", d.ErrorPrefix(), resolutionResult.Error)
 		return 1
 	}
 
 	// Handle warnings
 	if resolutionResult.Warning != "" {
-		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", tool.Name, resolutionResult.Warning)
+		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", d.Name(), resolutionResult.Warning)
 	}
 
-	// Validate runtime if validator is provided
-	if tool.RuntimeValidator != nil && resolutionResult.FoundRuntime != nil {
-		isValid, reason := tool.RuntimeValidator(resolutionResult.FoundRuntime)
+	// Validate runtime using driver's ValidateRuntime method
+	if resolutionResult.FoundRuntime != nil {
+		isValid, reason := d.ValidateRuntime(resolutionResult.FoundRuntime)
 		if !isValid {
-			fmt.Fprintf(os.Stderr, "%s %s\n", tool.ErrorPrefix, reason)
+			fmt.Fprintf(os.Stderr, "%s %s\n", d.ErrorPrefix(), reason)
 			return 1
 		}
 	}
@@ -190,26 +163,26 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 			"isNative", resolutionResult.IsNative)
 
 		// Create job (driver-specific)
-		job, err := tool.CreateJob(ctx, parsed, resolutionResult.FoundRuntime, workDir)
+		job, err := d.CreateJob(ctx, parsed, resolutionResult.FoundRuntime, workDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to create job: %v\n", tool.ErrorPrefix, err)
+			fmt.Fprintf(os.Stderr, "%s failed to create job: %v\n", d.ErrorPrefix(), err)
 			return 1
 		}
 
 		if job == nil {
-			fmt.Fprintf(os.Stderr, "%s failed to create job: job is nil\n", tool.ErrorPrefix)
+			fmt.Fprintf(os.Stderr, "%s failed to create job: job is nil\n", d.ErrorPrefix())
 			return 1
 		}
 
 		// Submit job
 		submitResp, err := SubmitJob(ctx, config.DaemonHost, config.DaemonPort, job)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to submit job: %v\n", tool.ErrorPrefix, err)
+			fmt.Fprintf(os.Stderr, "%s failed to submit job: %v\n", d.ErrorPrefix(), err)
 			return 1
 		}
 
 		if !submitResp.Accepted {
-			fmt.Fprintf(os.Stderr, "%s job rejected by daemon: %s\n", tool.ErrorPrefix, submitResp.ErrorMessage)
+			fmt.Fprintf(os.Stderr, "%s job rejected by daemon: %s\n", d.ErrorPrefix(), submitResp.ErrorMessage)
 			return 1
 		}
 
@@ -218,7 +191,7 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 		// Watch job progress and stream output to stdout
 		result, exitCode, err := WatchAndStreamJobProgress(ctx, config.DaemonHost, config.DaemonPort, job.Id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to watch job progress: %v\n", tool.ErrorPrefix, err)
+			fmt.Fprintf(os.Stderr, "%s failed to watch job progress: %v\n", d.ErrorPrefix(), err)
 			return 1
 		}
 
@@ -231,22 +204,21 @@ func RunDriver(ctx context.Context, tool *DriverTool, args []string, config *Dri
 	}
 
 	// No runtime found and no error was reported - unexpected state
-	fmt.Fprintf(os.Stderr, "%s unable to resolve compiler runtime\n", tool.ErrorPrefix)
+	fmt.Fprintf(os.Stderr, "%s unable to resolve compiler runtime\n", d.ErrorPrefix())
 	return 1
 }
 
-// ListCompatibleRuntimes lists compatible runtimes using a custom validator.
+// ListCompatibleRuntimes lists compatible runtimes for the given driver.
 // This is a generic function that works for any driver type.
 //
 // Parameters:
 //   - ctx: context for cancellation
-//   - toolName: name of the tool for logging
-//   - validator: validates if a runtime is compatible (optional, if nil accepts all)
+//   - d: the driver implementation (used for Name and ValidateRuntime)
 //   - config: driver configuration with daemon address
 //
 // Returns the exit code (0 for success, non-zero for failure)
-func ListCompatibleRuntimes(ctx context.Context, toolName string, validator func(*v1.Runtime) (bool, string), config *DriverConfig) int {
-	log := Log().Child(toolName)
+func ListCompatibleRuntimes(ctx context.Context, d driver.Driver, config *DriverConfig) int {
+	log := Log().Child(d.Name())
 
 	// Set log level if specified
 	if config.LogLevel != "" {
@@ -254,23 +226,16 @@ func ListCompatibleRuntimes(ctx context.Context, toolName string, validator func
 		logging.SetGlobalLevel(level)
 	}
 
-	log.Info(fmt.Sprintf("%s list-runtimes mode started", toolName))
+	log.Info(fmt.Sprintf("%s list-runtimes mode started", d.Name()))
 
 	// Create the RuntimeResolver using daemon address from config
 	resolver := NewRuntimeResolver(config.DaemonHost, config.DaemonPort)
 	log.Debug("Created RuntimeResolver", "daemonHost", config.DaemonHost, "daemonPort", config.DaemonPort)
 
-	// Create wrapper validator for resolver interface
-	resolverValidator := validator
-	if resolverValidator == nil {
-		// If no validator provided, accept all runtimes
-		resolverValidator = func(*v1.Runtime) (bool, string) { return true, "" }
-	}
-
 	// Query daemon and filter compatible runtimes
-	compatibleRuntimes, err := resolver.ListCompatibleRuntimes(ctx, resolverValidator, toolName)
+	compatibleRuntimes, err := resolver.ListCompatibleRuntimes(ctx, d)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s failed to list runtimes: %v\n", toolName+": error:", err)
+		fmt.Fprintf(os.Stderr, "%s failed to list runtimes: %v\n", d.ErrorPrefix(), err)
 		return 1
 	}
 
@@ -280,7 +245,7 @@ func ListCompatibleRuntimes(ctx context.Context, toolName string, validator func
 	}
 
 	// Display compatible runtimes
-	fmt.Printf("Compatible runtimes for %s:\n", toolName)
+	fmt.Printf("Compatible runtimes for %s:\n", d.Name())
 	fmt.Println("")
 	for _, rt := range compatibleRuntimes {
 		fmt.Printf("  %s\n", rt.Id)

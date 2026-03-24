@@ -6,6 +6,229 @@
 
 ---
 
+## Add --count Parameter to Daemon Command (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Add a `--count` parameter to the `daemon` command that allows launching multiple daemon instances. When `--count=1` (default), a single daemon launches with the configured host and port. When `--count>1`, the first daemon uses the configured port and additional daemons each get random free ports.
+
+### What Changed
+
+**`cmd/buildozer-client/cmd/daemon.go`**
+- Added `count` flag variable
+- Added `--count` flag definition (default: 1) to the daemon command
+- Updated Long description to document the new behavior
+- Modified `RunE` callback to pass `count` to `NewDaemonCommands()`
+
+**`pkg/cli/daemon.go`**
+- Updated imports: Added `"fmt"`, `"net"`, `"sync"` for multi-daemon support
+- Modified `DaemonCommands` struct: Changed `daemon *daemon.Daemon` to `daemons []*daemon.Daemon` to support multiple instances
+- Updated `NewDaemonCommands()` signature: Added `count int` parameter
+- Added validation: `count` must be >= 1
+- Implemented dual-path daemon creation:
+  - **If count == 1:** Single daemon with configured host/port (original behavior)
+  - **If count > 1:** First daemon uses configured host/port, remaining (count-1) daemons get random free ports
+- Added `findFreeRandomPorts(host string, count int)` helper function that:
+  - Uses `net.Listen("tcp", "host:0")` to find free random ports
+  - Returns array of available port numbers
+  - Ensures no duplicate ports in result
+- Updated `Start()` method:
+  - Launches all daemons concurrently using goroutines and `sync.WaitGroup`
+  - Waits for all daemons to start before reporting success
+  - Logs host:port for each daemon startup
+  - Handles graceful concurrent shutdown of all daemons
+  - Collects errors from all daemons during startup and shutdown
+
+### Design Decisions
+- **First daemon gets configured port:** Preserves backward compatibility and allows predictable targeting when launching multiple daemons
+- **Remaining daemons get random ports:** Eliminates port conflicts when `--count>1`
+- **Concurrent startup/shutdown:** Uses goroutines with WaitGroup for efficient parallel daemon lifecycle management
+- **Error collection:** All daemon errors during startup/shutdown are collected and reported
+
+### Verification
+- ✅ All binaries compile successfully: buildozer-client, gcc, g++, clang, clang++
+- ✅ No compilation errors or warnings
+- Help text shows: `--count int` flag with correct default
+
+### Next Steps
+- Test with actual daemon launching to verify port allocation and concurrent operation
+- Consider adding integration tests for multi-daemon scenarios
+
+---
+
+## Driver Interface: Replace Callbacks with Direct Methods (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Replace callback-returning factory methods (`ToolArgsApplier()`, `RuntimeValidator()`) on the `Driver` interface with direct methods (`ApplyToolArgs()`, `ValidateRuntime()`).
+
+### What Changed
+
+**`pkg/driver/driver.go`**
+- Removed `ToolArgsApplier` function type
+- Replaced `ToolArgsApplier(ctx) ToolArgsApplier` → `ApplyToolArgs(ctx, baseRuntime *v1.Runtime, toolArgs []string) (*v1.Runtime, error)`
+- Replaced `RuntimeValidator() func(*v1.Runtime) (bool, string)` → `ValidateRuntime(runtime *v1.Runtime) (bool, string)`
+
+**4 driver implementations (`gcc/interface.go`, `gxx/interface.go`, `clang/interface.go`, `clangxx/interface.go`)**
+- Implemented `ApplyToolArgs` and `ValidateRuntime` as direct methods instead of factory methods returning closures
+
+**`pkg/drivers/runtime_resolution.go`**
+- Removed `ToolArgsApplier` alias and `RuntimeValidator` type
+- `Resolve()` now accepts `driver.Driver` instead of separate `applier` and `driverName` parameters
+- `ListCompatibleRuntimes()` now accepts `driver.Driver` instead of `RuntimeValidator` callback and `driverName`
+
+**`pkg/drivers/driver_orchestrator.go`**
+- `RunDriver()` passes `d` directly to `resolver.Resolve()` instead of extracting callbacks
+- Calls `d.ValidateRuntime()` directly instead of `d.RuntimeValidator()()`
+- `ListCompatibleRuntimes()` accepts `driver.Driver` instead of `toolName` + `validator` callback
+- Removed unused `v1` import
+
+**`pkg/drivers/driver_cli.go`**
+- Updated `--buildozer-list-runtimes` handler to pass `d` directly to `ListCompatibleRuntimes()`
+
+**`pkg/drivers/runtime_resolution_test.go`**
+- Added `testDriver` mock struct implementing `driver.Driver`
+- All tests use `testDriver` instead of inline closures
+
+**`pkg/drivers/ARCHITECTURE.md`** — Updated all references
+
+### Design Decisions
+- Direct methods eliminate unnecessary factory/closure indirection
+- The resolver accepts `driver.Driver` directly, calling `d.ApplyToolArgs()` and `d.Name()` — no more separate function params
+- `ValidateRuntime` always returns a result (no more nil-validator check needed)
+
+### Verification
+- `make build` ✅ — all 5 binaries compile
+- All 4 drivers `--version` ✅
+- `go test ./pkg/drivers/` ✅ — all 11 tests pass
+
+---
+
+## Runtime Resolution Refactored to Use *v1.Runtime Descriptors (2026-03-24)
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Replace string-based runtime IDs throughout the runtime resolution pipeline with typed `*v1.Runtime` proto descriptors.
+
+### What Changed
+
+**New file: `pkg/runtime/proto.go`**
+- `ParseRuntimeID(id string) (*v1.Runtime, error)` — parses runtime ID strings (e.g. `native-c-gcc-10.2.1-glibc-2.31-x86_64`) into fully typed `*v1.Runtime` protos with populated `CppToolchain`
+- `RuntimeToID(rt *v1.Runtime) string` — generates runtime ID string from `*v1.Runtime` fields (inverse of ParseRuntimeID)
+- Exported helpers: `ParseVersionString`, `ParseArchitectureString`, `ParseStdlibString`
+- String↔Proto converters for all C/C++ enum types (language, compiler, architecture, c_runtime, stdlib)
+
+**Changed: `pkg/driver/driver.go`**
+- `ToolArgsApplier` signature changed from `func(ctx, baseRuntime string, toolArgs []string) (string, error)` to `func(ctx, baseRuntime *v1.Runtime, toolArgs []string) (*v1.Runtime, error)`
+
+**Changed: `pkg/drivers/runtime_resolution.go`**
+- `RuntimeResolutionResult.RequiredRuntime` changed from `string` to `*v1.Runtime`
+- `Resolve()` now parses the initial runtime ID string into `*v1.Runtime` via `pkgruntime.ParseRuntimeID()` before passing to the applier
+- The entire resolution pipeline operates on `*v1.Runtime` descriptors; string IDs used only at system boundaries (config parsing, daemon gRPC queries)
+
+**Changed: `pkg/drivers/cpp/gcc_common/compiler_flags.go`**
+- Renamed `ModifyRuntimeIDWithFlags` → `ModifyRuntimeWithFlags`
+- New signature: `func(baseRuntime *v1.Runtime, flags *CompilerFlagDetails) (*v1.Runtime, error)`
+- Uses `proto.Clone()` to avoid mutating the original, modifies `CppToolchain` fields directly, regenerates ID via `RuntimeToID()`
+
+**Changed: All 4 `interface.go` files (gcc, gxx, clang, clangxx)**
+- `ToolArgsApplier` closures updated to use `*v1.Runtime` params and call `ModifyRuntimeWithFlags`
+
+**Changed: `runtime_resolution_test.go`**
+- All test applier callbacks updated to use `*v1.Runtime` signature
+- Tests now provide valid parseable runtime IDs (e.g. `native-c-gcc-9.0.0-glibc-2.31-x86_64`)
+- Assertions compare `result.RequiredRuntime.Id` instead of `result.RequiredRuntime`
+
+**Deleted: Old-path remnant code from `gcc/driver.go` and `gxx/driver.go`**
+- Removed `RunGcc()`, `RunGxx()`, `ListCompatibleRuntimes()` and associated aliases
+
+### Design Decisions
+- `*v1.Runtime` protos carry structured toolchain data — no more string parsing at every step
+- The `pkg/runtime/` package is the authoritative source for runtime ID ↔ proto conversion
+- `proto.Clone()` ensures immutability when `ToolArgsApplier` modifies runtime descriptors
+- String runtime IDs are only used at system boundaries (config files, gRPC wire protocol)
+
+### Build & Verification
+- `make build` ✅
+- All 4 drivers `--version` ✅
+- All `pkg/drivers/` tests pass ✅
+- All `pkg/runtime/` tests pass ✅
+
+---
+
+## Removed Old Driver Path (2026-03-24)
+
+### Deleted Legacy RunCppDriver / RunGcc / RunGxx / RunClang / RunClangxx Code
+
+**Status:** ✅ COMPLETED
+
+**Objective:** Remove all dead old-path code now that the new `Driver` interface path (`NewDriver()` → `ExecuteDriver` → `RunDriver`) is the sole implementation.
+
+**Deleted Files:**
+- `pkg/drivers/cpp/gcc/driver.go` — `RunGcc()`, `BuildContext` alias, `ListCompatibleRuntimes()`
+- `pkg/drivers/cpp/gxx/driver.go` — `RunGxx()`, `BuildContext`/`ParsedArgs`/`CompileMode` aliases, `ListCompatibleRuntimes()`
+- `pkg/drivers/cpp/clang/driver.go` — `RunClang()`, `BuildContext` alias, `isClangRuntime()` helpers, `ListCompatibleRuntimes()`
+- `pkg/drivers/cpp/clangxx/driver.go` — `RunClangxx()`, `BuildContext` alias, helpers, `ListCompatibleRuntimes()`
+- `pkg/drivers/cpp/gcc_common/driver_base.go` — `LanguageType` enum, `RunCppDriver()`, `cppDriverAdapter`, `langTypeToCompilerType()`, `ListCompatibleRuntimesShared()`, `ListCompatibleRuntimesWithValidator()`, `RuntimeValidator` type
+
+**Other Changes:**
+- `pkg/drivers/cpp/gcc_common/types.go` — Removed `BuildContext` struct and unused `config` import
+- `pkg/drivers/driver_cli.go` — Updated stale comment referencing `BuildContext`
+
+**What Remains (new path only):**
+- `pkg/drivers/cpp/*/interface.go` — `NewDriver()` factories implementing `driver.Driver`
+- `pkg/drivers/cpp/*/logger.go` — Package-level logging
+- `pkg/drivers/cpp/gcc_common/runtime_validation.go` — `RuntimeCompatibility`, `ValidateRuntimeForC/Cxx/Clang/Clangxx`
+- `pkg/drivers/cpp/gcc_common/job.go` — `CreateCppJob()`, `JobSubmissionContext`
+- `pkg/drivers/cpp/gcc_common/parser.go` — `ParseCommandLine()`
+- `pkg/drivers/cpp/gcc_common/types.go` — `ParsedArgs`, `CompileMode`
+
+**Build:** ✅ `make build` passes, all 5 binaries built, `--version` works for all drivers
+
+---
+
+## Driver Interface in Packages with One-Line main.go (2026-03-24)
+
+### Moved Driver Implementations into Driver Packages
+
+**Status:** ✅ COMPLETED - All Drivers Build and Pass --version
+
+**Objective:** Each driver package (`pkg/drivers/cpp/gcc/`, etc.) now provides a `NewDriver()` factory returning `driver.Driver`, so every main.go becomes a single-line call: `drivers.ExecuteDriver(gcc.NewDriver())`.
+
+**Key Changes:**
+
+1. **`pkg/driver/driver.go`** — Rewrote from corrupted state. Defines:
+   - `CompilerType` enum (GCC, GXX, Clang, ClangCxx) — moved here to break import cycle
+   - `ToolArgsApplier` function type — moved here to break import cycle
+   - `Driver` interface with metadata, CLI config, and callback methods
+
+2. **`pkg/drivers/cli.go`** — `CompilerType` is now a type alias to `driver.CompilerType` (backward compat)
+
+3. **`pkg/drivers/runtime_resolution.go`** — `ToolArgsApplier` is now a type alias to `driver.ToolArgsApplier`
+
+4. **`pkg/drivers/cpp/gcc_common/job.go`** (new) — `CreateCppJob()` extracts job creation from the inline closure in `RunCppDriver`, using `JobSubmissionContext`
+
+5. **Driver package interface files** (new `interface.go` in each):
+   - `pkg/drivers/cpp/gcc/interface.go` — `NewDriver()` returns gcc `driver.Driver`
+   - `pkg/drivers/cpp/gxx/interface.go` — `NewDriver()` returns g++ `driver.Driver`
+   - `pkg/drivers/cpp/clang/interface.go` — `NewDriver()` returns clang `driver.Driver`
+   - `pkg/drivers/cpp/clangxx/interface.go` — `NewDriver()` returns clang++ `driver.Driver`
+
+6. **Simplified main.go files** — Each is now ~10 lines:
+   ```go
+   func main() { drivers.ExecuteDriver(gcc.NewDriver()) }
+   ```
+
+**Design Decisions:**
+- `CompilerType` and `ToolArgsApplier` moved to `pkg/driver` to break `pkg/driver` ↔ `pkg/drivers` import cycle
+- Type aliases in `pkg/drivers` maintain backward compatibility for all existing code
+- `interface.go` files keep new Driver impl separate from old `RunXxx()` functions
+- Used `ValidateRuntimeForClang`/`ValidateRuntimeForClangxx` for clang drivers (not the generic C/Cxx validators)
+
+**Build:** ✅ `make build` passes, all 5 binaries built, `--version` works for all drivers
+
+---
+
 ## Driver Architecture Unified with Orchestrator (2026-03-24)
 
 ### Refactored Driver CLI to Use Existing RunDriver() Orchestration

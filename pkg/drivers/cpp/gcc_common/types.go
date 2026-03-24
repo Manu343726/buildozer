@@ -1,10 +1,6 @@
 // Package gcc_common provides shared types and utilities for GCC/G++ drivers
 package gcc_common
 
-import (
-	"github.com/Manu343726/buildozer/pkg/config"
-)
-
 // CompileMode represents whether the command is compile-only, link-only, or both
 type CompileMode int
 
@@ -38,16 +34,4 @@ type ParsedArgs struct {
 
 	// OriginalArgs stores the original command-line arguments
 	OriginalArgs []string
-}
-
-// BuildContext holds the execution context for GCC/G++ drivers
-type BuildContext struct {
-	Config         *config.Config
-	Standalone     bool
-	DaemonHost     string // Buildozer daemon hostname or IP address
-	DaemonPort     int    // Buildozer daemon port number
-	StartDir       string
-	LogLevel       string // Log level: debug, info, warn, error
-	ConfigPath     string // Explicit path to .buildozer config file
-	InitialRuntime string // Initial runtime ID (overrides config)
 }

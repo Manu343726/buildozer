@@ -22,7 +22,7 @@ service IntrospectionService {
   rpc GetClientStatus(GetClientStatusRequest) returns (GetClientStatusResponse);
 
   // ListPeers lists all known peers in the network
-  rpc ListPeers(ListPeersRequest) returns (ListPeersResponse);
+  rpc ListPeers(IntrospectionListPeersRequest) returns (IntrospectionListPeersResponse);
 
   // GetPeerInfo returns detailed information about a specific peer
   rpc GetPeerInfo(GetPeerInfoRequest) returns (GetPeerInfoResponse);
@@ -114,16 +114,16 @@ message CurrentLoad {
   buildozer.proto.v1.Percentage current_cache_percent = 3;
 }
 
-// ListPeersRequest lists known peers
-message ListPeersRequest {
+// IntrospectionListPeersRequest lists known peers with filtering
+message IntrospectionListPeersRequest {
   // Only return peers with these runtime capabilities (filter)
   repeated buildozer.proto.v1.Runtime filter_by_runtime = 1;
   // Metadata about the requester making this request
   RequesterInfo requester_info = 2;
 }
 
-// ListPeersResponse returns peer list
-message ListPeersResponse {
+// IntrospectionListPeersResponse returns filtered peer list
+message IntrospectionListPeersResponse {
   // List of known peers
   repeated PeerInfo peers = 1;
 }

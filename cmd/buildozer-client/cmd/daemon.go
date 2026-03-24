@@ -8,6 +8,8 @@ import (
 
 // NewDaemonCommand creates the 'daemon' subcommand
 func NewDaemonCommand() *cobra.Command {
+	var count int
+
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Launch the buildozer client daemon",
@@ -16,7 +18,11 @@ func NewDaemonCommand() *cobra.Command {
 The daemon accepts job submissions via gRPC, coordinates with peer nodes via mDNS,
 and manages job scheduling and execution.
 
-The daemon listens on the configured host:port (see 'config' command to view current settings).
+With --count=1 (default), the daemon listens on the configured host:port
+(see 'config' command to view current settings).
+
+With --count>1, multiple daemons are launched, each with a random free port
+on the configured host.
 
 All services are exposed through a unified Connect/gRPC server:
   - Logging service for runtime log manipulation
@@ -28,13 +34,15 @@ NOTE: The 'daemon' subcommand cannot be used with --standalone flag. Use --stand
 with other commands (status, peers, logs, etc.) to run without a separate daemon process.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Logging is already initialized by root command with daemon config
-			daemonCommands, err := cli.NewDaemonCommands(pkgconfig.Get())
+			daemonCommands, err := cli.NewDaemonCommands(pkgconfig.Get(), count)
 			if err != nil {
 				return err
 			}
 			return daemonCommands.Start()
 		},
 	}
+
+	cmd.Flags().IntVar(&count, "count", 1, "number of daemons to launch (default 1)")
 
 	return cmd
 }

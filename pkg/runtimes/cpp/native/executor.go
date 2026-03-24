@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/Manu343726/buildozer/pkg/runtime"
 )
 
@@ -20,7 +20,7 @@ type Executor struct {
 	// workDir is the working directory for compiler invocations (where temp files are stored).
 	workDir string
 	// log is the logger for executor operations.
-	log *logger.ComponentLogger
+	log *logging.Logger
 }
 
 // NewExecutor creates and returns a new Executor for a specific compiler.
@@ -31,7 +31,7 @@ func NewExecutor(compilerPath, workDir string) *Executor {
 	return &Executor{
 		compilerPath: compilerPath,
 		workDir:      workDir,
-		log:          logger.NewComponentLogger("cpp-native-executor"),
+		log:          Log(),
 	}
 }
 

@@ -10,7 +10,9 @@ import (
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1/protov1connect"
 	"github.com/Manu343726/buildozer/pkg/config"
+	"github.com/Manu343726/buildozer/pkg/driver"
 	"github.com/Manu343726/buildozer/pkg/logging"
+	pkgruntime "github.com/Manu343726/buildozer/pkg/runtime"
 )
 
 // RuntimeResolutionResult contains the outcome of runtime resolution:
@@ -20,8 +22,8 @@ import (
 // - Warning if available remotely/Docker but not natively
 // - Error if not available at all
 type RuntimeResolutionResult struct {
-	// RequiredRuntime is the runtime ID requested after merging config + tool args
-	RequiredRuntime string
+	// RequiredRuntime is the runtime descriptor requested after merging config + tool args
+	RequiredRuntime *v1.Runtime
 
 	// FoundRuntime is the actual runtime proto returned by daemon (nil if not found)
 	FoundRuntime *v1.Runtime
@@ -36,24 +38,6 @@ type RuntimeResolutionResult struct {
 	// Error is a non-nil string if the runtime cannot be resolved at all
 	Error string
 }
-
-// ToolArgsApplier is a callback function that driver-specific code implements.
-// It takes a base runtime (from config) and tool arguments, and returns the
-// modified runtime ID that should be requested from the daemon.
-// For example, gcc driver would parse -march, compiler version flags, etc.
-//
-// baseRuntime: the initial runtime from config (may be empty if not configured)
-// toolArgs: the tool-specific arguments that may modify the runtime
-// return: the final runtime ID to request from daemon, or error if invalid args
-type ToolArgsApplier func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error)
-
-// RuntimeValidator is a callback function that driver-specific code implements.
-// It checks if a given runtime (returned from daemon) is compatible with the driver.
-// For example, gcc driver only accepts C/C++ toolchains that support C language.
-//
-// runtime: the runtime to validate
-// return: (isCompatible, reason)
-type RuntimeValidator func(runtime *v1.Runtime) (bool, string)
 
 // RuntimeResolver handles the driver-agnostic aspects of runtime resolution:
 // 1. Load config from .buildozer file (upward search)
@@ -81,28 +65,26 @@ func NewRuntimeResolver(daemonHost string, daemonPort int) *RuntimeResolver {
 // 1. Loads .buildozer config from cwd upward (or explicit path)
 // 2. Extracts base runtime from config (driver-specific)
 // 3. Merges config runtime with CLI initialRuntime (CLI overrides config)
-// 4. Validates that a base runtime was found (required)
-// 5. Applies tool args via callback to enhance the runtime ID
+// 4. Parses the base runtime ID to a *v1.Runtime descriptor
+// 5. Applies tool args via the driver's ApplyToolArgs method
 // 6. Queries daemon for final runtime
 // 7. Classifies availability (native, remote, not found)
 // 8. Returns result with warnings or errors
 //
 // configPath: explicit path to .buildozer file (empty = search from cwd)
 // startDir: directory to start upward search from (if configPath empty)
-// initialRuntime: CLI-provided initial runtime (overrides config)
+// initialRuntime: CLI-provided initial runtime ID (overrides config)
 // toolArgs: driver-specific arguments that may affect runtime
-// applier: driver-specific callback to apply tool args to runtime spec
-// driverName: name of driver for logging (e.g., "gcc", "g++")
+// d: the driver implementation (used for ApplyToolArgs and Name)
 func (rr *RuntimeResolver) Resolve(
 	ctx context.Context,
 	configPath string,
 	startDir string,
 	initialRuntime string,
 	toolArgs []string,
-	applier ToolArgsApplier,
-	driverName string,
+	d driver.Driver,
 ) *RuntimeResolutionResult {
-	rr.InfoContext(ctx, "Starting runtime resolution", "driver", driverName)
+	rr.InfoContext(ctx, "Starting runtime resolution", "driver", d.Name())
 
 	// Step 1: Load config
 	var cfg *config.Config
@@ -126,39 +108,44 @@ func (rr *RuntimeResolver) Resolve(
 		rr.InfoContext(ctx, "Config loaded", "path", configFile)
 	}
 
-	// Step 2: Get base runtime from config (depends on driver type)
-	// Note: The driver-specific code should extract the appropriate config.
-	// Here we pass empty string; driver-specific code handles config parsing.
-	// For example, gcc driver would use cfg.Drivers.Gcc runtime settings.
-	baseRuntime := ""
+	// Step 2: Get base runtime ID from config (depends on driver type)
+	baseRuntimeID := ""
 	if cfg != nil {
 		// Placeholder: driver-specific code extracts from config
-		// baseRuntime = cfg.Drivers.Gcc.Runtime (or similar)
+		// baseRuntimeID = cfg.Drivers.Gcc.Runtime (or similar)
 	}
 
 	rr.DebugContext(ctx, "Base runtime from config",
-		"config", configFile, "baseRuntime", baseRuntime)
+		"config", configFile, "baseRuntime", baseRuntimeID)
 
 	// Step 3: Apply CLI override if provided
-	// CLI initialRuntime takes precedence over config
 	if initialRuntime != "" {
 		rr.InfoContext(ctx, "Using CLI-provided initial runtime", "runtime", initialRuntime)
-		baseRuntime = initialRuntime
+		baseRuntimeID = initialRuntime
 	}
 
 	// Step 4: Check if we have an initial runtime to work with
-	// The applier is for enhancing/modifying an existing runtime, not creating one from scratch
-	if baseRuntime == "" {
+	if baseRuntimeID == "" {
 		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile, "cli", initialRuntime)
 		return &RuntimeResolutionResult{
-			RequiredRuntime: "",
+			RequiredRuntime: nil,
 			Error:           "unable to determine compiler runtime: no configuration file found and no explicit compiler version/architecture specified in command-line flags",
 		}
 	}
 
-	// Step 5: Apply tool args to enhance the runtime
-	rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime, "toolArgs", toolArgs)
-	requestedRuntime, applyErr := applier(ctx, baseRuntime, toolArgs)
+	// Step 5: Parse runtime ID string into a *v1.Runtime descriptor
+	baseRuntime, parseErr := pkgruntime.ParseRuntimeID(baseRuntimeID)
+	if parseErr != nil {
+		rr.ErrorContext(ctx, "Failed to parse runtime ID", "runtimeID", baseRuntimeID, "error", parseErr)
+		return &RuntimeResolutionResult{
+			RequiredRuntime: nil,
+			Error:           fmt.Sprintf("invalid runtime ID %q: %v", baseRuntimeID, parseErr),
+		}
+	}
+
+	// Step 6: Apply tool args via driver method
+	rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime.Id, "toolArgs", toolArgs)
+	requestedRuntime, applyErr := d.ApplyToolArgs(ctx, baseRuntime, toolArgs)
 	if applyErr != nil {
 		rr.ErrorContext(ctx, "Tool args validation failed", "error", applyErr)
 		return &RuntimeResolutionResult{
@@ -167,10 +154,10 @@ func (rr *RuntimeResolver) Resolve(
 		}
 	}
 
-	rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime)
+	rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime.Id)
 
-	// Step 6: Query daemon
-	foundRuntime, isNative, daemonErr := rr.queryDaemon(ctx, requestedRuntime)
+	// Step 7: Query daemon using the runtime ID
+	foundRuntime, isNative, daemonErr := rr.queryDaemon(ctx, requestedRuntime.Id)
 	if daemonErr != nil {
 		rr.ErrorContext(ctx, "Failed to query daemon", "error", daemonErr)
 		return &RuntimeResolutionResult{
@@ -181,19 +168,19 @@ func (rr *RuntimeResolver) Resolve(
 		}
 	}
 
-	// Step 7: Classify result
+	// Step 8: Classify result
 	if foundRuntime == nil {
-		rr.ErrorContext(ctx, "Runtime not found", "runtime", requestedRuntime)
+		rr.ErrorContext(ctx, "Runtime not found", "runtime", requestedRuntime.Id)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: requestedRuntime,
 			FoundRuntime:    nil,
 			IsNative:        false,
-			Error:           fmt.Sprintf("runtime '%s' not found on daemon", requestedRuntime),
+			Error:           fmt.Sprintf("runtime '%s' not found on daemon", requestedRuntime.Id),
 		}
 	}
 
 	if isNative {
-		rr.InfoContext(ctx, "Runtime available natively", "runtime", requestedRuntime)
+		rr.InfoContext(ctx, "Runtime available natively", "runtime", requestedRuntime.Id)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: requestedRuntime,
 			FoundRuntime:    foundRuntime,
@@ -205,9 +192,9 @@ func (rr *RuntimeResolver) Resolve(
 	warning := fmt.Sprintf(
 		"runtime '%s' is available on a peer or as a Docker image, but not natively on this machine. "+
 			"Job execution will use remote runtime.",
-		requestedRuntime,
+		requestedRuntime.Id,
 	)
-	rr.WarnContext(ctx, "Runtime not available natively", "runtime", requestedRuntime)
+	rr.WarnContext(ctx, "Runtime not available natively", "runtime", requestedRuntime.Id)
 	return &RuntimeResolutionResult{
 		RequiredRuntime: requestedRuntime,
 		FoundRuntime:    foundRuntime,
@@ -255,16 +242,15 @@ func (rr *RuntimeResolver) queryDaemon(
 }
 
 // ListCompatibleRuntimes queries the daemon for all available runtimes and filters them
-// based on the provided validator function. Returns only runtimes compatible with the driver.
+// using the driver's ValidateRuntime method. Returns only runtimes compatible with the driver.
 func (rr *RuntimeResolver) ListCompatibleRuntimes(
 	ctx context.Context,
-	validator RuntimeValidator,
-	driverName string,
+	d driver.Driver,
 ) ([]*v1.Runtime, error) {
 	daemonURL := fmt.Sprintf("http://%s:%d", rr.daemonHost, rr.daemonPort)
 	client := protov1connect.NewRuntimeServiceClient(http.DefaultClient, daemonURL)
 
-	rr.InfoContext(ctx, "Querying daemon for available runtimes", "driver", driverName)
+	rr.InfoContext(ctx, "Querying daemon for available runtimes", "driver", d.Name())
 
 	resp, err := client.ListRuntimes(ctx, connect.NewRequest(&v1.ListRuntimesRequest{}))
 	if err != nil {
@@ -275,10 +261,10 @@ func (rr *RuntimeResolver) ListCompatibleRuntimes(
 	allRuntimes := resp.Msg.Runtimes
 	rr.InfoContext(ctx, "Daemon returned runtimes", "count", len(allRuntimes), "notes", resp.Msg.DetectionNotes)
 
-	// Filter runtimes based on validator
+	// Filter runtimes based on driver's ValidateRuntime method
 	var compatibleRuntimes []*v1.Runtime
 	for _, runtime := range allRuntimes {
-		isCompatible, reason := validator(runtime)
+		isCompatible, reason := d.ValidateRuntime(runtime)
 		if isCompatible {
 			compatibleRuntimes = append(compatibleRuntimes, runtime)
 			rr.DebugContext(ctx, "Runtime compatible", "runtimeID", runtime.Id)
@@ -287,7 +273,7 @@ func (rr *RuntimeResolver) ListCompatibleRuntimes(
 		}
 	}
 
-	rr.InfoContext(ctx, "Filtered compatible runtimes", "driver", driverName, "compatible", len(compatibleRuntimes), "total", len(allRuntimes))
+	rr.InfoContext(ctx, "Filtered compatible runtimes", "driver", d.Name(), "compatible", len(compatibleRuntimes), "total", len(allRuntimes))
 	return compatibleRuntimes, nil
 }
 

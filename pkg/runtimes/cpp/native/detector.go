@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Manu343726/buildozer/internal/logger"
+	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
 //go:embed testdata/*
@@ -21,13 +21,13 @@ var testPrograms embed.FS
 // It scans the system PATH for known compilers (gcc, clang) and extracts their metadata.
 type Detector struct {
 	// log is the logger for detector operations.
-	log *logger.ComponentLogger
+	log *logging.Logger
 }
 
 // NewDetector creates and returns a new C/C++ compiler detector.
 func NewDetector() *Detector {
 	return &Detector{
-		log: logger.NewComponentLogger("cpp-native-detector"),
+		log: Log(),
 	}
 }
 

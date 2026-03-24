@@ -3,9 +3,12 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"sync"
 
+	"github.com/Manu343726/buildozer/pkg/discovery"
 	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/Manu343726/buildozer/pkg/runtimes"
 )
@@ -111,6 +114,39 @@ func (hs *httpServer) getContext() context.Context {
 	return hs.ctx
 }
 
+// getAdvertisedHost returns the host address that should be advertised for peer discovery.
+// If the listen address is 0.0.0.0 (all interfaces), returns the machine's hostname.
+// If it's localhost/127.0.0.1, returns that as-is (for local-only daemons).
+// Otherwise returns the configured host.
+func getAdvertisedHost(listenHost string) string {
+	if listenHost == "0.0.0.0" {
+		// Listen on all interfaces, advertise the hostname
+		if hostname, err := os.Hostname(); err == nil && hostname != "" {
+			return hostname
+		}
+		// Fallback: try to get the primary local IP
+		if ip := getLocalIP(); ip != "" {
+			return ip
+		}
+		// Last resort: use localhost
+		return "localhost"
+	}
+	// Use the configured host (localhost, 127.0.0.1, or explicit IP)
+	return listenHost
+}
+
+// getLocalIP returns the IP address of the primary local network interface.
+func getLocalIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
+}
+
 // DaemonConfig holds the configuration for the daemon.
 type DaemonConfig struct {
 	// Network configuration
@@ -123,6 +159,9 @@ type DaemonConfig struct {
 
 	// Feature flags
 	EnableMDNS bool `json:"enable_mdns" yaml:"enable_mdns"` // Enable mDNS peer discovery
+
+	// mDNS configuration
+	MDNSIntervalSecs int `json:"mdns_interval_secs" yaml:"mdns_interval_secs"` // mDNS discovery interval in seconds
 
 	// Logging configuration for daemon mode
 	Logging logging.LoggingConfig `json:"logging" yaml:"logging"` // Logging config used by daemon
@@ -169,6 +208,7 @@ func DefaultConfig() DaemonConfig {
 		MaxConcurrentJobs: 4,
 		MaxRAMMB:          8192,
 		EnableMDNS:        true,
+		MDNSIntervalSecs:  30,
 		Logging:           DefaultDaemonLoggingConfig(),
 	}
 }
@@ -180,15 +220,18 @@ func DefaultConfig() DaemonConfig {
 // - Setting up service handlers (logging, runtime, jobs, etc.)
 // - Running the HTTP/Connect server
 // - Coordinating graceful shutdown
+// - Managing peer discovery via mDNS
 //
 // This is the main entry point for starting a buildozer daemon.
 type Daemon struct {
 	*logging.Logger // Embedded logger for daemon-level logging
 
-	httpServer           *httpServer
-	loggingConfigManager logging.ConfigManager
-	runtimeManager       *runtimes.Manager
-	jobManager           *JobManager
+	config     DaemonConfig
+	httpServer *httpServer
+	discoverer *discovery.MDNSDiscoverer
+	logging    logging.ConfigManager
+	runtimes   *runtimes.Manager
+	jobManager *JobManager
 }
 
 // NewDaemon creates a new Daemon with all standard services configured.
@@ -211,9 +254,10 @@ type Daemon struct {
 // The Daemon handles initialization of:
 // - Logging infrastructure and configuration manager
 // - Logging service handler registration
-// - (Future) Runtime detection and job execution
-// - (Future) Job queue and scheduler
-// - (Future) Peer discovery
+// - Runtime detection and job execution
+// - Peer discovery via mDNS
+// - (Future) Cache service
+// - (Future) Queue/Scheduler service
 func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	// Use the global logging system initialized by the caller
 	// The caller (e.g., DaemonCommands) is responsible for initializing
@@ -249,36 +293,61 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	httpSrv.registerHandler(jobPath, jobHandler)
 	Log().Debug("Job service registered", "path", jobPath)
 
+	// Create mDNS discoverer with advertised host (not listen address)
+	advertisedHost := getAdvertisedHost(config.Host)
+	daemonID := fmt.Sprintf("%s:%d", advertisedHost, config.Port)
+	discoverer := discovery.NewMDNSDiscoverer(daemonID, advertisedHost, config.Port, config.MDNSIntervalSecs)
+
+	// Register discovery service (will be initialized after we create the Daemon struct below,
+	// but we create the discoverer object now so it's available in the service handler)
+	// We'll register it after returning the Daemon instance in a separate call
+
 	// TODO: Register other services
-	// - Peer discovery service
 	// - Cache service
 	// - Queue/Scheduler service
 
-	return &Daemon{
-		Logger:               Log(),
-		httpServer:           httpSrv,
-		loggingConfigManager: loggingConfigMgr,
-		runtimeManager:       runtimeMgr,
-		jobManager:           jobManager,
-	}, nil
+	d := &Daemon{
+		Logger:     Log(),
+		config:     config,
+		httpServer: httpSrv,
+		discoverer: discoverer,
+		logging:    loggingConfigMgr,
+		runtimes:   runtimeMgr,
+		jobManager: jobManager,
+	}
+
+	// Register discovery service now that we have the daemon instance
+	discoveryPath, discoveryHandler := RegisterDiscoveryService(d)
+	httpSrv.registerHandler(discoveryPath, discoveryHandler)
+	Log().Debug("Discovery service registered", "path", discoveryPath)
+
+	return d, nil
 }
 
 // Start starts the daemon and all registered services.
 //
 // Returns an error if the daemon fails to start.
-// Start starts the daemon and performs initial setup including runtime discovery.
-// Discovers runtimes on startup rather than lazily on first request.
+// Discovers runtimes and starts mDNS peer discovery on startup.
 func (d *Daemon) Start() error {
 	ctx := context.Background()
 
 	// Discover runtimes on startup
 	d.Info("discovering runtimes on startup")
-	runtimes, notes, err := d.runtimeManager.GetRuntimes(ctx)
+	runtimes, notes, err := d.runtimes.GetRuntimes(ctx)
 	if err != nil {
 		d.Error("failed to discover runtimes", "error", err)
 		// Don't fail startup - continue with partial or no runtimes available
 	} else {
 		d.Info("runtime discovery complete", "count", len(runtimes), "notes", notes)
+	}
+
+	// Start mDNS discovery if enabled
+	if d.config.EnableMDNS {
+		d.Info("starting mDNS peer discovery")
+		if err := d.discoverer.Start(ctx); err != nil {
+			d.Error("failed to start mDNS discoverer", "error", err)
+			// Don't fail daemon startup if mDNS fails
+		}
 	}
 
 	if err := d.httpServer.start(); err != nil {
@@ -292,6 +361,15 @@ func (d *Daemon) Start() error {
 // Returns an error if graceful shutdown fails (though the daemon will still stop).
 func (d *Daemon) Stop(ctx context.Context) error {
 	d.Info("stopping daemon")
+
+	// Stop mDNS discoverer
+	if d.discoverer.IsRunning() {
+		if err := d.discoverer.Stop(); err != nil {
+			d.Error("error stopping mDNS discoverer", "error", err)
+		}
+	}
+
+	// Stop HTTP server
 	return d.httpServer.stop(ctx)
 }
 
@@ -307,13 +385,13 @@ func (d *Daemon) Context() context.Context {
 
 // Config returns the daemon's configuration.
 func (d *Daemon) Config() DaemonConfig {
-	return d.httpServer.config
+	return d.config
 }
 
 // LoggingConfigManager returns the logging config manager used by the daemon.
 // This can be used to query or update logging configuration.
 func (d *Daemon) LoggingConfigManager() logging.ConfigManager {
-	return d.loggingConfigManager
+	return d.logging
 }
 
 // RegisterServiceHandler registers a Connect service handler with the daemon.
@@ -323,4 +401,18 @@ func (d *Daemon) LoggingConfigManager() logging.ConfigManager {
 func (d *Daemon) RegisterServiceHandler(path string, handler http.Handler) {
 	d.httpServer.registerHandler(path, handler)
 	d.Info("Service registered", "path", path)
+}
+
+// Discoverer returns the mDNS discoverer used by the daemon.
+// This can be used to query discovered peers.
+func (d *Daemon) Discoverer() *discovery.MDNSDiscoverer {
+	return d.discoverer
+}
+
+// GetDiscoveredPeers returns all peers discovered via mDNS.
+func (d *Daemon) GetDiscoveredPeers() []*discovery.PeerInfo {
+	if d.discoverer == nil {
+		return []*discovery.PeerInfo{}
+	}
+	return d.discoverer.GetDiscoveredPeers()
 }

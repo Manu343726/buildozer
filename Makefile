@@ -7,7 +7,9 @@ build: generate build-tests
 	go build -o ./bin/buildozer-client ./cmd/buildozer-client/main.go
 	go build -o ./bin/gcc ./cmd/drivers/cpp/gcc
 	go build -o ./bin/g++ ./cmd/drivers/cpp/gxx
-	@echo "✓ Build complete: ./bin/buildozer-client ./bin/gcc ./bin/g++"
+	go build -o ./bin/clang ./cmd/drivers/cpp/clang
+	go build -o ./bin/clang++ ./cmd/drivers/cpp/clangxx
+	@echo "✓ Build complete: ./bin/buildozer-client ./bin/gcc ./bin/g++ ./bin/clang ./bin/clang++"
 
 # Download module dependencies
 deps:

@@ -3,13 +3,46 @@ package drivers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 )
+
+// testDriver is a minimal driver.Driver implementation for testing the resolver.
+type testDriver struct {
+	name            string
+	applyToolArgs   func(ctx context.Context, rt *v1.Runtime, args []string) (*v1.Runtime, error)
+	validateRuntime func(rt *v1.Runtime) (bool, string)
+}
+
+func (d testDriver) Name() string        { return d.name }
+func (d testDriver) Version() string     { return "1.0.0" }
+func (d testDriver) Short() string       { return "" }
+func (d testDriver) Long() string        { return "" }
+func (d testDriver) ErrorPrefix() string { return d.name + ": error:" }
+
+func (d testDriver) ValidateArgs([]string) error           { return nil }
+func (d testDriver) ParseCommandLine([]string) interface{} { return nil }
+func (d testDriver) CreateJob(context.Context, interface{}, *v1.Runtime, string) (*v1.Job, error) {
+	return nil, nil
+}
+
+func (d testDriver) ApplyToolArgs(ctx context.Context, baseRuntime *v1.Runtime, toolArgs []string) (*v1.Runtime, error) {
+	if d.applyToolArgs != nil {
+		return d.applyToolArgs(ctx, baseRuntime, toolArgs)
+	}
+	return baseRuntime, nil
+}
+
+func (d testDriver) ValidateRuntime(runtime *v1.Runtime) (bool, string) {
+	if d.validateRuntime != nil {
+		return d.validateRuntime(runtime)
+	}
+	return true, ""
+}
 
 // TestNewRuntimeResolver tests resolver creation
 func TestNewRuntimeResolver(t *testing.T) {
@@ -66,17 +99,20 @@ drivers:
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	// Test with applier that modifies runtime
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		// Simulate gcc driver: returns a modified runtime ID
-		return "gcc-9-glibc-x86_64", nil
-	}
+	// Test with driver that returns the runtime as-is
+	d := testDriver{name: "gcc"}
 
-	result := resolver.Resolve(ctx, configPath, tmpDir, "", []string{"-march=x86-64"}, applier, "gcc")
+	// Provide a valid initialRuntime that can be parsed
+	result := resolver.Resolve(ctx, configPath, tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-march=x86-64"}, d)
 
 	// Result should have requested runtime set
-	if result.RequiredRuntime != "gcc-9-glibc-x86_64" {
-		t.Errorf("expected RequiredRuntime='gcc-9-glibc-x86_64', got '%s'", result.RequiredRuntime)
+	if result.RequiredRuntime == nil || result.RequiredRuntime.Id != "native-c-gcc-9.0.0-glibc-2.31-x86_64" {
+		wantID := "native-c-gcc-9.0.0-glibc-2.31-x86_64"
+		gotID := ""
+		if result.RequiredRuntime != nil {
+			gotID = result.RequiredRuntime.Id
+		}
+		t.Errorf("expected RequiredRuntime.Id=%q, got %q", wantID, gotID)
 	}
 
 	// Since daemon might not have the runtime, we expect either Error or found runtime
@@ -91,18 +127,21 @@ func TestResolveApplierError(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
-	// Applier that returns error
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		return "", errors.New("invalid compiler flag")
+	// Driver that returns error from ApplyToolArgs
+	d := testDriver{
+		name: "gcc",
+		applyToolArgs: func(_ context.Context, _ *v1.Runtime, _ []string) (*v1.Runtime, error) {
+			return nil, errors.New("invalid compiler flag")
+		},
 	}
 
-	result := resolver.Resolve(ctx, "", tmpDir, "", []string{"-invalid-flag"}, applier, "gcc")
+	result := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-invalid-flag"}, d)
 
 	// Should have error about invalid tool arguments
 	if result.Error == "" {
 		t.Fatal("expected error for invalid tool arguments")
 	}
-	if !contains(result.Error, "invalid") {
+	if !strings.Contains(result.Error, "invalid") {
 		t.Errorf("expected 'invalid' in error message, got: %s", result.Error)
 	}
 }
@@ -113,23 +152,17 @@ func TestResolveNoConfig(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
-	// Applier that returns base runtime (no config available)
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		if baseRuntime != "" {
-			return baseRuntime, nil
-		}
-		// When no config, use default runtime
-		return "gcc-default", nil
-	}
+	// Driver that returns the base runtime as-is
+	d := testDriver{name: "gcc"}
 
-	result := resolver.Resolve(ctx, "", tmpDir, "", []string{}, applier, "gcc")
+	result := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{}, d)
 
 	// Should handle missing config gracefully
-	if result.RequiredRuntime == "" {
+	if result.RequiredRuntime == nil {
 		t.Fatal("expected RequiredRuntime to be set")
 	}
-	if result.RequiredRuntime != "gcc-default" {
-		t.Errorf("expected 'gcc-default', got '%s'", result.RequiredRuntime)
+	if result.RequiredRuntime.Id != "native-c-gcc-9.0.0-glibc-2.31-x86_64" {
+		t.Errorf("expected 'native-c-gcc-9.0.0-glibc-2.31-x86_64', got '%s'", result.RequiredRuntime.Id)
 	}
 }
 
@@ -143,12 +176,10 @@ func TestResolveWithDaemon(t *testing.T) {
 	resolver := NewRuntimeResolver(daemonHost, daemonPort)
 	ctx := context.Background()
 
-	// Use a dummy applier that returns a request
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		return "test-runtime", nil
-	}
+	// Applier that returns the runtime as-is
+	d := testDriver{name: "test"}
 
-	result := resolver.Resolve(ctx, "", t.TempDir(), "", []string{}, applier, "test")
+	result := resolver.Resolve(ctx, "", t.TempDir(), "native-c-gcc-10.0.0-glibc-2.31-x86_64", []string{}, d)
 
 	// If daemon is running, we'll get either success or "runtime not found"
 	// If daemon is not running, we'll get a connection error
@@ -159,8 +190,12 @@ func TestResolveWithDaemon(t *testing.T) {
 	}
 
 	// If we got here, daemon is running
-	if result.RequiredRuntime != "test-runtime" {
-		t.Errorf("expected RequiredRuntime='test-runtime', got '%s'", result.RequiredRuntime)
+	if result.RequiredRuntime == nil || result.RequiredRuntime.Id != "native-c-gcc-10.0.0-glibc-2.31-x86_64" {
+		gotID := ""
+		if result.RequiredRuntime != nil {
+			gotID = result.RequiredRuntime.Id
+		}
+		t.Errorf("expected RequiredRuntime.Id='native-c-gcc-10.0.0-glibc-2.31-x86_64', got '%s'", gotID)
 	}
 }
 
@@ -170,53 +205,43 @@ func TestResolveMultipleToolArgs(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
-	// Applier that simulates gcc parsing multiple flags
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		// Count the number of tool args to demonstrate parsing
-		if len(toolArgs) == 0 {
-			return "gcc-9-default", nil
-		}
-
-		// Simulate compiler version detection from tool args
-		for _, arg := range toolArgs {
-			if arg == "-v11" {
-				return "gcc-11-glibc-x86_64", nil
-			}
-			if arg == "-v10" {
-				return "gcc-10-glibc-x86_64", nil
-			}
-		}
-
-		return "gcc-9-glibc-x86_64", nil
-	}
+	// Driver that returns the base runtime as-is (tool arg handling is in ModifyRuntimeWithFlags)
+	d := testDriver{name: "gcc"}
 
 	tests := []struct {
-		name        string
-		toolArgs    []string
-		wantRuntime string
+		name           string
+		initialRuntime string
+		toolArgs       []string
+		wantRuntimeID  string
 	}{
 		{
-			name:        "no args",
-			toolArgs:    []string{},
-			wantRuntime: "gcc-9-default",
+			name:           "no args",
+			initialRuntime: "native-c-gcc-9.0.0-glibc-2.31-x86_64",
+			toolArgs:       []string{},
+			wantRuntimeID:  "native-c-gcc-9.0.0-glibc-2.31-x86_64",
 		},
 		{
-			name:        "version 11",
-			toolArgs:    []string{"-v11", "-c"},
-			wantRuntime: "gcc-11-glibc-x86_64",
+			name:           "with compile flag",
+			initialRuntime: "native-c-gcc-11.0.0-glibc-2.31-x86_64",
+			toolArgs:       []string{"-v11", "-c"},
+			wantRuntimeID:  "native-c-gcc-11.0.0-glibc-2.31-x86_64",
 		},
 		{
-			name:        "version 10",
-			toolArgs:    []string{"-v10", "-O2"},
-			wantRuntime: "gcc-10-glibc-x86_64",
+			name:           "with optimization",
+			initialRuntime: "native-c-gcc-10.0.0-glibc-2.31-x86_64",
+			toolArgs:       []string{"-v10", "-O2"},
+			wantRuntimeID:  "native-c-gcc-10.0.0-glibc-2.31-x86_64",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := resolver.Resolve(ctx, "", tmpDir, "", tt.toolArgs, applier, "gcc")
-			if result.RequiredRuntime != tt.wantRuntime {
-				t.Errorf("expected '%s', got '%s'", tt.wantRuntime, result.RequiredRuntime)
+			result := resolver.Resolve(ctx, "", tmpDir, tt.initialRuntime, tt.toolArgs, d)
+			if result.RequiredRuntime == nil {
+				t.Fatal("expected RequiredRuntime to be set")
+			}
+			if result.RequiredRuntime.Id != tt.wantRuntimeID {
+				t.Errorf("expected '%s', got '%s'", tt.wantRuntimeID, result.RequiredRuntime.Id)
 			}
 		})
 	}
@@ -271,8 +296,8 @@ func TestRuntimeResolutionResult(t *testing.T) {
 		{
 			name: "success native runtime",
 			result: &RuntimeResolutionResult{
-				RequiredRuntime: "gcc-9-glibc-x86_64",
-				FoundRuntime:    &v1.Runtime{Id: "gcc-9-glibc-x86_64"},
+				RequiredRuntime: &v1.Runtime{Id: "native-c-gcc-9.0.0-glibc-2.31-x86_64"},
+				FoundRuntime:    &v1.Runtime{Id: "native-c-gcc-9.0.0-glibc-2.31-x86_64"},
 				IsNative:        true,
 				Error:           "",
 				Warning:         "",
@@ -284,8 +309,8 @@ func TestRuntimeResolutionResult(t *testing.T) {
 		{
 			name: "remote runtime with warning",
 			result: &RuntimeResolutionResult{
-				RequiredRuntime: "gcc-9-glibc-x86_64",
-				FoundRuntime:    &v1.Runtime{Id: "gcc-9-glibc-x86_64"},
+				RequiredRuntime: &v1.Runtime{Id: "native-c-gcc-9.0.0-glibc-2.31-x86_64"},
+				FoundRuntime:    &v1.Runtime{Id: "native-c-gcc-9.0.0-glibc-2.31-x86_64"},
 				IsNative:        false,
 				Error:           "",
 				Warning:         "runtime available on peer",
@@ -297,7 +322,7 @@ func TestRuntimeResolutionResult(t *testing.T) {
 		{
 			name: "runtime not found error",
 			result: &RuntimeResolutionResult{
-				RequiredRuntime: "gcc-9-glibc-x86_64",
+				RequiredRuntime: &v1.Runtime{Id: "native-c-gcc-9.0.0-glibc-2.31-x86_64"},
 				FoundRuntime:    nil,
 				IsNative:        false,
 				Error:           "runtime not found",
@@ -318,30 +343,25 @@ func TestRuntimeResolutionResult(t *testing.T) {
 	}
 }
 
-// Helper function to check if string contains substring
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-			fmt.Sprintf("%s%s", "%", substr) != "" && fmt.Sprintf("%s", substr) != ""))
-}
-
 // TestApplierContract tests that ToolArgsApplier receives correct inputs
 func TestApplierContract(t *testing.T) {
 	resolver := NewRuntimeResolver("localhost", 6789)
 	ctx := context.Background()
 	tmpDir := t.TempDir()
 
-	// Track what applier receives
+	// Track what driver receives
 	var receivedArgs []string
 
-	applier := func(ctx context.Context, baseRuntime string, toolArgs []string) (string, error) {
-		_ = baseRuntime // baseRuntime is intentionally not checked in this test
-		receivedArgs = toolArgs
-		return "resolved-runtime", nil
+	d := testDriver{
+		name: "test",
+		applyToolArgs: func(_ context.Context, baseRuntime *v1.Runtime, toolArgs []string) (*v1.Runtime, error) {
+			receivedArgs = toolArgs
+			return baseRuntime, nil
+		},
 	}
 
 	testArgs := []string{"-c", "-o", "output.o"}
-	resolver.Resolve(ctx, "", tmpDir, "", testArgs, applier, "test")
+	resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", testArgs, d)
 
 	// Verify applier was called with correct arguments
 	if len(receivedArgs) != len(testArgs) {

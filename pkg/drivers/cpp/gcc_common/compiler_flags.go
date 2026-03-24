@@ -1,7 +1,12 @@
 package gcc_common
 
 import (
+	"fmt"
 	"strings"
+
+	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
+	pkgruntime "github.com/Manu343726/buildozer/pkg/runtime"
+	"google.golang.org/protobuf/proto"
 )
 
 // CompilerFlagDetails holds extracted compiler configuration details from command-line flags
@@ -120,48 +125,37 @@ func isVersion(s string) bool {
 	return true
 }
 
-// ModifyRuntimeIDWithFlags takes a base runtime ID and compiler flag details,
-// and returns a modified runtime ID that includes the extracted flag values.
-// baseRuntime is guaranteed to be non-empty (checked by RuntimeResolver).
-// Returns an error only if the enhanced runtime ID is invalid.
-// Example: "gcc-glibc-x86_64" + version "11" + arch "armv7-a" = "gcc-11-glibc-armv7-a"
-func ModifyRuntimeIDWithFlags(baseRuntime string, flags *CompilerFlagDetails) (string, error) {
-	// baseRuntime is guaranteed to be non-empty by RuntimeResolver
-	// so we don't need to create one from scratch
+// ModifyRuntimeWithFlags takes a base runtime descriptor and compiler flag details,
+// and returns a modified runtime descriptor with the extracted flag values applied.
+// baseRuntime is guaranteed to be non-nil (checked by RuntimeResolver).
+// Returns an error only if the runtime is not a C/C++ runtime.
+func ModifyRuntimeWithFlags(baseRuntime *v1.Runtime, flags *CompilerFlagDetails) (*v1.Runtime, error) {
+	cpp := baseRuntime.GetCpp()
+	if cpp == nil {
+		return nil, fmt.Errorf("not a C/C++ runtime: %s", baseRuntime.GetId())
+	}
 
-	// Parse the base runtime ID structure: "compiler-version-cruntime-architecture"
-	// Examples: "gcc-9-glibc-x86_64", "clang-10-glibc-libstdcxx-x86_64"
-
-	// If flags don't specify version or architecture, return base as-is
-	if flags.Version == "" && flags.Architecture == "" {
+	// If no flags affect the runtime, return as-is
+	if flags.Version == "" && flags.Architecture == "" && flags.StdLib == "" {
 		return baseRuntime, nil
 	}
 
-	// Split the base runtime into parts
-	parts := strings.Split(baseRuntime, "-")
+	// Clone the proto so we don't mutate the original
+	modified := proto.Clone(baseRuntime).(*v1.Runtime)
+	modCpp := modified.GetCpp()
 
-	// Handle simple compiler name (e.g., "gcc")
-	if len(parts) == 1 {
-		// Just compiler name, build full runtime ID from flags
-		result := parts[0]
-		if flags.Version != "" {
-			result = result + "-" + flags.Version
-		}
-		if flags.Architecture != "" {
-			result = result + "-unknown-" + flags.Architecture
-		}
-		return result, nil
+	if flags.Version != "" {
+		modCpp.CompilerVersion = pkgruntime.ParseVersionString(flags.Version)
+	}
+	if flags.Architecture != "" {
+		modCpp.Architecture = pkgruntime.ParseArchitectureString(flags.Architecture)
+	}
+	if flags.StdLib != "" {
+		modCpp.CppStdlib = pkgruntime.ParseStdlibString(flags.StdLib)
 	}
 
-	// Modify existing runtime ID
-	if flags.Version != "" && len(parts) > 1 {
-		// Replace version component (parts[1])
-		parts[1] = flags.Version
-	}
-	if flags.Architecture != "" && len(parts) > 0 {
-		// Replace or add architecture component (last element)
-		parts[len(parts)-1] = flags.Architecture
-	}
+	// Regenerate the ID from updated fields
+	modified.Id = pkgruntime.RuntimeToID(modified)
 
-	return strings.Join(parts, "-"), nil
+	return modified, nil
 }
