@@ -74,7 +74,7 @@ func runGxx(cmd *cobra.Command, args []string) error {
 	daemonHost := "localhost"
 	daemonPort := 6789
 	standalone := *drivers.StandalonePtr
-	
+
 	if drivers.DaemonHostPtr != nil && *drivers.DaemonHostPtr != nil {
 		daemonHost = **drivers.DaemonHostPtr
 	}

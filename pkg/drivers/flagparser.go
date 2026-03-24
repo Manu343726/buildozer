@@ -45,12 +45,12 @@ import (
 
 // FlagInfo holds metadata about a registered flag
 type FlagInfo struct {
-	Name        string                      // Flag name without --buildozer- prefix
-	Description string                      // Help text
-	Value       interface{}                 // pointer to the flag value
-	Parser      func(string) (any, error)   // Function to parse flag value from string
-	IsOptional  bool                        // True if this is an optional flag (no default)
-	IsBool      bool                        // True if this is a boolean flag (can be used without value)
+	Name        string                    // Flag name without --buildozer- prefix
+	Description string                    // Help text
+	Value       interface{}               // pointer to the flag value
+	Parser      func(string) (any, error) // Function to parse flag value from string
+	IsOptional  bool                      // True if this is an optional flag (no default)
+	IsBool      bool                      // True if this is a boolean flag (can be used without value)
 }
 
 // FlagSet manages typed driver flags and provides parsing similar to pflag.
@@ -88,24 +88,25 @@ func (fs *FlagSet) String(name string, defaultVal string, description string) *s
 // Returns a pointer-to-pointer to the flag value (initially pointing to nil).
 // After Parse(), if the flag was provided, the inner pointer will be non-nil.
 // Usage:
-//   configPtr := fs.StringOpt("config", "Config file path")
-//   fs.Parse(args)
-//   if *configPtr != nil {
-//       fmt.Println(**configPtr)  // dereference to get the actual string
-//   }
+//
+//	configPtr := fs.StringOpt("config", "Config file path")
+//	fs.Parse(args)
+//	if *configPtr != nil {
+//	    fmt.Println(**configPtr)  // dereference to get the actual string
+//	}
 func (fs *FlagSet) StringOpt(name string, description string) **string {
-	ptr := new(*string)  // ptr is **string, *ptr is nil initially
+	ptr := new(*string) // ptr is **string, *ptr is nil initially
 
 	fs.flags[name] = &FlagInfo{
 		Name:        name,
 		Description: description,
-		Value:       ptr,  // Store pointer-to-pointer
+		Value:       ptr, // Store pointer-to-pointer
 		IsOptional:  true,
 		Parser: func(s string) (any, error) {
 			return s, nil
 		},
 	}
-	return ptr  // Return pointer-to-pointer so Parse() updates are visible
+	return ptr // Return pointer-to-pointer so Parse() updates are visible
 }
 
 // Int registers an int flag with the given name, default value, and description.
@@ -133,13 +134,14 @@ func (fs *FlagSet) Int(name string, defaultVal int, description string) *int {
 // Returns a pointer-to-pointer to the flag value (initially pointing to nil).
 // After Parse(), if the flag was provided, the inner pointer will be non-nil.
 // Usage:
-//   timeoutPtr := fs.IntOpt("timeout", "Request timeout in seconds")
-//   fs.Parse(args)
-//   if *timeoutPtr != nil {
-//       fmt.Println(**timeoutPtr)  // dereference to get the actual int
-//   }
+//
+//	timeoutPtr := fs.IntOpt("timeout", "Request timeout in seconds")
+//	fs.Parse(args)
+//	if *timeoutPtr != nil {
+//	    fmt.Println(**timeoutPtr)  // dereference to get the actual int
+//	}
 func (fs *FlagSet) IntOpt(name string, description string) **int {
-	ptr := new(*int)  // ptr is **int, *ptr is nil initially
+	ptr := new(*int) // ptr is **int, *ptr is nil initially
 
 	fs.flags[name] = &FlagInfo{
 		Parser: func(s string) (any, error) {
@@ -151,10 +153,10 @@ func (fs *FlagSet) IntOpt(name string, description string) **int {
 		},
 		Name:        name,
 		Description: description,
-		Value:       ptr,  // Store pointer-to-pointer
+		Value:       ptr, // Store pointer-to-pointer
 		IsOptional:  true,
 	}
-	return ptr  // Return pointer-to-pointer so Parse() updates are visible
+	return ptr // Return pointer-to-pointer so Parse() updates are visible
 }
 
 // Bool registers a bool flag with the given name, default value, and description.
@@ -180,25 +182,26 @@ func (fs *FlagSet) Bool(name string, defaultVal bool, description string) *bool 
 // Returns a pointer-to-pointer to the flag value (initially pointing to nil).
 // After Parse(), if the flag was provided, the inner pointer will be non-nil.
 // Usage:
-//   verbosePtr := fs.BoolOpt("verbose", "Verbose output")
-//   fs.Parse(args)
-//   if *verbosePtr != nil {
-//       fmt.Println(**verbosePtr)  // dereference to get the actual bool
-//   }
+//
+//	verbosePtr := fs.BoolOpt("verbose", "Verbose output")
+//	fs.Parse(args)
+//	if *verbosePtr != nil {
+//	    fmt.Println(**verbosePtr)  // dereference to get the actual bool
+//	}
 func (fs *FlagSet) BoolOpt(name string, description string) **bool {
-	ptr := new(*bool)  // ptr is **bool, *ptr is nil initially
+	ptr := new(*bool) // ptr is **bool, *ptr is nil initially
 
 	fs.flags[name] = &FlagInfo{
 		Name:        name,
 		Description: description,
-		Value:       ptr,  // Store pointer-to-pointer
+		Value:       ptr, // Store pointer-to-pointer
 		IsOptional:  true,
 		Parser: func(s string) (any, error) {
 			boolVal := s == "true" || s == "1" || s == "yes"
 			return boolVal, nil
 		},
 	}
-	return ptr  // Return pointer-to-pointer so Parse() updates are visible
+	return ptr // Return pointer-to-pointer so Parse() updates are visible
 }
 
 // Enum registers an enum flag with the given name, default value, valid enum values, and description.
@@ -274,7 +277,7 @@ func Enum[T fmt.Stringer](fs *FlagSet, name string, defaultVal T, validValues []
 //		fmt.Println(**modePtr)  // dereference to get the actual enum value
 //	}
 func EnumOpt[T fmt.Stringer](fs *FlagSet, name string, validValues []T, description string) **T {
-	ptr := new(*T)  // ptr is **T, *ptr is nil initially
+	ptr := new(*T) // ptr is **T, *ptr is nil initially
 
 	// Create a map from string representation to enum value for fast lookup
 	enumMap := make(map[string]T)
@@ -285,7 +288,7 @@ func EnumOpt[T fmt.Stringer](fs *FlagSet, name string, validValues []T, descript
 	fs.flags[name] = &FlagInfo{
 		Name:        name,
 		Description: description,
-		Value:       ptr,  // Store pointer-to-pointer
+		Value:       ptr, // Store pointer-to-pointer
 		IsOptional:  true,
 		Parser: func(s string) (any, error) {
 			if val, ok := enumMap[s]; ok {
@@ -298,7 +301,7 @@ func EnumOpt[T fmt.Stringer](fs *FlagSet, name string, validValues []T, descript
 			return nil, fmt.Errorf("invalid enum value: %s (valid values: %v)", s, validStrs)
 		},
 	}
-	return ptr  // Return pointer-to-pointer so Parse() updates are visible
+	return ptr // Return pointer-to-pointer so Parse() updates are visible
 }
 
 // Parse extracts buildozer-prefixed flags from command line arguments.
@@ -349,16 +352,16 @@ func (fs *FlagSet) Parse(args []string) []string {
 
 				// Set the parsed value using reflection
 				ptrVal := reflect.ValueOf(flagInfo.Value)
-				
+
 				if flagInfo.IsOptional {
 					// For optional flags, Value is a pointer-to-pointer (**T)
 					// Dereference once to get the inner pointer (*T)
 					innerPtrVal := ptrVal.Elem()
-					
+
 					// Create a new pointer to hold the parsed value
 					newPtr := reflect.New(reflect.TypeOf(parsedVal))
 					newPtr.Elem().Set(reflect.ValueOf(parsedVal))
-					
+
 					// Assign the new pointer through the pointer-to-pointer
 					innerPtrVal.Set(newPtr)
 				} else {
@@ -389,13 +392,14 @@ func (fs *FlagSet) Flags() map[string]*FlagInfo {
 }
 
 // Exposes standard driver flags:
-//   --buildozer-log-level (default: warn)
-//   --buildozer-config (default: empty)
-//   --buildozer-runtime (default: empty, use config value)
-//   --buildozer-list-runtimes (default: false)
-//   --buildozer-daemon-host (default: localhost)
-//   --buildozer-daemon-port (default: 6789)
-//   --buildozer-standalone (default: false, runs in-process daemon)
+//
+//	--buildozer-log-level (default: warn)
+//	--buildozer-config (default: empty)
+//	--buildozer-runtime (default: empty, use config value)
+//	--buildozer-list-runtimes (default: false)
+//	--buildozer-daemon-host (default: localhost)
+//	--buildozer-daemon-port (default: 6789)
+//	--buildozer-standalone (default: false, runs in-process daemon)
 var (
 	StandardDriverFlags = NewFlagSet()
 	LogLevelPtr         = StandardDriverFlags.String("log-level", "warn", "Log level: debug, info, warn, error")
