@@ -21,7 +21,8 @@ type ParsedArgs struct {
 	// Compilation/linking flags
 	Defines       []string // Defines are the -D macro definitions
 	IncludeDirs   []string // IncludeDirs are the -I directories
-	Libraries     []string // Libraries are the -l libraries to link against
+	Libraries     []string // Libraries are the -l (named) libraries to link against (e.g., "m", "pthread")
+	LibraryFiles  []string // LibraryFiles are full-path library files (e.g., "lib/libmath.a")
 	LibraryDirs   []string // LibraryDirs are the -L search directories
 	CompilerFlags []string // CompilerFlags are other compiler-specific flags
 	LinkerFlags   []string // LinkerFlags are linker-specific flags

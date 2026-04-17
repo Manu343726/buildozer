@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
+	"github.com/Manu343726/buildozer/pkg/driver"
 )
 
 // testDriver is a minimal driver.Driver implementation for testing the resolver.
@@ -26,7 +27,7 @@ func (d testDriver) ErrorPrefix() string { return d.name + ": error:" }
 
 func (d testDriver) ValidateArgs([]string) error           { return nil }
 func (d testDriver) ParseCommandLine([]string) interface{} { return nil }
-func (d testDriver) CreateJob(context.Context, interface{}, *v1.Runtime, string) (*v1.Job, error) {
+func (d testDriver) CreateJob(context.Context, interface{}, string, *driver.RuntimeContext) (*v1.Job, error) {
 	return nil, nil
 }
 
@@ -42,6 +43,14 @@ func (d testDriver) ValidateRuntime(runtime *v1.Runtime) (bool, string) {
 		return d.validateRuntime(runtime)
 	}
 	return true, ""
+}
+
+func (d testDriver) ConstructRuntimeID(cfgMap map[string]interface{}) (string, error) {
+	// Test implementation: return a dummy ID or error if missing required field
+	if _, ok := cfgMap["compiler_version"]; !ok {
+		return "", errors.New("required config field 'compiler_version' is missing")
+	}
+	return "test-runtime-id", nil
 }
 
 // TestNewRuntimeResolver tests resolver creation
@@ -103,7 +112,11 @@ drivers:
 	d := testDriver{name: "gcc"}
 
 	// Provide a valid initialRuntime that can be parsed
-	result := resolver.Resolve(ctx, configPath, tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-march=x86-64"}, d)
+	resultIface := resolver.Resolve(ctx, configPath, tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-march=x86-64"}, d)
+	result, ok := resultIface.(*RuntimeResolutionResult)
+	if !ok || result == nil {
+		t.Fatal("expected *RuntimeResolutionResult, got nil or wrong type")
+	}
 
 	// Result should have requested runtime set
 	if result.RequiredRuntime == nil || result.RequiredRuntime.Id != "native-c-gcc-9.0.0-glibc-2.31-x86_64" {
@@ -135,7 +148,11 @@ func TestResolveApplierError(t *testing.T) {
 		},
 	}
 
-	result := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-invalid-flag"}, d)
+	resultIface := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{"-invalid-flag"}, d)
+	result, ok := resultIface.(*RuntimeResolutionResult)
+	if !ok || result == nil {
+		t.Fatal("expected *RuntimeResolutionResult, got nil or wrong type")
+	}
 
 	// Should have error about invalid tool arguments
 	if result.Error == "" {
@@ -155,7 +172,11 @@ func TestResolveNoConfig(t *testing.T) {
 	// Driver that returns the base runtime as-is
 	d := testDriver{name: "gcc"}
 
-	result := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{}, d)
+	resultIface := resolver.Resolve(ctx, "", tmpDir, "native-c-gcc-9.0.0-glibc-2.31-x86_64", []string{}, d)
+	result, ok := resultIface.(*RuntimeResolutionResult)
+	if !ok || result == nil {
+		t.Fatal("expected *RuntimeResolutionResult, got nil or wrong type")
+	}
 
 	// Should handle missing config gracefully
 	if result.RequiredRuntime == nil {
@@ -179,7 +200,11 @@ func TestResolveWithDaemon(t *testing.T) {
 	// Applier that returns the runtime as-is
 	d := testDriver{name: "test"}
 
-	result := resolver.Resolve(ctx, "", t.TempDir(), "native-c-gcc-10.0.0-glibc-2.31-x86_64", []string{}, d)
+	resultIface := resolver.Resolve(ctx, "", t.TempDir(), "native-c-gcc-10.0.0-glibc-2.31-x86_64", []string{}, d)
+	result, ok := resultIface.(*RuntimeResolutionResult)
+	if !ok || result == nil {
+		t.Fatal("expected *RuntimeResolutionResult, got nil or wrong type")
+	}
 
 	// If daemon is running, we'll get either success or "runtime not found"
 	// If daemon is not running, we'll get a connection error
@@ -236,7 +261,11 @@ func TestResolveMultipleToolArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := resolver.Resolve(ctx, "", tmpDir, tt.initialRuntime, tt.toolArgs, d)
+			resultIface := resolver.Resolve(ctx, "", tmpDir, tt.initialRuntime, tt.toolArgs, d)
+			result, ok := resultIface.(*RuntimeResolutionResult)
+			if !ok || result == nil {
+				t.Fatal("expected *RuntimeResolutionResult, got nil or wrong type")
+			}
 			if result.RequiredRuntime == nil {
 				t.Fatal("expected RequiredRuntime to be set")
 			}
@@ -258,7 +287,7 @@ standalone: true
 drivers:
   gcc:
     compiler_version: "10"
-    compiler_type: "gcc"
+
     c_runtime: "glibc"
     architecture: "x86_64"
 `

@@ -3,7 +3,10 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 )
 
 // MockRuntime is a test implementation of the Runtime interface.
@@ -41,6 +44,24 @@ func (m *MockRuntime) Metadata(ctx context.Context) (*Metadata, error) {
 
 func (m *MockRuntime) RuntimeID() string {
 	return m.id
+}
+
+func (m *MockRuntime) MatchesQuery(ctx context.Context, query *v1.RuntimeMatchQuery) (bool, error) {
+	if query == nil {
+		return false, fmt.Errorf("runtime query is nil")
+	}
+
+	return false, nil
+}
+
+func (m *MockRuntime) Proto(ctx context.Context) (*v1.Runtime, error) {
+	return &v1.Runtime{
+		Id: m.id,
+	}, nil
+}
+
+func (m *MockRuntime) Close() error {
+	return nil
 }
 
 // TestRegistryRegister tests registering runtimes in the registry.

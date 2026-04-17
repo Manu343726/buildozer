@@ -39,6 +39,8 @@ const (
 	// RuntimeServiceGetRuntimeProcedure is the fully-qualified name of the RuntimeService's GetRuntime
 	// RPC.
 	RuntimeServiceGetRuntimeProcedure = "/buildozer.proto.v1.RuntimeService/GetRuntime"
+	// RuntimeServiceMatchProcedure is the fully-qualified name of the RuntimeService's Match RPC.
+	RuntimeServiceMatchProcedure = "/buildozer.proto.v1.RuntimeService/Match"
 )
 
 // RuntimeServiceClient is a client for the buildozer.proto.v1.RuntimeService service.
@@ -47,6 +49,8 @@ type RuntimeServiceClient interface {
 	ListRuntimes(context.Context, *connect.Request[v1.ListRuntimesRequest]) (*connect.Response[v1.ListRuntimesResponse], error)
 	// GetRuntime returns details about a specific runtime
 	GetRuntime(context.Context, *connect.Request[v1.GetRuntimeRequest]) (*connect.Response[v1.GetRuntimeResponse], error)
+	// Match returns runtimes matching the given query
+	Match(context.Context, *connect.Request[v1.MatchRuntimesRequest]) (*connect.Response[v1.MatchRuntimesResponse], error)
 }
 
 // NewRuntimeServiceClient constructs a client for the buildozer.proto.v1.RuntimeService service. By
@@ -72,6 +76,12 @@ func NewRuntimeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(runtimeServiceMethods.ByName("GetRuntime")),
 			connect.WithClientOptions(opts...),
 		),
+		match: connect.NewClient[v1.MatchRuntimesRequest, v1.MatchRuntimesResponse](
+			httpClient,
+			baseURL+RuntimeServiceMatchProcedure,
+			connect.WithSchema(runtimeServiceMethods.ByName("Match")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -79,6 +89,7 @@ func NewRuntimeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type runtimeServiceClient struct {
 	listRuntimes *connect.Client[v1.ListRuntimesRequest, v1.ListRuntimesResponse]
 	getRuntime   *connect.Client[v1.GetRuntimeRequest, v1.GetRuntimeResponse]
+	match        *connect.Client[v1.MatchRuntimesRequest, v1.MatchRuntimesResponse]
 }
 
 // ListRuntimes calls buildozer.proto.v1.RuntimeService.ListRuntimes.
@@ -91,12 +102,19 @@ func (c *runtimeServiceClient) GetRuntime(ctx context.Context, req *connect.Requ
 	return c.getRuntime.CallUnary(ctx, req)
 }
 
+// Match calls buildozer.proto.v1.RuntimeService.Match.
+func (c *runtimeServiceClient) Match(ctx context.Context, req *connect.Request[v1.MatchRuntimesRequest]) (*connect.Response[v1.MatchRuntimesResponse], error) {
+	return c.match.CallUnary(ctx, req)
+}
+
 // RuntimeServiceHandler is an implementation of the buildozer.proto.v1.RuntimeService service.
 type RuntimeServiceHandler interface {
 	// ListRuntimes returns all runtimes available on this daemon
 	ListRuntimes(context.Context, *connect.Request[v1.ListRuntimesRequest]) (*connect.Response[v1.ListRuntimesResponse], error)
 	// GetRuntime returns details about a specific runtime
 	GetRuntime(context.Context, *connect.Request[v1.GetRuntimeRequest]) (*connect.Response[v1.GetRuntimeResponse], error)
+	// Match returns runtimes matching the given query
+	Match(context.Context, *connect.Request[v1.MatchRuntimesRequest]) (*connect.Response[v1.MatchRuntimesResponse], error)
 }
 
 // NewRuntimeServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -118,12 +136,20 @@ func NewRuntimeServiceHandler(svc RuntimeServiceHandler, opts ...connect.Handler
 		connect.WithSchema(runtimeServiceMethods.ByName("GetRuntime")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeServiceMatchHandler := connect.NewUnaryHandler(
+		RuntimeServiceMatchProcedure,
+		svc.Match,
+		connect.WithSchema(runtimeServiceMethods.ByName("Match")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/buildozer.proto.v1.RuntimeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RuntimeServiceListRuntimesProcedure:
 			runtimeServiceListRuntimesHandler.ServeHTTP(w, r)
 		case RuntimeServiceGetRuntimeProcedure:
 			runtimeServiceGetRuntimeHandler.ServeHTTP(w, r)
+		case RuntimeServiceMatchProcedure:
+			runtimeServiceMatchHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -139,4 +165,8 @@ func (UnimplementedRuntimeServiceHandler) ListRuntimes(context.Context, *connect
 
 func (UnimplementedRuntimeServiceHandler) GetRuntime(context.Context, *connect.Request[v1.GetRuntimeRequest]) (*connect.Response[v1.GetRuntimeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.RuntimeService.GetRuntime is not implemented"))
+}
+
+func (UnimplementedRuntimeServiceHandler) Match(context.Context, *connect.Request[v1.MatchRuntimesRequest]) (*connect.Response[v1.MatchRuntimesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.RuntimeService.Match is not implemented"))
 }

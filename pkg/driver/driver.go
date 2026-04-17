@@ -15,6 +15,36 @@ import (
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 )
 
+// RuntimeResolver defines the interface for runtime resolution algorithms.
+// Drivers can use this to perform their own runtime resolution in CreateJob.
+type RuntimeResolver interface {
+	// Resolve performs complete runtime resolution workflow
+	// Returns *drivers.RuntimeResolutionResult on success, or error details if resolution fails
+	Resolve(
+		ctx context.Context,
+		configPath string,
+		startDir string,
+		initialRuntime string,
+		toolArgs []string,
+		d Driver,
+	) interface{}
+}
+
+// RuntimeContext encapsulates runtime resolution capabilities available to drivers.
+// Drivers can access this during CreateJob to perform their own runtime resolution.
+type RuntimeContext struct {
+	// Resolver provides access to the runtime resolution algorithm
+	Resolver RuntimeResolver
+	// DaemonHost is the hostname/IP of the daemon
+	DaemonHost string
+	// DaemonPort is the port of the daemon
+	DaemonPort int
+	// ConfigPath is optional path to .buildozer config file
+	ConfigPath string
+	// WorkDir is the working directory for config file discovery
+	WorkDir string
+}
+
 // Driver is the interface that every buildozer driver must implement.
 // It provides all the information and methods that the generic
 // drivers.ExecuteDriver function needs to work.
@@ -52,8 +82,21 @@ type Driver interface {
 	ParseCommandLine(args []string) interface{}
 
 	// CreateJob builds a Job protocol buffer from the parsed arguments,
-	// the resolved runtime, and the working directory.
-	CreateJob(ctx context.Context, parsed interface{}, runtime *v1.Runtime, workDir string) (*v1.Job, error)
+	// working directory, and runtime context.
+	//
+	// The driver is responsible for resolving the runtime inside CreateJob by calling
+	// rtCtx.Resolver.Resolve(). This gives drivers full control over resolution strategy:
+	// - Explicit-ID drivers (gcc, g++, clang) use Resolver to get the concrete runtime
+	// - Query-based drivers (ar) can use RuntimeContext to match runtimes by requirements
+	//
+	// Parameters:
+	//   - ctx: context for cancellation
+	//   - parsed: driver-specific parsed representation from ParseCommandLine
+	//   - workDir: working directory
+	//   - rtCtx: runtime context providing access to resolution algorithm
+	//
+	// Returns a Job with the appropriate RuntimeRequirement set (either Runtime or RuntimeMatchQuery)
+	CreateJob(ctx context.Context, parsed interface{}, workDir string, rtCtx *RuntimeContext) (*v1.Job, error)
 
 	// ApplyToolArgs modifies a base runtime descriptor based on tool-specific
 	// flags extracted from the command line (e.g. -march, -std, etc.).
@@ -64,4 +107,10 @@ type Driver interface {
 	// this driver. It returns (true, "") when the runtime is acceptable,
 	// or (false, reason) when it is not.
 	ValidateRuntime(runtime *v1.Runtime) (bool, string)
+
+	// ConstructRuntimeID constructs a runtime ID string from a driver-specific
+	// configuration map. The map contains driver-specific fields required to build
+	// a complete runtime specification.
+	// Returns error if required fields are missing or invalid.
+	ConstructRuntimeID(cfgMap map[string]interface{}) (string, error)
 }

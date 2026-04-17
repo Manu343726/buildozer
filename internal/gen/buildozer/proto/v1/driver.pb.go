@@ -85,15 +85,14 @@ func (x *SubmitJobRequest) GetRequesterInfo() *RequesterInfo {
 	return nil
 }
 
-// SubmitJobResponse confirms job submission
+// SubmitJobResponse is streamed back, first with submission confirmation, then with status updates
 type SubmitJobResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Submitted job status
-	JobStatus *JobStatus `protobuf:"bytes,1,opt,name=job_status,json=jobStatus,proto3" json:"job_status,omitempty"`
-	// Job accepted by the receiving client?
-	Accepted bool `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	// If rejected, error explanation
-	ErrorMessage  string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// Types that are valid to be assigned to Response:
+	//
+	//	*SubmitJobResponse_Confirmation
+	//	*SubmitJobResponse_StatusUpdate
+	Response      isSubmitJobResponse_Response `protobuf_oneof:"response"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -128,25 +127,166 @@ func (*SubmitJobResponse) Descriptor() ([]byte, []int) {
 	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *SubmitJobResponse) GetJobStatus() *JobStatus {
+func (x *SubmitJobResponse) GetResponse() isSubmitJobResponse_Response {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+func (x *SubmitJobResponse) GetConfirmation() *SubmissionConfirmation {
+	if x != nil {
+		if x, ok := x.Response.(*SubmitJobResponse_Confirmation); ok {
+			return x.Confirmation
+		}
+	}
+	return nil
+}
+
+func (x *SubmitJobResponse) GetStatusUpdate() *StatusUpdate {
+	if x != nil {
+		if x, ok := x.Response.(*SubmitJobResponse_StatusUpdate); ok {
+			return x.StatusUpdate
+		}
+	}
+	return nil
+}
+
+type isSubmitJobResponse_Response interface {
+	isSubmitJobResponse_Response()
+}
+
+type SubmitJobResponse_Confirmation struct {
+	// First message: submission confirmation
+	Confirmation *SubmissionConfirmation `protobuf:"bytes,1,opt,name=confirmation,proto3,oneof"`
+}
+
+type SubmitJobResponse_StatusUpdate struct {
+	// Subsequent messages: status updates
+	StatusUpdate *StatusUpdate `protobuf:"bytes,2,opt,name=status_update,json=statusUpdate,proto3,oneof"`
+}
+
+func (*SubmitJobResponse_Confirmation) isSubmitJobResponse_Response() {}
+
+func (*SubmitJobResponse_StatusUpdate) isSubmitJobResponse_Response() {}
+
+// SubmissionConfirmation confirms initial job submission
+type SubmissionConfirmation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Initial job status
+	JobStatus *JobStatus `protobuf:"bytes,1,opt,name=job_status,json=jobStatus,proto3" json:"job_status,omitempty"`
+	// Job accepted by the receiving client?
+	Accepted bool `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	// If rejected, error explanation
+	ErrorMessage  string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmissionConfirmation) Reset() {
+	*x = SubmissionConfirmation{}
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmissionConfirmation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmissionConfirmation) ProtoMessage() {}
+
+func (x *SubmissionConfirmation) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmissionConfirmation.ProtoReflect.Descriptor instead.
+func (*SubmissionConfirmation) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SubmissionConfirmation) GetJobStatus() *JobStatus {
 	if x != nil {
 		return x.JobStatus
 	}
 	return nil
 }
 
-func (x *SubmitJobResponse) GetAccepted() bool {
+func (x *SubmissionConfirmation) GetAccepted() bool {
 	if x != nil {
 		return x.Accepted
 	}
 	return false
 }
 
-func (x *SubmitJobResponse) GetErrorMessage() string {
+func (x *SubmissionConfirmation) GetErrorMessage() string {
 	if x != nil {
 		return x.ErrorMessage
 	}
 	return ""
+}
+
+// StatusUpdate is a job status update streamed after submission
+type StatusUpdate struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Updated job status
+	JobStatus *JobStatus `protobuf:"bytes,1,opt,name=job_status,json=jobStatus,proto3" json:"job_status,omitempty"`
+	// Timestamp of the update
+	UpdatedAt     *TimeStamp `protobuf:"bytes,2,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatusUpdate) Reset() {
+	*x = StatusUpdate{}
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusUpdate) ProtoMessage() {}
+
+func (x *StatusUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusUpdate.ProtoReflect.Descriptor instead.
+func (*StatusUpdate) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *StatusUpdate) GetJobStatus() *JobStatus {
+	if x != nil {
+		return x.JobStatus
+	}
+	return nil
+}
+
+func (x *StatusUpdate) GetUpdatedAt() *TimeStamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
 }
 
 // JobStatus represents the current state of a submitted job
@@ -166,7 +306,7 @@ type JobStatus struct {
 
 func (x *JobStatus) Reset() {
 	*x = JobStatus{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[2]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -178,7 +318,7 @@ func (x *JobStatus) String() string {
 func (*JobStatus) ProtoMessage() {}
 
 func (x *JobStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[2]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -191,7 +331,7 @@ func (x *JobStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobStatus.ProtoReflect.Descriptor instead.
 func (*JobStatus) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{2}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JobStatus) GetJobId() string {
@@ -237,7 +377,7 @@ type GetJobStatusRequest struct {
 
 func (x *GetJobStatusRequest) Reset() {
 	*x = GetJobStatusRequest{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +389,7 @@ func (x *GetJobStatusRequest) String() string {
 func (*GetJobStatusRequest) ProtoMessage() {}
 
 func (x *GetJobStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +402,7 @@ func (x *GetJobStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetJobStatusRequest) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{3}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetJobStatusRequest) GetJobId() string {
@@ -299,7 +439,7 @@ type GetJobStatusResponse struct {
 
 func (x *GetJobStatusResponse) Reset() {
 	*x = GetJobStatusResponse{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +451,7 @@ func (x *GetJobStatusResponse) String() string {
 func (*GetJobStatusResponse) ProtoMessage() {}
 
 func (x *GetJobStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +464,7 @@ func (x *GetJobStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetJobStatusResponse) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{4}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetJobStatusResponse) GetJobStatus() *JobStatus {
@@ -356,7 +496,7 @@ type WatchJobStatusRequest struct {
 
 func (x *WatchJobStatusRequest) Reset() {
 	*x = WatchJobStatusRequest{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +508,7 @@ func (x *WatchJobStatusRequest) String() string {
 func (*WatchJobStatusRequest) ProtoMessage() {}
 
 func (x *WatchJobStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -381,7 +521,7 @@ func (x *WatchJobStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchJobStatusRequest.ProtoReflect.Descriptor instead.
 func (*WatchJobStatusRequest) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{5}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WatchJobStatusRequest) GetJobId() string {
@@ -418,7 +558,7 @@ type WatchJobStatusResponse struct {
 
 func (x *WatchJobStatusResponse) Reset() {
 	*x = WatchJobStatusResponse{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -430,7 +570,7 @@ func (x *WatchJobStatusResponse) String() string {
 func (*WatchJobStatusResponse) ProtoMessage() {}
 
 func (x *WatchJobStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -443,7 +583,7 @@ func (x *WatchJobStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchJobStatusResponse.ProtoReflect.Descriptor instead.
 func (*WatchJobStatusResponse) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{6}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WatchJobStatusResponse) GetJobStatus() *JobStatus {
@@ -477,7 +617,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[7]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -489,7 +629,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[7]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -502,7 +642,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{7}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -548,7 +688,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[8]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +700,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[8]
+	mi := &file_buildozer_proto_v1_driver_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +713,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{8}
+	return file_buildozer_proto_v1_driver_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CancelJobResponse) GetSuccess() bool {
@@ -605,12 +745,22 @@ const file_buildozer_proto_v1_driver_proto_rawDesc = "" +
 	"\x10SubmitJobRequest\x12)\n" +
 	"\x03job\x18\x01 \x01(\v2\x17.buildozer.proto.v1.JobR\x03job\x12?\n" +
 	"\bmetadata\x18\x02 \x01(\v2#.buildozer.proto.v1.RequestMetadataR\bmetadata\x12H\n" +
-	"\x0erequester_info\x18\x03 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"\x92\x01\n" +
-	"\x11SubmitJobResponse\x12<\n" +
+	"\x0erequester_info\x18\x03 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"\xba\x01\n" +
+	"\x11SubmitJobResponse\x12P\n" +
+	"\fconfirmation\x18\x01 \x01(\v2*.buildozer.proto.v1.SubmissionConfirmationH\x00R\fconfirmation\x12G\n" +
+	"\rstatus_update\x18\x02 \x01(\v2 .buildozer.proto.v1.StatusUpdateH\x00R\fstatusUpdateB\n" +
+	"\n" +
+	"\bresponse\"\x97\x01\n" +
+	"\x16SubmissionConfirmation\x12<\n" +
 	"\n" +
 	"job_status\x18\x01 \x01(\v2\x1d.buildozer.proto.v1.JobStatusR\tjobStatus\x12\x1a\n" +
 	"\baccepted\x18\x02 \x01(\bR\baccepted\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xd1\x01\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x8a\x01\n" +
+	"\fStatusUpdate\x12<\n" +
+	"\n" +
+	"job_status\x18\x01 \x01(\v2\x1d.buildozer.proto.v1.JobStatusR\tjobStatus\x12<\n" +
+	"\n" +
+	"updated_at\x18\x02 \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\tupdatedAt\"\xd1\x01\n" +
 	"\tJobStatus\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12.\n" +
 	"\x13submitter_client_id\x18\x02 \x01(\tR\x11submitterClientId\x12@\n" +
@@ -641,12 +791,11 @@ const file_buildozer_proto_v1_driver_proto_rawDesc = "" +
 	"\x11CancelJobResponse\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12%\n" +
-	"\x0ejobs_cancelled\x18\x04 \x01(\rR\rjobsCancelled2\x8e\x03\n" +
+	"\x0ejobs_cancelled\x18\x04 \x01(\rR\rjobsCancelled2\xa5\x02\n" +
 	"\n" +
-	"JobService\x12X\n" +
-	"\tSubmitJob\x12$.buildozer.proto.v1.SubmitJobRequest\x1a%.buildozer.proto.v1.SubmitJobResponse\x12a\n" +
-	"\fGetJobStatus\x12'.buildozer.proto.v1.GetJobStatusRequest\x1a(.buildozer.proto.v1.GetJobStatusResponse\x12i\n" +
-	"\x0eWatchJobStatus\x12).buildozer.proto.v1.WatchJobStatusRequest\x1a*.buildozer.proto.v1.WatchJobStatusResponse0\x01\x12X\n" +
+	"JobService\x12Z\n" +
+	"\tSubmitJob\x12$.buildozer.proto.v1.SubmitJobRequest\x1a%.buildozer.proto.v1.SubmitJobResponse0\x01\x12a\n" +
+	"\fGetJobStatus\x12'.buildozer.proto.v1.GetJobStatusRequest\x1a(.buildozer.proto.v1.GetJobStatusResponse\x12X\n" +
 	"\tCancelJob\x12$.buildozer.proto.v1.CancelJobRequest\x1a%.buildozer.proto.v1.CancelJobResponseB\xd8\x01\n" +
 	"\x16com.buildozer.proto.v1B\vDriverProtoP\x01ZGgithub.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1;protov1\xa2\x02\x03BPX\xaa\x02\x12Buildozer.Proto.V1\xca\x02\x12Buildozer\\Proto\\V1\xe2\x02\x1eBuildozer\\Proto\\V1\\GPBMetadata\xea\x02\x14Buildozer::Proto::V1b\x06proto3"
 
@@ -662,51 +811,55 @@ func file_buildozer_proto_v1_driver_proto_rawDescGZIP() []byte {
 	return file_buildozer_proto_v1_driver_proto_rawDescData
 }
 
-var file_buildozer_proto_v1_driver_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_buildozer_proto_v1_driver_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_buildozer_proto_v1_driver_proto_goTypes = []any{
 	(*SubmitJobRequest)(nil),       // 0: buildozer.proto.v1.SubmitJobRequest
 	(*SubmitJobResponse)(nil),      // 1: buildozer.proto.v1.SubmitJobResponse
-	(*JobStatus)(nil),              // 2: buildozer.proto.v1.JobStatus
-	(*GetJobStatusRequest)(nil),    // 3: buildozer.proto.v1.GetJobStatusRequest
-	(*GetJobStatusResponse)(nil),   // 4: buildozer.proto.v1.GetJobStatusResponse
-	(*WatchJobStatusRequest)(nil),  // 5: buildozer.proto.v1.WatchJobStatusRequest
-	(*WatchJobStatusResponse)(nil), // 6: buildozer.proto.v1.WatchJobStatusResponse
-	(*CancelJobRequest)(nil),       // 7: buildozer.proto.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),      // 8: buildozer.proto.v1.CancelJobResponse
-	(*Job)(nil),                    // 9: buildozer.proto.v1.Job
-	(*RequestMetadata)(nil),        // 10: buildozer.proto.v1.RequestMetadata
-	(*RequesterInfo)(nil),          // 11: buildozer.proto.v1.RequesterInfo
-	(*TimeStamp)(nil),              // 12: buildozer.proto.v1.TimeStamp
-	(*JobProgress)(nil),            // 13: buildozer.proto.v1.JobProgress
+	(*SubmissionConfirmation)(nil), // 2: buildozer.proto.v1.SubmissionConfirmation
+	(*StatusUpdate)(nil),           // 3: buildozer.proto.v1.StatusUpdate
+	(*JobStatus)(nil),              // 4: buildozer.proto.v1.JobStatus
+	(*GetJobStatusRequest)(nil),    // 5: buildozer.proto.v1.GetJobStatusRequest
+	(*GetJobStatusResponse)(nil),   // 6: buildozer.proto.v1.GetJobStatusResponse
+	(*WatchJobStatusRequest)(nil),  // 7: buildozer.proto.v1.WatchJobStatusRequest
+	(*WatchJobStatusResponse)(nil), // 8: buildozer.proto.v1.WatchJobStatusResponse
+	(*CancelJobRequest)(nil),       // 9: buildozer.proto.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),      // 10: buildozer.proto.v1.CancelJobResponse
+	(*Job)(nil),                    // 11: buildozer.proto.v1.Job
+	(*RequestMetadata)(nil),        // 12: buildozer.proto.v1.RequestMetadata
+	(*RequesterInfo)(nil),          // 13: buildozer.proto.v1.RequesterInfo
+	(*TimeStamp)(nil),              // 14: buildozer.proto.v1.TimeStamp
+	(*JobProgress)(nil),            // 15: buildozer.proto.v1.JobProgress
 }
 var file_buildozer_proto_v1_driver_proto_depIdxs = []int32{
-	9,  // 0: buildozer.proto.v1.SubmitJobRequest.job:type_name -> buildozer.proto.v1.Job
-	10, // 1: buildozer.proto.v1.SubmitJobRequest.metadata:type_name -> buildozer.proto.v1.RequestMetadata
-	11, // 2: buildozer.proto.v1.SubmitJobRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	2,  // 3: buildozer.proto.v1.SubmitJobResponse.job_status:type_name -> buildozer.proto.v1.JobStatus
-	12, // 4: buildozer.proto.v1.JobStatus.submitted_at:type_name -> buildozer.proto.v1.TimeStamp
-	13, // 5: buildozer.proto.v1.JobStatus.progress:type_name -> buildozer.proto.v1.JobProgress
-	12, // 6: buildozer.proto.v1.GetJobStatusRequest.since:type_name -> buildozer.proto.v1.TimeStamp
-	11, // 7: buildozer.proto.v1.GetJobStatusRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	2,  // 8: buildozer.proto.v1.GetJobStatusResponse.job_status:type_name -> buildozer.proto.v1.JobStatus
-	12, // 9: buildozer.proto.v1.WatchJobStatusRequest.since:type_name -> buildozer.proto.v1.TimeStamp
-	11, // 10: buildozer.proto.v1.WatchJobStatusRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	2,  // 11: buildozer.proto.v1.WatchJobStatusResponse.job_status:type_name -> buildozer.proto.v1.JobStatus
-	12, // 12: buildozer.proto.v1.WatchJobStatusResponse.updated_at:type_name -> buildozer.proto.v1.TimeStamp
-	11, // 13: buildozer.proto.v1.CancelJobRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	0,  // 14: buildozer.proto.v1.JobService.SubmitJob:input_type -> buildozer.proto.v1.SubmitJobRequest
-	3,  // 15: buildozer.proto.v1.JobService.GetJobStatus:input_type -> buildozer.proto.v1.GetJobStatusRequest
-	5,  // 16: buildozer.proto.v1.JobService.WatchJobStatus:input_type -> buildozer.proto.v1.WatchJobStatusRequest
-	7,  // 17: buildozer.proto.v1.JobService.CancelJob:input_type -> buildozer.proto.v1.CancelJobRequest
-	1,  // 18: buildozer.proto.v1.JobService.SubmitJob:output_type -> buildozer.proto.v1.SubmitJobResponse
-	4,  // 19: buildozer.proto.v1.JobService.GetJobStatus:output_type -> buildozer.proto.v1.GetJobStatusResponse
-	6,  // 20: buildozer.proto.v1.JobService.WatchJobStatus:output_type -> buildozer.proto.v1.WatchJobStatusResponse
-	8,  // 21: buildozer.proto.v1.JobService.CancelJob:output_type -> buildozer.proto.v1.CancelJobResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	11, // 0: buildozer.proto.v1.SubmitJobRequest.job:type_name -> buildozer.proto.v1.Job
+	12, // 1: buildozer.proto.v1.SubmitJobRequest.metadata:type_name -> buildozer.proto.v1.RequestMetadata
+	13, // 2: buildozer.proto.v1.SubmitJobRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	2,  // 3: buildozer.proto.v1.SubmitJobResponse.confirmation:type_name -> buildozer.proto.v1.SubmissionConfirmation
+	3,  // 4: buildozer.proto.v1.SubmitJobResponse.status_update:type_name -> buildozer.proto.v1.StatusUpdate
+	4,  // 5: buildozer.proto.v1.SubmissionConfirmation.job_status:type_name -> buildozer.proto.v1.JobStatus
+	4,  // 6: buildozer.proto.v1.StatusUpdate.job_status:type_name -> buildozer.proto.v1.JobStatus
+	14, // 7: buildozer.proto.v1.StatusUpdate.updated_at:type_name -> buildozer.proto.v1.TimeStamp
+	14, // 8: buildozer.proto.v1.JobStatus.submitted_at:type_name -> buildozer.proto.v1.TimeStamp
+	15, // 9: buildozer.proto.v1.JobStatus.progress:type_name -> buildozer.proto.v1.JobProgress
+	14, // 10: buildozer.proto.v1.GetJobStatusRequest.since:type_name -> buildozer.proto.v1.TimeStamp
+	13, // 11: buildozer.proto.v1.GetJobStatusRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	4,  // 12: buildozer.proto.v1.GetJobStatusResponse.job_status:type_name -> buildozer.proto.v1.JobStatus
+	14, // 13: buildozer.proto.v1.WatchJobStatusRequest.since:type_name -> buildozer.proto.v1.TimeStamp
+	13, // 14: buildozer.proto.v1.WatchJobStatusRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	4,  // 15: buildozer.proto.v1.WatchJobStatusResponse.job_status:type_name -> buildozer.proto.v1.JobStatus
+	14, // 16: buildozer.proto.v1.WatchJobStatusResponse.updated_at:type_name -> buildozer.proto.v1.TimeStamp
+	13, // 17: buildozer.proto.v1.CancelJobRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	0,  // 18: buildozer.proto.v1.JobService.SubmitJob:input_type -> buildozer.proto.v1.SubmitJobRequest
+	5,  // 19: buildozer.proto.v1.JobService.GetJobStatus:input_type -> buildozer.proto.v1.GetJobStatusRequest
+	9,  // 20: buildozer.proto.v1.JobService.CancelJob:input_type -> buildozer.proto.v1.CancelJobRequest
+	1,  // 21: buildozer.proto.v1.JobService.SubmitJob:output_type -> buildozer.proto.v1.SubmitJobResponse
+	6,  // 22: buildozer.proto.v1.JobService.GetJobStatus:output_type -> buildozer.proto.v1.GetJobStatusResponse
+	10, // 23: buildozer.proto.v1.JobService.CancelJob:output_type -> buildozer.proto.v1.CancelJobResponse
+	21, // [21:24] is the sub-list for method output_type
+	18, // [18:21] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_buildozer_proto_v1_driver_proto_init() }
@@ -717,13 +870,17 @@ func file_buildozer_proto_v1_driver_proto_init() {
 	file_buildozer_proto_v1_auth_proto_init()
 	file_buildozer_proto_v1_job_proto_init()
 	file_buildozer_proto_v1_vocabulary_proto_init()
+	file_buildozer_proto_v1_driver_proto_msgTypes[1].OneofWrappers = []any{
+		(*SubmitJobResponse_Confirmation)(nil),
+		(*SubmitJobResponse_StatusUpdate)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buildozer_proto_v1_driver_proto_rawDesc), len(file_buildozer_proto_v1_driver_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

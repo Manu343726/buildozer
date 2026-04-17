@@ -21,13 +21,13 @@ var testPrograms embed.FS
 // It scans the system PATH for known compilers (gcc, clang) and extracts their metadata.
 type Detector struct {
 	// log is the logger for detector operations.
-	log *logging.Logger
+	*logging.Logger
 }
 
 // NewDetector creates and returns a new C/C++ compiler detector.
 func NewDetector() *Detector {
 	return &Detector{
-		log: Log(),
+		Logger: Log().Child("Detector"),
 	}
 }
 
@@ -191,13 +191,24 @@ func (d *Detector) findCompilerPaths(compilerName string) []string {
 	return results
 }
 
+func (d *Detector) FindArchiverForCompiler(compilerName string) string {
+	// For both gcc and clang we use "ar" as the archiver, which is the standard Unix archiving tool.
+	archiverName := "ar"
+	archiverPath, err := exec.LookPath(archiverName)
+	if err != nil {
+		d.Warn("archiver not found in PATH", "archiver", archiverName)
+		return ""
+	}
+	return archiverPath
+}
+
 // DetectToolchains discovers all available C/C++ toolchains on the system.
 // Returns a list of Toolchain objects representing complete compilation environments.
 // This includes detection of C/C++ compilers, runtimes, standard libraries, and ABI details.
 // For compilers with multiple available C++ standard libraries, a separate toolchain is created for each.
 func (d *Detector) DetectToolchains(ctx context.Context) ([]Toolchain, error) {
 	if runtime.GOOS != "linux" {
-		d.log.Info("native C/C++ detection only supported on Linux", "os", runtime.GOOS)
+		d.Info("native C/C++ detection only supported on Linux", "os", runtime.GOOS)
 		return []Toolchain{}, nil
 	}
 
@@ -235,6 +246,11 @@ func (d *Detector) detectCompilerToolchains(ctx context.Context, compilerName st
 		return nil
 	}
 
+	archiverPath := d.FindArchiverForCompiler(compilerName)
+	if len(archiverPath) == 0 {
+		return nil
+	}
+
 	var allToolchains []Toolchain
 	seen := make(map[string]bool) // Deduplicate by version+cruntime+stdlib+arch
 
@@ -261,6 +277,7 @@ func (d *Detector) detectCompilerToolchains(ctx context.Context, compilerName st
 				tc.Language, tc.CppStdlib, tc.Architecture)
 			if !seen[key] {
 				seen[key] = true
+				tc.ArchiverPath = archiverPath
 				allToolchains = append(allToolchains, tc)
 			}
 		}
@@ -365,7 +382,7 @@ func (d *Detector) detectArchitectureVariants(ctx context.Context, compilerPath 
 		for _, arch := range availableArchitectures {
 			tc, err := d.buildToolchain(ctx, compilerPath, compiler, language, cruntime, CppStdlibUnspecified, arch)
 			if err == nil {
-				d.log.Info("detected toolchain", "compiler", compilerName, "language", languageString(language), "cruntime", cruntimeString(cruntime), "arch", archString(arch), "version", tc.CompilerVersion)
+				d.Info("detected toolchain", "compiler", compilerName, "language", languageString(language), "cruntime", cruntimeString(cruntime), "arch", archString(arch), "version", tc.CompilerVersion)
 				toolchains = append(toolchains, tc)
 			}
 		}
@@ -408,7 +425,7 @@ func (d *Detector) detectCppStdlibVariantsForArch(ctx context.Context, compilerP
 	for _, stdlib := range availableStdlibs {
 		tc, err := d.buildToolchain(ctx, compilerPath, compiler, LanguageCpp, cruntime, stdlib, arch)
 		if err == nil {
-			d.log.Info("detected toolchain", "compiler", compilerName, "language", "C++", "cruntime", cruntimeString(cruntime), "stdlib", cppstdlibString(stdlib), "arch", archString(arch), "version", tc.CompilerVersion)
+			d.Info("detected toolchain", "compiler", compilerName, "language", "C++", "cruntime", cruntimeString(cruntime), "stdlib", cppstdlibString(stdlib), "arch", archString(arch), "version", tc.CompilerVersion)
 			toolchains = append(toolchains, tc)
 		}
 	}

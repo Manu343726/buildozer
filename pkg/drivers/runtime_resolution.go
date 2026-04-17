@@ -83,7 +83,7 @@ func (rr *RuntimeResolver) Resolve(
 	initialRuntime string,
 	toolArgs []string,
 	d driver.Driver,
-) *RuntimeResolutionResult {
+) interface{} {
 	rr.InfoContext(ctx, "Starting runtime resolution", "driver", d.Name())
 
 	// Step 1: Load config
@@ -100,19 +100,48 @@ func (rr *RuntimeResolver) Resolve(
 	}
 
 	if configErr != nil {
-		rr.WarnContext(ctx, "Failed to load config, using defaults", "error", configErr)
+		rr.WarnContext(ctx, "Failed to load config", "error", configErr, "configFile", configFile)
 		cfg = nil
 	}
 
-	if configFile != "" {
-		rr.InfoContext(ctx, "Config loaded", "path", configFile)
-	}
-
 	// Step 2: Get base runtime ID from config (depends on driver type)
+	// Note: Some drivers like AR use RuntimeMatchQuery instead of explicit runtime IDs
 	baseRuntimeID := ""
 	if cfg != nil {
-		// Placeholder: driver-specific code extracts from config
-		// baseRuntimeID = cfg.Drivers.Gcc.Runtime (or similar)
+		rr.DebugContext(ctx, "Config is not nil, extracting driver config")
+		// Extract driver-specific config map
+		cfgMap := cfg.Drivers[d.Name()]
+		if cfgMap != nil {
+			rr.DebugContext(ctx, "Extracted driver config",
+				"driver", d.Name(),
+				"version", cfgMap["compiler_version"],
+				"cruntime", cfgMap["c_runtime"],
+				"arch", cfgMap["architecture"])
+
+			// Try to construct runtime ID from config using the driver's implementation
+			// Some drivers (like AR) don't use ConstructRuntimeID and will return an error with advice
+			runtimeID, err := ConstructRuntimeIDFromConfig(d.Name(), cfgMap)
+			if err != nil {
+				// Check if this is a driver that uses RuntimeMatchQuery instead
+				if isRuntimeMatchQueryDriver(err) {
+					rr.InfoContext(ctx, "Driver uses RuntimeMatchQuery for flexible matching",
+						"driver", d.Name(), "reason", err.Error())
+					// For these drivers, we don't construct a runtime ID here
+					// Instead, they handle it themselves in CreateJob
+					baseRuntimeID = ""
+				} else {
+					rr.WarnContext(ctx, "Failed to construct runtime ID from config",
+						"driver", d.Name(), "error", err)
+				}
+			} else {
+				baseRuntimeID = runtimeID
+				rr.DebugContext(ctx, "Constructed runtime ID from config", "runtimeID", baseRuntimeID)
+			}
+		} else {
+			rr.DebugContext(ctx, "No configuration found for driver", "driver", d.Name())
+		}
+	} else {
+		rr.DebugContext(ctx, "Config is nil, cannot extract driver config")
 	}
 
 	rr.DebugContext(ctx, "Base runtime from config",
@@ -125,7 +154,8 @@ func (rr *RuntimeResolver) Resolve(
 	}
 
 	// Step 4: Check if we have an initial runtime to work with
-	if baseRuntimeID == "" {
+	// For drivers using explicit runtime IDs (gcc, g++, clang, etc.)
+	if isExplicitRuntimeIDDriver(d) && baseRuntimeID == "" {
 		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile, "cli", initialRuntime)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: nil,
@@ -133,73 +163,114 @@ func (rr *RuntimeResolver) Resolve(
 		}
 	}
 
-	// Step 5: Parse runtime ID string into a *v1.Runtime descriptor
-	baseRuntime, parseErr := pkgruntime.ParseRuntimeID(baseRuntimeID)
-	if parseErr != nil {
-		rr.ErrorContext(ctx, "Failed to parse runtime ID", "runtimeID", baseRuntimeID, "error", parseErr)
+	// For RuntimeMatchQuery drivers like AR, baseRuntimeID can be empty
+	// They will construct the query directly in CreateJob()
+	if baseRuntimeID == "" && !isRuntimeMatchQueryDriver(fmt.Errorf("driver %s uses RuntimeMatchQuery", d.Name())) {
+		rr.ErrorContext(ctx, "No initial runtime found", "config", configFile, "cli", initialRuntime)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: nil,
-			Error:           fmt.Sprintf("invalid runtime ID %q: %v", baseRuntimeID, parseErr),
+			Error:           "unable to determine runtime: no configuration file found and no explicit runtime specified in command-line flags",
+		}
+	}
+
+	// Step 5: Parse runtime ID string into a *v1.Runtime descriptor
+	// Skip for drivers that use RuntimeMatchQuery (baseRuntimeID can be empty)
+	var baseRuntime *v1.Runtime
+	if baseRuntimeID != "" {
+		var parseErr error
+		baseRuntime, parseErr = pkgruntime.ParseRuntimeID(baseRuntimeID)
+		if parseErr != nil {
+			rr.ErrorContext(ctx, "Failed to parse runtime ID", "runtimeID", baseRuntimeID, "error", parseErr)
+			return &RuntimeResolutionResult{
+				RequiredRuntime: nil,
+				Error:           fmt.Sprintf("invalid runtime ID %q: %v", baseRuntimeID, parseErr),
+			}
 		}
 	}
 
 	// Step 6: Apply tool args via driver method
-	rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime.Id, "toolArgs", toolArgs)
-	requestedRuntime, applyErr := d.ApplyToolArgs(ctx, baseRuntime, toolArgs)
-	if applyErr != nil {
-		rr.ErrorContext(ctx, "Tool args validation failed", "error", applyErr)
-		return &RuntimeResolutionResult{
-			RequiredRuntime: baseRuntime,
-			Error:           fmt.Sprintf("invalid tool arguments: %v", applyErr),
+	// For RuntimeMatchQuery drivers with no explicit runtime, pass nil
+	var requestedRuntime *v1.Runtime
+	if baseRuntime != nil {
+		rr.DebugContext(ctx, "Applying tool arguments", "baseRuntime", baseRuntime.Id, "toolArgs", toolArgs)
+		var applyErr error
+		requestedRuntime, applyErr = d.ApplyToolArgs(ctx, baseRuntime, toolArgs)
+		if applyErr != nil {
+			rr.ErrorContext(ctx, "Tool args validation failed", "error", applyErr)
+			return &RuntimeResolutionResult{
+				RequiredRuntime: baseRuntime,
+				Error:           fmt.Sprintf("invalid tool arguments: %v", applyErr),
+			}
 		}
+	} else {
+		// For RuntimeMatchQuery drivers with no explicit runtime ID
+		rr.DebugContext(ctx, "Skipping ApplyToolArgs - driver uses RuntimeMatchQuery", "driver", d.Name())
+		// Return nil for requestedRuntime - driver uses RuntimeMatchQuery instead
 	}
 
-	rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime.Id)
+	if requestedRuntime != nil {
+		rr.InfoContext(ctx, "Runtime requested from daemon", "runtime", requestedRuntime.Id)
+	}
 
 	// Step 7: Query daemon using the runtime ID
-	foundRuntime, isNative, daemonErr := rr.queryDaemon(ctx, requestedRuntime.Id)
-	if daemonErr != nil {
-		rr.ErrorContext(ctx, "Failed to query daemon", "error", daemonErr)
+	// For RuntimeMatchQuery drivers with no explicit runtime, skip this step
+	var foundRuntime *v1.Runtime
+	var isNative bool
+	if requestedRuntime != nil {
+		var daemonErr error
+		foundRuntime, isNative, daemonErr = rr.queryDaemon(ctx, requestedRuntime.Id)
+		if daemonErr != nil {
+			rr.ErrorContext(ctx, "Failed to query daemon", "error", daemonErr)
+			return &RuntimeResolutionResult{
+				RequiredRuntime: requestedRuntime,
+				FoundRuntime:    foundRuntime,
+				IsNative:        isNative,
+				Error:           fmt.Sprintf("daemon query failed: %v", daemonErr),
+			}
+		}
+
+		// Step 8: Classify result
+		if foundRuntime == nil {
+			rr.ErrorContext(ctx, "Runtime not found", "runtime", requestedRuntime.Id)
+			return &RuntimeResolutionResult{
+				RequiredRuntime: requestedRuntime,
+				FoundRuntime:    nil,
+				IsNative:        false,
+				Error:           fmt.Sprintf("runtime '%s' not found on daemon", requestedRuntime.Id),
+			}
+		}
+
+		if isNative {
+			rr.InfoContext(ctx, "Runtime available natively", "runtime", requestedRuntime.Id)
+			return &RuntimeResolutionResult{
+				RequiredRuntime: requestedRuntime,
+				FoundRuntime:    foundRuntime,
+				IsNative:        true,
+			}
+		}
+
+		// Runtime available but not natively
+		warning := fmt.Sprintf(
+			"runtime '%s' is available on a peer or as a Docker image, but not natively on this machine. "+
+				"Job execution will use remote runtime.",
+			requestedRuntime.Id,
+		)
+		rr.WarnContext(ctx, "Runtime not available natively", "runtime", requestedRuntime.Id)
 		return &RuntimeResolutionResult{
 			RequiredRuntime: requestedRuntime,
 			FoundRuntime:    foundRuntime,
-			IsNative:        isNative,
-			Error:           fmt.Sprintf("daemon query failed: %v", daemonErr),
-		}
-	}
-
-	// Step 8: Classify result
-	if foundRuntime == nil {
-		rr.ErrorContext(ctx, "Runtime not found", "runtime", requestedRuntime.Id)
-		return &RuntimeResolutionResult{
-			RequiredRuntime: requestedRuntime,
-			FoundRuntime:    nil,
 			IsNative:        false,
-			Error:           fmt.Sprintf("runtime '%s' not found on daemon", requestedRuntime.Id),
+			Warning:         warning,
 		}
 	}
 
-	if isNative {
-		rr.InfoContext(ctx, "Runtime available natively", "runtime", requestedRuntime.Id)
-		return &RuntimeResolutionResult{
-			RequiredRuntime: requestedRuntime,
-			FoundRuntime:    foundRuntime,
-			IsNative:        true,
-		}
-	}
-
-	// Runtime available but not natively
-	warning := fmt.Sprintf(
-		"runtime '%s' is available on a peer or as a Docker image, but not natively on this machine. "+
-			"Job execution will use remote runtime.",
-		requestedRuntime.Id,
-	)
-	rr.WarnContext(ctx, "Runtime not available natively", "runtime", requestedRuntime.Id)
+	// For RuntimeMatchQuery drivers, return success with nil runtime (driver handles matching)
+	rr.InfoContext(ctx, "Driver uses RuntimeMatchQuery for flexible matching", "driver", d.Name())
 	return &RuntimeResolutionResult{
-		RequiredRuntime: requestedRuntime,
-		FoundRuntime:    foundRuntime,
-		IsNative:        false,
-		Warning:         warning,
+		RequiredRuntime: nil,
+		FoundRuntime:    nil,
+		IsNative:        false, // N/A for RuntimeMatchQuery
+		Warning:         "",
 	}
 }
 
@@ -277,6 +348,15 @@ func (rr *RuntimeResolver) ListCompatibleRuntimes(
 	return compatibleRuntimes, nil
 }
 
+// constructRuntimeIDFromConfig constructs a runtime ID from driver configuration.
+// It takes the compiler version, C runtime, architecture, and C++ stdlib (if g++)
+// and constructs a valid runtime ID string.
+//
+// The generated runtime ID follows the format:
+//
+//	<platform>-<toolchain>-<compiler>-<version>-<cruntime>-<cruntimeVersion>-[<stdlib>-]<arch>
+//
+// For missing information, defaults are used (but config should always provide full versions):
 // isNativeRuntime determines if a runtime is native (not Docker, not remote peer)
 // This is a helper function that encodes the logic for determining native runtimes.
 // Currently simplified; actual implementation may need more sophisticated detection.
@@ -301,4 +381,26 @@ func LoadDriverConfig(startDir string) (*config.Config, string, error) {
 
 	// This wraps the existing config.LoadDriverConfig which does upward search
 	return config.LoadDriverConfig(startDir)
+}
+
+// isRuntimeMatchQueryDriver checks if the given error indicates a driver uses RuntimeMatchQuery.
+// AR driver and others that use RuntimeMatchQuery return a specific error from ConstructRuntimeID.
+func isRuntimeMatchQueryDriver(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	// Check for AR's specific error message
+	return errMsg == "ar driver does not use ConstructRuntimeID: it uses RuntimeMatchQuery for flexible runtime matching"
+}
+
+// isExplicitRuntimeIDDriver checks if a driver uses explicit runtime ID construction.
+// Most drivers (gcc, g++, clang, etc.) use explicit runtime IDs.
+// AR and similar drivers use RuntimeMatchQuery instead and return true.
+func isExplicitRuntimeIDDriver(d driver.Driver) bool {
+	// For now, assume all drivers except those that explicitly reject
+	// ConstructRuntimeID use explicit runtime IDs
+	// This could be enhanced with a dedicated interface method in the future
+	driverName := d.Name()
+	return driverName != "ar" // AR uses RuntimeMatchQuery
 }

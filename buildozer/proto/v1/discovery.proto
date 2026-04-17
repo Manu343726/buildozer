@@ -43,43 +43,40 @@ message PeerCapabilities {
   uint32 max_cache_size_mb = 7;
 }
 
-// PeerMetadata contains peer version and configuration info
-message PeerMetadata {
-  // Protocol version supported by this peer
-  string protocol_version = 1;
-
-  // Buildozer binary version on this peer
-  string buildozer_version = 2;
-
-  // Operating system (Linux, Darwin, Windows)
-  string operating_system = 3;
-
-  // Architecture (x86_64, aarch64, etc.)
-  string architecture = 4;
-}
-
-// PeerInfo contains information about a known peer
-message PeerInfo {
-  // Unique peer identifier
+// Peer contains all information about a discovered peer
+message Peer {
+  // Unique peer identifier (required)
   string peer_id = 1;
 
-  // Peer hostname
-  string hostname = 2;
+  // gRPC API endpoint (required)
+  buildozer.proto.v1.ApiUri api_uri = 2;
 
-  // gRPC API endpoint
-  buildozer.proto.v1.ApiUri grpc_uri = 3;
+  // Optional: Peer hostname
+  optional string hostname = 3;
 
-  // Optional: REST API endpoint
-  buildozer.proto.v1.ApiUri rest_api_uri = 4;
+  // Optional: Last time this peer announced itself
+  optional buildozer.proto.v1.TimeStamp last_seen = 4;
 
-  // Last time this peer announced itself
-  buildozer.proto.v1.TimeStamp last_seen = 5;
+  // Optional: Is this peer currently online/responsive?
+  optional bool is_online = 5;
 
-  // Is this peer currently online/responsive?
-  bool is_online = 6;
+  // Optional: Available runtimes on this peer
+  repeated buildozer.proto.v1.Runtime available_runtimes = 6;
 
-  // Available runtimes on this peer
-  repeated buildozer.proto.v1.Runtime available_runtimes = 7;
+  // Optional: Protocol version supported by this peer
+  optional string protocol_version = 7;
+
+  // Optional: Buildozer binary version on this peer
+  optional string buildozer_version = 8;
+
+  // Optional: Operating system (Linux, Darwin, Windows)
+  optional string operating_system = 9;
+
+  // Optional: Architecture (x86_64, aarch64, etc.)
+  optional string architecture = 10;
+
+  // Optional: Is this the local daemon that handled this request?
+  optional bool is_local = 11;
 }
 
 // ListPeersRequest requests the list of known peers
@@ -91,7 +88,7 @@ message ListPeersRequest {
 // ListPeersResponse returns all discovered peers
 message ListPeersResponse {
   // List of discovered peers
-  repeated PeerInfo peers = 1;
+  repeated Peer peers = 1;
 
   // Number of peers in the list
   int32 count = 2;
@@ -117,4 +114,66 @@ message TriggerDiscoveryResponse {
 
   // Status code
   Status status = 2;
+}
+
+// DaemonState represents the current state of a daemon
+enum DaemonState {
+  // Daemon is idle and ready for work
+  DAEMON_STATE_IDLE = 0;
+  // Daemon is currently processing jobs
+  DAEMON_STATE_BUSY = 1;
+  // Daemon is unhealthy or experiencing issues
+  DAEMON_STATE_UNHEALTHY = 2;
+}
+
+// DaemonStatus contains the current status of a daemon
+message DaemonStatus {
+  // Current state of the daemon
+  DaemonState state = 1;
+
+  // Load percentage (0-100)
+  uint32 load_percentage = 2;
+
+  // Number of active jobs
+  uint32 active_jobs = 3;
+
+  // Uptime in seconds
+  uint64 uptime_seconds = 4;
+}
+
+// AnnouncementType indicates whether an announcement is a request or response
+enum AnnouncementType {
+  // Initial announcement sent on network quiet (REQUEST type)
+  ANNOUNCEMENT_TYPE_REQUEST = 0;
+  // Response to another peer's announcement (RESPONSE type)
+  ANNOUNCEMENT_TYPE_RESPONSE = 1;
+}
+
+// AnnouncementEvent is sent by daemons to announce their presence to peers
+// This is sent via UDP multicast to 239.0.0.1:5354
+message AnnouncementEvent {
+  // Timestamp when announcement was created
+  buildozer.proto.v1.TimeStamp timestamp = 1;
+
+  // Peer information for this announcement
+  Peer peer = 2;
+
+  // Type of announcement (REQUEST or RESPONSE)
+  AnnouncementType type = 3;
+
+  // Peer ID of the peer that initiated this announcement cycle
+  // For REQUEST type: the originating peer's ID
+  // For RESPONSE type: the peer_id of the REQUEST that triggered this response
+  string initiator_peer_id = 4;
+
+  // List of peer IDs that should be ignored (suppress response)
+  // Used to avoid redundant announcements to peers we've already announced to recently
+  // REQUEST sender can include peers it recently heard from, so responders skip them
+  repeated string ignore_peer_ids = 5;
+
+  // List of known peers this daemon is aware of (full peer information)
+  // Used for gossip protocol to share knowledge about other peers in the network
+  // Receiving peers can use this to discover peers and register their information
+  // Example: A broadcasts with known_peers=[B, C]; B learns about C's endpoints, runtimes, etc
+  repeated Peer known_peers = 6;
 }

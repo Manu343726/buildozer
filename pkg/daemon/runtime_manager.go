@@ -23,9 +23,9 @@ type RuntimeManager struct {
 }
 
 // NewRuntimeManager creates a new runtime manager with lazy detection.
-func NewRuntimeManager() *RuntimeManager {
+func NewRuntimeManager(daemonID ...string) *RuntimeManager {
 	return &RuntimeManager{
-		Logger: Log().Child("RuntimeManager"),
+		Logger: Log(daemonID...).Child("RuntimeManager"),
 	}
 }
 
@@ -139,11 +139,11 @@ func (rm *RuntimeManager) filterRuntimes(runtimes []*v1.Runtime, filter string) 
 func (rm *RuntimeManager) matchesFilter(rt *v1.Runtime, filter string) bool {
 	switch filter {
 	case "cpp", "c++":
-		return rt.Toolchain == (*v1.Runtime_Cpp)(nil) && rt.GetCpp() != nil
+		return rt.ToolchainSpec == (*v1.Runtime_Cpp)(nil) && rt.GetCpp() != nil
 	case "go":
-		return rt.Toolchain == (*v1.Runtime_Go)(nil) && rt.GetGo() != nil
+		return rt.ToolchainSpec == (*v1.Runtime_Go)(nil) && rt.GetGo() != nil
 	case "rust":
-		return rt.Toolchain == (*v1.Runtime_Rust)(nil) && rt.GetRust() != nil
+		return rt.ToolchainSpec == (*v1.Runtime_Rust)(nil) && rt.GetRust() != nil
 	default:
 		return false
 	}

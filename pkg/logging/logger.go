@@ -167,6 +167,16 @@ func (r *Registry) log(ctx context.Context, record slog.Record, attrsOrGroups []
 		for _, sinkName := range config.sinkNames {
 			if sink, exists := r.GetSink(sinkName); exists && sink.Handler.Enabled(ctx, record.Level) {
 				handler := sink.Handler
+
+				// Extract daemon attribute if present - add it first via WithAttrs() so it appears early
+				// (daemon should appear right after level in output, before other attributes)
+				for _, ag := range attrsOrGroups {
+					if !ag.isGroup && ag.name == "daemon" {
+						handler = handler.WithAttrs([]slog.Attr{{Key: "daemon", Value: ag.value}})
+						break
+					}
+				}
+
 				// Simulate WithAttrs and WithGroup calls in order from the registryHandler buffer in order
 				//
 				// There should be a better way to do this, but since the slog text and JSON handlers implement WithAttrs() and WithGroup()
@@ -175,7 +185,8 @@ func (r *Registry) log(ctx context.Context, record slog.Record, attrsOrGroups []
 				for _, ag := range attrsOrGroups {
 					if ag.isGroup {
 						handler = handler.WithGroup(ag.name)
-					} else {
+					} else if ag.name != "daemon" {
+						// Skip daemon - already added above
 						handler = handler.WithAttrs([]slog.Attr{{Key: ag.name, Value: ag.value}})
 					}
 				}
@@ -438,6 +449,20 @@ func (r *Registry) GetGlobalLevel() slog.Level {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.globalLevel
+}
+
+// SetLoggingDir sets the base directory for file sinks
+func (r *Registry) SetLoggingDir(dir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loggingDir = dir
+}
+
+// GetLoggingDir returns the base directory for file sinks
+func (r *Registry) GetLoggingDir() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.loggingDir
 }
 
 // SetSinkLevel sets the level for a specific sink

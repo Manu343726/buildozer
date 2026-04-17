@@ -37,24 +37,20 @@ const (
 	JobServiceSubmitJobProcedure = "/buildozer.proto.v1.JobService/SubmitJob"
 	// JobServiceGetJobStatusProcedure is the fully-qualified name of the JobService's GetJobStatus RPC.
 	JobServiceGetJobStatusProcedure = "/buildozer.proto.v1.JobService/GetJobStatus"
-	// JobServiceWatchJobStatusProcedure is the fully-qualified name of the JobService's WatchJobStatus
-	// RPC.
-	JobServiceWatchJobStatusProcedure = "/buildozer.proto.v1.JobService/WatchJobStatus"
 	// JobServiceCancelJobProcedure is the fully-qualified name of the JobService's CancelJob RPC.
 	JobServiceCancelJobProcedure = "/buildozer.proto.v1.JobService/CancelJob"
 )
 
 // JobServiceClient is a client for the buildozer.proto.v1.JobService service.
 type JobServiceClient interface {
-	// SubmitJob submits a job for execution in the network
-	// The job is validated and queued for execution
-	SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest]) (*connect.Response[v1.SubmitJobResponse], error)
+	// SubmitJob submits a job for execution and streams all status updates
+	// Returns a stream starting with submission confirmation, then all status updates.
+	// The daemon waits for the client to connect before scheduling the job.
+	// This prevents the race condition where the job completes before the client connects to the stream.
+	SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest]) (*connect.ServerStreamForClient[v1.SubmitJobResponse], error)
 	// GetJobStatus queries the current status of a submitted job (single query)
 	// Returns the latest known status without blocking
 	GetJobStatus(context.Context, *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error)
-	// WatchJobStatus streams real-time job status updates
-	// Streams status changes as the job progresses through execution phases
-	WatchJobStatus(context.Context, *connect.Request[v1.WatchJobStatusRequest]) (*connect.ServerStreamForClient[v1.WatchJobStatusResponse], error)
 	// CancelJob cancels a job and optionally its dependents
 	// Cancellation is broadcast to all peers; dependent jobs in the DAG are also cancelled
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
@@ -83,12 +79,6 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(jobServiceMethods.ByName("GetJobStatus")),
 			connect.WithClientOptions(opts...),
 		),
-		watchJobStatus: connect.NewClient[v1.WatchJobStatusRequest, v1.WatchJobStatusResponse](
-			httpClient,
-			baseURL+JobServiceWatchJobStatusProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("WatchJobStatus")),
-			connect.WithClientOptions(opts...),
-		),
 		cancelJob: connect.NewClient[v1.CancelJobRequest, v1.CancelJobResponse](
 			httpClient,
 			baseURL+JobServiceCancelJobProcedure,
@@ -100,25 +90,19 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // jobServiceClient implements JobServiceClient.
 type jobServiceClient struct {
-	submitJob      *connect.Client[v1.SubmitJobRequest, v1.SubmitJobResponse]
-	getJobStatus   *connect.Client[v1.GetJobStatusRequest, v1.GetJobStatusResponse]
-	watchJobStatus *connect.Client[v1.WatchJobStatusRequest, v1.WatchJobStatusResponse]
-	cancelJob      *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	submitJob    *connect.Client[v1.SubmitJobRequest, v1.SubmitJobResponse]
+	getJobStatus *connect.Client[v1.GetJobStatusRequest, v1.GetJobStatusResponse]
+	cancelJob    *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
 }
 
 // SubmitJob calls buildozer.proto.v1.JobService.SubmitJob.
-func (c *jobServiceClient) SubmitJob(ctx context.Context, req *connect.Request[v1.SubmitJobRequest]) (*connect.Response[v1.SubmitJobResponse], error) {
-	return c.submitJob.CallUnary(ctx, req)
+func (c *jobServiceClient) SubmitJob(ctx context.Context, req *connect.Request[v1.SubmitJobRequest]) (*connect.ServerStreamForClient[v1.SubmitJobResponse], error) {
+	return c.submitJob.CallServerStream(ctx, req)
 }
 
 // GetJobStatus calls buildozer.proto.v1.JobService.GetJobStatus.
 func (c *jobServiceClient) GetJobStatus(ctx context.Context, req *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error) {
 	return c.getJobStatus.CallUnary(ctx, req)
-}
-
-// WatchJobStatus calls buildozer.proto.v1.JobService.WatchJobStatus.
-func (c *jobServiceClient) WatchJobStatus(ctx context.Context, req *connect.Request[v1.WatchJobStatusRequest]) (*connect.ServerStreamForClient[v1.WatchJobStatusResponse], error) {
-	return c.watchJobStatus.CallServerStream(ctx, req)
 }
 
 // CancelJob calls buildozer.proto.v1.JobService.CancelJob.
@@ -128,15 +112,14 @@ func (c *jobServiceClient) CancelJob(ctx context.Context, req *connect.Request[v
 
 // JobServiceHandler is an implementation of the buildozer.proto.v1.JobService service.
 type JobServiceHandler interface {
-	// SubmitJob submits a job for execution in the network
-	// The job is validated and queued for execution
-	SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest]) (*connect.Response[v1.SubmitJobResponse], error)
+	// SubmitJob submits a job for execution and streams all status updates
+	// Returns a stream starting with submission confirmation, then all status updates.
+	// The daemon waits for the client to connect before scheduling the job.
+	// This prevents the race condition where the job completes before the client connects to the stream.
+	SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest], *connect.ServerStream[v1.SubmitJobResponse]) error
 	// GetJobStatus queries the current status of a submitted job (single query)
 	// Returns the latest known status without blocking
 	GetJobStatus(context.Context, *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error)
-	// WatchJobStatus streams real-time job status updates
-	// Streams status changes as the job progresses through execution phases
-	WatchJobStatus(context.Context, *connect.Request[v1.WatchJobStatusRequest], *connect.ServerStream[v1.WatchJobStatusResponse]) error
 	// CancelJob cancels a job and optionally its dependents
 	// Cancellation is broadcast to all peers; dependent jobs in the DAG are also cancelled
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
@@ -149,7 +132,7 @@ type JobServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	jobServiceMethods := v1.File_buildozer_proto_v1_driver_proto.Services().ByName("JobService").Methods()
-	jobServiceSubmitJobHandler := connect.NewUnaryHandler(
+	jobServiceSubmitJobHandler := connect.NewServerStreamHandler(
 		JobServiceSubmitJobProcedure,
 		svc.SubmitJob,
 		connect.WithSchema(jobServiceMethods.ByName("SubmitJob")),
@@ -159,12 +142,6 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		JobServiceGetJobStatusProcedure,
 		svc.GetJobStatus,
 		connect.WithSchema(jobServiceMethods.ByName("GetJobStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	jobServiceWatchJobStatusHandler := connect.NewServerStreamHandler(
-		JobServiceWatchJobStatusProcedure,
-		svc.WatchJobStatus,
-		connect.WithSchema(jobServiceMethods.ByName("WatchJobStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	jobServiceCancelJobHandler := connect.NewUnaryHandler(
@@ -179,8 +156,6 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceSubmitJobHandler.ServeHTTP(w, r)
 		case JobServiceGetJobStatusProcedure:
 			jobServiceGetJobStatusHandler.ServeHTTP(w, r)
-		case JobServiceWatchJobStatusProcedure:
-			jobServiceWatchJobStatusHandler.ServeHTTP(w, r)
 		case JobServiceCancelJobProcedure:
 			jobServiceCancelJobHandler.ServeHTTP(w, r)
 		default:
@@ -192,16 +167,12 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 // UnimplementedJobServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedJobServiceHandler struct{}
 
-func (UnimplementedJobServiceHandler) SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest]) (*connect.Response[v1.SubmitJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.JobService.SubmitJob is not implemented"))
+func (UnimplementedJobServiceHandler) SubmitJob(context.Context, *connect.Request[v1.SubmitJobRequest], *connect.ServerStream[v1.SubmitJobResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.JobService.SubmitJob is not implemented"))
 }
 
 func (UnimplementedJobServiceHandler) GetJobStatus(context.Context, *connect.Request[v1.GetJobStatusRequest]) (*connect.Response[v1.GetJobStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.JobService.GetJobStatus is not implemented"))
-}
-
-func (UnimplementedJobServiceHandler) WatchJobStatus(context.Context, *connect.Request[v1.WatchJobStatusRequest], *connect.ServerStream[v1.WatchJobStatusResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("buildozer.proto.v1.JobService.WatchJobStatus is not implemented"))
 }
 
 func (UnimplementedJobServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {

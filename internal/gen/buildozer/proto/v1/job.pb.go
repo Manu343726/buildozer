@@ -27,47 +27,55 @@ type JobProgress_JobStatus int32
 const (
 	// In queue, waiting to be scheduled
 	JobProgress_JOB_STATUS_UNSPECIFIED JobProgress_JobStatus = 0
+	// Job received and acknowledged by daemon, queued for scheduling
+	JobProgress_JOB_STATUS_RECEIVED JobProgress_JobStatus = 1
 	// All dependencies met, ready to run
-	JobProgress_JOB_STATUS_READY JobProgress_JobStatus = 1
+	JobProgress_JOB_STATUS_READY JobProgress_JobStatus = 2
 	// Assigned to a peer
-	JobProgress_JOB_STATUS_SCHEDULED JobProgress_JobStatus = 2
+	JobProgress_JOB_STATUS_SCHEDULED JobProgress_JobStatus = 3
 	// Inputs being transferred to executing peer
-	JobProgress_JOB_STATUS_INPUT_TRANSFER JobProgress_JobStatus = 3
+	JobProgress_JOB_STATUS_INPUT_TRANSFER JobProgress_JobStatus = 4
 	// Currently executing
-	JobProgress_JOB_STATUS_RUNNING JobProgress_JobStatus = 4
+	JobProgress_JOB_STATUS_RUNNING JobProgress_JobStatus = 5
 	// Execution finished, outputs ready
-	JobProgress_JOB_STATUS_COMPLETED JobProgress_JobStatus = 5
+	JobProgress_JOB_STATUS_COMPLETED JobProgress_JobStatus = 6
 	// Outputs being transferred back to requesting client
-	JobProgress_JOB_STATUS_OUTPUT_TRANSFER JobProgress_JobStatus = 6
+	JobProgress_JOB_STATUS_OUTPUT_TRANSFER JobProgress_JobStatus = 7
 	// Execution failed
-	JobProgress_JOB_STATUS_FAILED JobProgress_JobStatus = 7
+	JobProgress_JOB_STATUS_FAILED JobProgress_JobStatus = 8
 	// Cancelled by user or due to dependency failure
-	JobProgress_JOB_STATUS_CANCELLED JobProgress_JobStatus = 8
+	JobProgress_JOB_STATUS_CANCELLED JobProgress_JobStatus = 9
+	// In queue, waiting to be assigned to peer (deprecated: use RECEIVED)
+	JobProgress_JOB_STATUS_QUEUED JobProgress_JobStatus = 10
 )
 
 // Enum value maps for JobProgress_JobStatus.
 var (
 	JobProgress_JobStatus_name = map[int32]string{
-		0: "JOB_STATUS_UNSPECIFIED",
-		1: "JOB_STATUS_READY",
-		2: "JOB_STATUS_SCHEDULED",
-		3: "JOB_STATUS_INPUT_TRANSFER",
-		4: "JOB_STATUS_RUNNING",
-		5: "JOB_STATUS_COMPLETED",
-		6: "JOB_STATUS_OUTPUT_TRANSFER",
-		7: "JOB_STATUS_FAILED",
-		8: "JOB_STATUS_CANCELLED",
+		0:  "JOB_STATUS_UNSPECIFIED",
+		1:  "JOB_STATUS_RECEIVED",
+		2:  "JOB_STATUS_READY",
+		3:  "JOB_STATUS_SCHEDULED",
+		4:  "JOB_STATUS_INPUT_TRANSFER",
+		5:  "JOB_STATUS_RUNNING",
+		6:  "JOB_STATUS_COMPLETED",
+		7:  "JOB_STATUS_OUTPUT_TRANSFER",
+		8:  "JOB_STATUS_FAILED",
+		9:  "JOB_STATUS_CANCELLED",
+		10: "JOB_STATUS_QUEUED",
 	}
 	JobProgress_JobStatus_value = map[string]int32{
 		"JOB_STATUS_UNSPECIFIED":     0,
-		"JOB_STATUS_READY":           1,
-		"JOB_STATUS_SCHEDULED":       2,
-		"JOB_STATUS_INPUT_TRANSFER":  3,
-		"JOB_STATUS_RUNNING":         4,
-		"JOB_STATUS_COMPLETED":       5,
-		"JOB_STATUS_OUTPUT_TRANSFER": 6,
-		"JOB_STATUS_FAILED":          7,
-		"JOB_STATUS_CANCELLED":       8,
+		"JOB_STATUS_RECEIVED":        1,
+		"JOB_STATUS_READY":           2,
+		"JOB_STATUS_SCHEDULED":       3,
+		"JOB_STATUS_INPUT_TRANSFER":  4,
+		"JOB_STATUS_RUNNING":         5,
+		"JOB_STATUS_COMPLETED":       6,
+		"JOB_STATUS_OUTPUT_TRANSFER": 7,
+		"JOB_STATUS_FAILED":          8,
+		"JOB_STATUS_CANCELLED":       9,
+		"JOB_STATUS_QUEUED":          10,
 	}
 )
 
@@ -95,32 +103,36 @@ func (x JobProgress_JobStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use JobProgress_JobStatus.Descriptor instead.
 func (JobProgress_JobStatus) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{3, 0}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{4, 0}
 }
 
 // Final status
 type JobResult_JobStatus int32
 
 const (
-	// Successfully completed and outputs fully delivered
+	// Unspecified status
 	JobResult_JOB_STATUS_UNSPECIFIED JobResult_JobStatus = 0
+	// Successfully completed and outputs fully delivered
+	JobResult_JOB_STATUS_COMPLETED JobResult_JobStatus = 1
 	// Execution failed
-	JobResult_JOB_STATUS_FAILED JobResult_JobStatus = 1
+	JobResult_JOB_STATUS_FAILED JobResult_JobStatus = 2
 	// Cancelled by user or due to dependency failure
-	JobResult_JOB_STATUS_CANCELLED JobResult_JobStatus = 2
+	JobResult_JOB_STATUS_CANCELLED JobResult_JobStatus = 3
 )
 
 // Enum value maps for JobResult_JobStatus.
 var (
 	JobResult_JobStatus_name = map[int32]string{
 		0: "JOB_STATUS_UNSPECIFIED",
-		1: "JOB_STATUS_FAILED",
-		2: "JOB_STATUS_CANCELLED",
+		1: "JOB_STATUS_COMPLETED",
+		2: "JOB_STATUS_FAILED",
+		3: "JOB_STATUS_CANCELLED",
 	}
 	JobResult_JobStatus_value = map[string]int32{
 		"JOB_STATUS_UNSPECIFIED": 0,
-		"JOB_STATUS_FAILED":      1,
-		"JOB_STATUS_CANCELLED":   2,
+		"JOB_STATUS_COMPLETED":   1,
+		"JOB_STATUS_FAILED":      2,
+		"JOB_STATUS_CANCELLED":   3,
 	}
 )
 
@@ -148,29 +160,33 @@ func (x JobResult_JobStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use JobResult_JobStatus.Descriptor instead.
 func (JobResult_JobStatus) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{5, 0}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{6, 0}
 }
 
 // Job is the generic base for all distributable work.
-// Each job has a runtime requirement and input/output specifications.
+// Each job has a runtime requirement (either explicit or via query) and input/output specifications.
 // The job type is determined by which field in the oneof is set.
 type Job struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique job ID (UUID, generated by client)
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Required runtime for this job
-	Runtime *Runtime `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	// Runtime requirement: either explicit Runtime or RuntimeMatchQuery for flexible matching
+	//
+	// Types that are valid to be assigned to RuntimeRequirement:
+	//
+	//	*Job_Runtime
+	//	*Job_RuntimeMatchQuery
+	RuntimeRequirement isJob_RuntimeRequirement `protobuf_oneof:"runtime_requirement"`
 	// Input data IDs (files, directories, abstract objects)
 	// Will be resolved from cache or network before execution
-	InputDataIds []string `protobuf:"bytes,3,rep,name=input_data_ids,json=inputDataIds,proto3" json:"input_data_ids,omitempty"`
-	// Expected output data IDs (what artifacts this job will produce)
-	ExpectedOutputDataIds []string `protobuf:"bytes,4,rep,name=expected_output_data_ids,json=expectedOutputDataIds,proto3" json:"expected_output_data_ids,omitempty"`
+	InputDataIds []string `protobuf:"bytes,4,rep,name=input_data_ids,json=inputDataIds,proto3" json:"input_data_ids,omitempty"`
 	// Job-specific parameters (oneof discriminates the job type)
 	//
 	// Types that are valid to be assigned to JobSpec:
 	//
 	//	*Job_CppCompile
 	//	*Job_CppLink
+	//	*Job_CppArchive
 	JobSpec isJob_JobSpec `protobuf_oneof:"job_spec"`
 	// SHA256(job_spec_type || runtime_id || input_hashes || recipe_hash)
 	// Used for caching: if any peer has output for this hash, return it directly
@@ -186,7 +202,18 @@ type Job struct {
 	DependencyIds []string `protobuf:"bytes,24,rep,name=dependency_ids,json=dependencyIds,proto3" json:"dependency_ids,omitempty"`
 	// Input data (files, directories, etc.)
 	// Included in Job to ensure inputs are not lost when job is passed around
-	Inputs        []*JobData `protobuf:"bytes,25,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	Inputs []*JobData `protobuf:"bytes,25,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	// Expected output data (files that this job will produce)
+	// Driver populates with output paths (no content initially).
+	// After execution, daemon populates content for sandboxed runtimes,
+	// or signals content: nil for local runtimes (file already written to disk).
+	// This field helps the system know which files to collect after execution.
+	Outputs []*JobData `protobuf:"bytes,27,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	// Original working directory where the job was submitted
+	// Runtime will replicate this directory structure to ensure relative paths resolve correctly
+	// Example: "/workspaces/buildozer/examples/cmake_project/build/debug"
+	// This allows compilers invoked with relative paths to find inputs and create outputs correctly
+	Cwd           string `protobuf:"bytes,26,opt,name=cwd,proto3" json:"cwd,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -228,9 +255,27 @@ func (x *Job) GetId() string {
 	return ""
 }
 
+func (x *Job) GetRuntimeRequirement() isJob_RuntimeRequirement {
+	if x != nil {
+		return x.RuntimeRequirement
+	}
+	return nil
+}
+
 func (x *Job) GetRuntime() *Runtime {
 	if x != nil {
-		return x.Runtime
+		if x, ok := x.RuntimeRequirement.(*Job_Runtime); ok {
+			return x.Runtime
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetRuntimeMatchQuery() *RuntimeMatchQuery {
+	if x != nil {
+		if x, ok := x.RuntimeRequirement.(*Job_RuntimeMatchQuery); ok {
+			return x.RuntimeMatchQuery
+		}
 	}
 	return nil
 }
@@ -238,13 +283,6 @@ func (x *Job) GetRuntime() *Runtime {
 func (x *Job) GetInputDataIds() []string {
 	if x != nil {
 		return x.InputDataIds
-	}
-	return nil
-}
-
-func (x *Job) GetExpectedOutputDataIds() []string {
-	if x != nil {
-		return x.ExpectedOutputDataIds
 	}
 	return nil
 }
@@ -269,6 +307,15 @@ func (x *Job) GetCppLink() *CppLinkJob {
 	if x != nil {
 		if x, ok := x.JobSpec.(*Job_CppLink); ok {
 			return x.CppLink
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetCppArchive() *CppArchiveJob {
+	if x != nil {
+		if x, ok := x.JobSpec.(*Job_CppArchive); ok {
+			return x.CppArchive
 		}
 	}
 	return nil
@@ -316,6 +363,36 @@ func (x *Job) GetInputs() []*JobData {
 	return nil
 }
 
+func (x *Job) GetOutputs() []*JobData {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
+func (x *Job) GetCwd() string {
+	if x != nil {
+		return x.Cwd
+	}
+	return ""
+}
+
+type isJob_RuntimeRequirement interface {
+	isJob_RuntimeRequirement()
+}
+
+type Job_Runtime struct {
+	Runtime *Runtime `protobuf:"bytes,2,opt,name=runtime,proto3,oneof"`
+}
+
+type Job_RuntimeMatchQuery struct {
+	RuntimeMatchQuery *RuntimeMatchQuery `protobuf:"bytes,3,opt,name=runtime_match_query,json=runtimeMatchQuery,proto3,oneof"`
+}
+
+func (*Job_Runtime) isJob_RuntimeRequirement() {}
+
+func (*Job_RuntimeMatchQuery) isJob_RuntimeRequirement() {}
+
 type isJob_JobSpec interface {
 	isJob_JobSpec()
 }
@@ -325,12 +402,18 @@ type Job_CppCompile struct {
 }
 
 type Job_CppLink struct {
-	CppLink *CppLinkJob `protobuf:"bytes,11,opt,name=cpp_link,json=cppLink,proto3,oneof"` // Future: GoCompileJob go_compile = 12, RustCompileJob rust_compile = 13, etc.
+	CppLink *CppLinkJob `protobuf:"bytes,11,opt,name=cpp_link,json=cppLink,proto3,oneof"`
+}
+
+type Job_CppArchive struct {
+	CppArchive *CppArchiveJob `protobuf:"bytes,12,opt,name=cpp_archive,json=cppArchive,proto3,oneof"` // Future: GoCompileJob go_compile = 13, RustCompileJob rust_compile = 14, etc.
 }
 
 func (*Job_CppCompile) isJob_JobSpec() {}
 
 func (*Job_CppLink) isJob_JobSpec() {}
+
+func (*Job_CppArchive) isJob_JobSpec() {}
 
 // CppCompileJob: Compile source file(s) to object file(s)
 // Inputs: source files, compiler args
@@ -423,16 +506,20 @@ type CppLinkJob struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Object file paths (input artifacts from compile jobs)
 	ObjectFiles []string `protobuf:"bytes,1,rep,name=object_files,json=objectFiles,proto3" json:"object_files,omitempty"`
-	// Library paths to link (-l flags)
+	// Named library names to link with -l flag (e.g., "m" for -lm, "pthread" for -lpthread)
+	// These are linked by name, and linker searches library_dirs and system paths
 	Libraries []string `protobuf:"bytes,2,rep,name=libraries,proto3" json:"libraries,omitempty"`
+	// Full-path library files to link directly (e.g., "lib/libmath.a", "/usr/lib/libcustom.so")
+	// These are passed directly to the linker without -l flag
+	LibraryFiles []string `protobuf:"bytes,3,rep,name=library_files,json=libraryFiles,proto3" json:"library_files,omitempty"`
 	// Library search directories (-L flags)
-	LibraryDirs []string `protobuf:"bytes,3,rep,name=library_dirs,json=libraryDirs,proto3" json:"library_dirs,omitempty"`
+	LibraryDirs []string `protobuf:"bytes,4,rep,name=library_dirs,json=libraryDirs,proto3" json:"library_dirs,omitempty"`
 	// Linker arguments (e.g., "-Wl,--as-needed")
-	LinkerArgs []string `protobuf:"bytes,4,rep,name=linker_args,json=linkerArgs,proto3" json:"linker_args,omitempty"`
+	LinkerArgs []string `protobuf:"bytes,5,rep,name=linker_args,json=linkerArgs,proto3" json:"linker_args,omitempty"`
 	// Output file path (executable or library)
-	OutputFile string `protobuf:"bytes,5,opt,name=output_file,json=outputFile,proto3" json:"output_file,omitempty"`
+	OutputFile string `protobuf:"bytes,6,opt,name=output_file,json=outputFile,proto3" json:"output_file,omitempty"`
 	// Whether output is shared library (vs. static or executable)
-	IsSharedLibrary bool `protobuf:"varint,6,opt,name=is_shared_library,json=isSharedLibrary,proto3" json:"is_shared_library,omitempty"`
+	IsSharedLibrary bool `protobuf:"varint,7,opt,name=is_shared_library,json=isSharedLibrary,proto3" json:"is_shared_library,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -481,6 +568,13 @@ func (x *CppLinkJob) GetLibraries() []string {
 	return nil
 }
 
+func (x *CppLinkJob) GetLibraryFiles() []string {
+	if x != nil {
+		return x.LibraryFiles
+	}
+	return nil
+}
+
 func (x *CppLinkJob) GetLibraryDirs() []string {
 	if x != nil {
 		return x.LibraryDirs
@@ -509,6 +603,73 @@ func (x *CppLinkJob) GetIsSharedLibrary() bool {
 	return false
 }
 
+// CppArchiveJob: Create a static library archive from object files
+// Inputs: object files to archive
+// Outputs: static library archive (.a file)
+type CppArchiveJob struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Object file paths (input artifacts from compile jobs)
+	InputFiles []string `protobuf:"bytes,1,rep,name=input_files,json=inputFiles,proto3" json:"input_files,omitempty"`
+	// Archive operation mode (e.g., "r" for replace, "u" for update, "c" for create)
+	// Common ar command flags: r (replace), u (update), c (create), v (verbose)
+	ArFlags []string `protobuf:"bytes,2,rep,name=ar_flags,json=arFlags,proto3" json:"ar_flags,omitempty"`
+	// Output archive file path (.a file)
+	OutputFile    string `protobuf:"bytes,3,opt,name=output_file,json=outputFile,proto3" json:"output_file,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CppArchiveJob) Reset() {
+	*x = CppArchiveJob{}
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CppArchiveJob) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CppArchiveJob) ProtoMessage() {}
+
+func (x *CppArchiveJob) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CppArchiveJob.ProtoReflect.Descriptor instead.
+func (*CppArchiveJob) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CppArchiveJob) GetInputFiles() []string {
+	if x != nil {
+		return x.InputFiles
+	}
+	return nil
+}
+
+func (x *CppArchiveJob) GetArFlags() []string {
+	if x != nil {
+		return x.ArFlags
+	}
+	return nil
+}
+
+func (x *CppArchiveJob) GetOutputFile() string {
+	if x != nil {
+		return x.OutputFile
+	}
+	return ""
+}
+
 // JobProgress represents real-time progress updates during execution
 type JobProgress struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -522,14 +683,22 @@ type JobProgress struct {
 	// Which peer is executing this job (if SCHEDULED or RUNNING)
 	ExecutingPeerId string `protobuf:"bytes,5,opt,name=executing_peer_id,json=executingPeerId,proto3" json:"executing_peer_id,omitempty"`
 	// Log output (accumulated)
-	LogOutput     string `protobuf:"bytes,6,opt,name=log_output,json=logOutput,proto3" json:"log_output,omitempty"`
+	LogOutput string `protobuf:"bytes,6,opt,name=log_output,json=logOutput,proto3" json:"log_output,omitempty"`
+	// Full job result (only populated on terminal status: COMPLETED, FAILED, CANCELLED)
+	// Contains output data materialized by the runtime:
+	//   - For sandboxed runtimes: outputs field includes content (driver must write)
+	//   - For local unsandboxed: outputs field has empty content (driver validates hash only)
+	//
+	// This allows drivers to materialize outputs transparently in one streaming message
+	// without needing separate RPC calls to fetch output data.
+	Result        *JobResult `protobuf:"bytes,7,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JobProgress) Reset() {
 	*x = JobProgress{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -541,7 +710,7 @@ func (x *JobProgress) String() string {
 func (*JobProgress) ProtoMessage() {}
 
 func (x *JobProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -554,7 +723,7 @@ func (x *JobProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobProgress.ProtoReflect.Descriptor instead.
 func (*JobProgress) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{3}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JobProgress) GetJobId() string {
@@ -597,6 +766,13 @@ func (x *JobProgress) GetLogOutput() string {
 		return x.LogOutput
 	}
 	return ""
+}
+
+func (x *JobProgress) GetResult() *JobResult {
+	if x != nil {
+		return x.Result
+	}
+	return nil
 }
 
 // JobTimings tracks exact time ranges and durations of job processing through all phases
@@ -653,7 +829,7 @@ type JobTimings struct {
 
 func (x *JobTimings) Reset() {
 	*x = JobTimings{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +841,7 @@ func (x *JobTimings) String() string {
 func (*JobTimings) ProtoMessage() {}
 
 func (x *JobTimings) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +854,7 @@ func (x *JobTimings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobTimings.ProtoReflect.Descriptor instead.
 func (*JobTimings) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{4}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *JobTimings) GetJobId() string {
@@ -835,14 +1011,21 @@ type JobResult struct {
 	// Runtime used for this execution (for artifact tagging)
 	RuntimeUsed *Runtime `protobuf:"bytes,9,opt,name=runtime_used,json=runtimeUsed,proto3" json:"runtime_used,omitempty"`
 	// Exit code (0 = success, non-zero = failure)
-	ExitCode      int32 `protobuf:"varint,10,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	ExitCode int32 `protobuf:"varint,10,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	// Output data (files, directories, etc.) materialized by the runtime.
+	// Content presence signals I/O ownership:
+	// - Content filled: Runtime is sandboxed or remote peer → driver must extract/write files
+	// - Content empty: Runtime is local unsandboxed or already wrote files → driver validates hash only
+	// This follows the same transparent pattern as inputs:
+	// Daemon loads inputs when content is empty, driver materializes outputs when content is filled.
+	Outputs       []*JobData `protobuf:"bytes,11,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -854,7 +1037,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -867,7 +1050,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{5}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *JobResult) GetJobId() string {
@@ -940,6 +1123,13 @@ func (x *JobResult) GetExitCode() int32 {
 	return 0
 }
 
+func (x *JobResult) GetOutputs() []*JobData {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
 // JobDataTransfer tracks data sizes and network I/O metrics
 type JobDataTransfer struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -959,7 +1149,7 @@ type JobDataTransfer struct {
 
 func (x *JobDataTransfer) Reset() {
 	*x = JobDataTransfer{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -971,7 +1161,7 @@ func (x *JobDataTransfer) String() string {
 func (*JobDataTransfer) ProtoMessage() {}
 
 func (x *JobDataTransfer) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -984,7 +1174,7 @@ func (x *JobDataTransfer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobDataTransfer.ProtoReflect.Descriptor instead.
 func (*JobDataTransfer) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{6}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *JobDataTransfer) GetInputDataSize() *Size {
@@ -1043,7 +1233,7 @@ type JobExecutionMetrics struct {
 
 func (x *JobExecutionMetrics) Reset() {
 	*x = JobExecutionMetrics{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[7]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1055,7 +1245,7 @@ func (x *JobExecutionMetrics) String() string {
 func (*JobExecutionMetrics) ProtoMessage() {}
 
 func (x *JobExecutionMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[7]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1068,7 +1258,7 @@ func (x *JobExecutionMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobExecutionMetrics.ProtoReflect.Descriptor instead.
 func (*JobExecutionMetrics) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{7}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *JobExecutionMetrics) GetExecutingPeerId() string {
@@ -1132,7 +1322,7 @@ type JobStatistics struct {
 
 func (x *JobStatistics) Reset() {
 	*x = JobStatistics{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[8]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1144,7 +1334,7 @@ func (x *JobStatistics) String() string {
 func (*JobStatistics) ProtoMessage() {}
 
 func (x *JobStatistics) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[8]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1157,7 +1347,7 @@ func (x *JobStatistics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobStatistics.ProtoReflect.Descriptor instead.
 func (*JobStatistics) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{8}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *JobStatistics) GetJobId() string {
@@ -1208,7 +1398,7 @@ type JobDependency struct {
 
 func (x *JobDependency) Reset() {
 	*x = JobDependency{}
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[9]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1410,7 @@ func (x *JobDependency) String() string {
 func (*JobDependency) ProtoMessage() {}
 
 func (x *JobDependency) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_job_proto_msgTypes[9]
+	mi := &file_buildozer_proto_v1_job_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1423,7 @@ func (x *JobDependency) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobDependency.ProtoReflect.Descriptor instead.
 func (*JobDependency) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{9}
+	return file_buildozer_proto_v1_job_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *JobDependency) GetDependentJobId() string {
@@ -1254,22 +1444,27 @@ var File_buildozer_proto_v1_job_proto protoreflect.FileDescriptor
 
 const file_buildozer_proto_v1_job_proto_rawDesc = "" +
 	"\n" +
-	"\x1cbuildozer/proto/v1/job.proto\x12\x12buildozer.proto.v1\x1a!buildozer/proto/v1/job_data.proto\x1a buildozer/proto/v1/runtime.proto\x1a#buildozer/proto/v1/vocabulary.proto\"\xfb\x04\n" +
+	"\x1cbuildozer/proto/v1/job.proto\x12\x12buildozer.proto.v1\x1a!buildozer/proto/v1/job_data.proto\x1a buildozer/proto/v1/runtime.proto\x1a#buildozer/proto/v1/vocabulary.proto\"\xc3\x06\n" +
 	"\x03Job\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x125\n" +
-	"\aruntime\x18\x02 \x01(\v2\x1b.buildozer.proto.v1.RuntimeR\aruntime\x12$\n" +
-	"\x0einput_data_ids\x18\x03 \x03(\tR\finputDataIds\x127\n" +
-	"\x18expected_output_data_ids\x18\x04 \x03(\tR\x15expectedOutputDataIds\x12D\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x127\n" +
+	"\aruntime\x18\x02 \x01(\v2\x1b.buildozer.proto.v1.RuntimeH\x00R\aruntime\x12W\n" +
+	"\x13runtime_match_query\x18\x03 \x01(\v2%.buildozer.proto.v1.RuntimeMatchQueryH\x00R\x11runtimeMatchQuery\x12$\n" +
+	"\x0einput_data_ids\x18\x04 \x03(\tR\finputDataIds\x12D\n" +
 	"\vcpp_compile\x18\n" +
-	" \x01(\v2!.buildozer.proto.v1.CppCompileJobH\x00R\n" +
+	" \x01(\v2!.buildozer.proto.v1.CppCompileJobH\x01R\n" +
 	"cppCompile\x12;\n" +
-	"\bcpp_link\x18\v \x01(\v2\x1e.buildozer.proto.v1.CppLinkJobH\x00R\acppLink\x12;\n" +
+	"\bcpp_link\x18\v \x01(\v2\x1e.buildozer.proto.v1.CppLinkJobH\x01R\acppLink\x12D\n" +
+	"\vcpp_archive\x18\f \x01(\v2!.buildozer.proto.v1.CppArchiveJobH\x01R\n" +
+	"cppArchive\x12;\n" +
 	"\fcontent_hash\x18\x14 \x01(\v2\x18.buildozer.proto.v1.HashR\vcontentHash\x12(\n" +
 	"\x10source_client_id\x18\x15 \x01(\tR\x0esourceClientId\x12@\n" +
 	"\fsubmitted_at\x18\x16 \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\vsubmittedAt\x12:\n" +
 	"\atimeout\x18\x17 \x01(\v2 .buildozer.proto.v1.TimeDurationR\atimeout\x12%\n" +
 	"\x0edependency_ids\x18\x18 \x03(\tR\rdependencyIds\x123\n" +
-	"\x06inputs\x18\x19 \x03(\v2\x1b.buildozer.proto.v1.JobDataR\x06inputsB\n" +
+	"\x06inputs\x18\x19 \x03(\v2\x1b.buildozer.proto.v1.JobDataR\x06inputs\x125\n" +
+	"\aoutputs\x18\x1b \x03(\v2\x1b.buildozer.proto.v1.JobDataR\aoutputs\x12\x10\n" +
+	"\x03cwd\x18\x1a \x01(\tR\x03cwdB\x15\n" +
+	"\x13runtime_requirementB\n" +
 	"\n" +
 	"\bjob_spec\"\xb5\x01\n" +
 	"\rCppCompileJob\x12!\n" +
@@ -1278,17 +1473,24 @@ const file_buildozer_proto_v1_job_proto_rawDesc = "" +
 	"\finclude_dirs\x18\x03 \x03(\tR\vincludeDirs\x12\x18\n" +
 	"\adefines\x18\x04 \x03(\tR\adefines\x12\x1f\n" +
 	"\voutput_file\x18\x05 \x01(\tR\n" +
-	"outputFile\"\xde\x01\n" +
+	"outputFile\"\x83\x02\n" +
 	"\n" +
 	"CppLinkJob\x12!\n" +
 	"\fobject_files\x18\x01 \x03(\tR\vobjectFiles\x12\x1c\n" +
-	"\tlibraries\x18\x02 \x03(\tR\tlibraries\x12!\n" +
-	"\flibrary_dirs\x18\x03 \x03(\tR\vlibraryDirs\x12\x1f\n" +
-	"\vlinker_args\x18\x04 \x03(\tR\n" +
+	"\tlibraries\x18\x02 \x03(\tR\tlibraries\x12#\n" +
+	"\rlibrary_files\x18\x03 \x03(\tR\flibraryFiles\x12!\n" +
+	"\flibrary_dirs\x18\x04 \x03(\tR\vlibraryDirs\x12\x1f\n" +
+	"\vlinker_args\x18\x05 \x03(\tR\n" +
 	"linkerArgs\x12\x1f\n" +
-	"\voutput_file\x18\x05 \x01(\tR\n" +
+	"\voutput_file\x18\x06 \x01(\tR\n" +
 	"outputFile\x12*\n" +
-	"\x11is_shared_library\x18\x06 \x01(\bR\x0fisSharedLibrary\"\xb7\x04\n" +
+	"\x11is_shared_library\x18\a \x01(\bR\x0fisSharedLibrary\"l\n" +
+	"\rCppArchiveJob\x12\x1f\n" +
+	"\vinput_files\x18\x01 \x03(\tR\n" +
+	"inputFiles\x12\x19\n" +
+	"\bar_flags\x18\x02 \x03(\tR\aarFlags\x12\x1f\n" +
+	"\voutput_file\x18\x03 \x01(\tR\n" +
+	"outputFile\"\x9e\x05\n" +
 	"\vJobProgress\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12A\n" +
 	"\x06status\x18\x02 \x01(\x0e2).buildozer.proto.v1.JobProgress.JobStatusR\x06status\x12I\n" +
@@ -1297,17 +1499,21 @@ const file_buildozer_proto_v1_job_proto_rawDesc = "" +
 	"updated_at\x18\x04 \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\tupdatedAt\x12*\n" +
 	"\x11executing_peer_id\x18\x05 \x01(\tR\x0fexecutingPeerId\x12\x1d\n" +
 	"\n" +
-	"log_output\x18\x06 \x01(\tR\tlogOutput\"\xf9\x01\n" +
+	"log_output\x18\x06 \x01(\tR\tlogOutput\x125\n" +
+	"\x06result\x18\a \x01(\v2\x1d.buildozer.proto.v1.JobResultR\x06result\"\xa9\x02\n" +
 	"\tJobStatus\x12\x1a\n" +
-	"\x16JOB_STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
-	"\x10JOB_STATUS_READY\x10\x01\x12\x18\n" +
-	"\x14JOB_STATUS_SCHEDULED\x10\x02\x12\x1d\n" +
-	"\x19JOB_STATUS_INPUT_TRANSFER\x10\x03\x12\x16\n" +
-	"\x12JOB_STATUS_RUNNING\x10\x04\x12\x18\n" +
-	"\x14JOB_STATUS_COMPLETED\x10\x05\x12\x1e\n" +
-	"\x1aJOB_STATUS_OUTPUT_TRANSFER\x10\x06\x12\x15\n" +
-	"\x11JOB_STATUS_FAILED\x10\a\x12\x18\n" +
-	"\x14JOB_STATUS_CANCELLED\x10\b\"\xae\v\n" +
+	"\x16JOB_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13JOB_STATUS_RECEIVED\x10\x01\x12\x14\n" +
+	"\x10JOB_STATUS_READY\x10\x02\x12\x18\n" +
+	"\x14JOB_STATUS_SCHEDULED\x10\x03\x12\x1d\n" +
+	"\x19JOB_STATUS_INPUT_TRANSFER\x10\x04\x12\x16\n" +
+	"\x12JOB_STATUS_RUNNING\x10\x05\x12\x18\n" +
+	"\x14JOB_STATUS_COMPLETED\x10\x06\x12\x1e\n" +
+	"\x1aJOB_STATUS_OUTPUT_TRANSFER\x10\a\x12\x15\n" +
+	"\x11JOB_STATUS_FAILED\x10\b\x12\x18\n" +
+	"\x14JOB_STATUS_CANCELLED\x10\t\x12\x15\n" +
+	"\x11JOB_STATUS_QUEUED\x10\n" +
+	"\"\xae\v\n" +
 	"\n" +
 	"JobTimings\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12K\n" +
@@ -1329,7 +1535,7 @@ const file_buildozer_proto_v1_job_proto_rawDesc = "" +
 	"\x18output_transfer_duration\x18\x10 \x01(\v2 .buildozer.proto.v1.TimeDurationR\x16outputTransferDuration\x12G\n" +
 	"\x0etotal_duration\x18\x11 \x01(\v2 .buildozer.proto.v1.TimeDurationR\rtotalDuration\x12P\n" +
 	"\x13wall_clock_duration\x18\x12 \x01(\v2 .buildozer.proto.v1.TimeDurationR\x11wallClockDuration\x12K\n" +
-	"\x10compute_duration\x18\x13 \x01(\v2 .buildozer.proto.v1.TimeDurationR\x0fcomputeDuration\"\xb2\x04\n" +
+	"\x10compute_duration\x18\x13 \x01(\v2 .buildozer.proto.v1.TimeDurationR\x0fcomputeDuration\"\x83\x05\n" +
 	"\tJobResult\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12?\n" +
 	"\x06status\x18\x02 \x01(\x0e2'.buildozer.proto.v1.JobResult.JobStatusR\x06status\x12&\n" +
@@ -1343,11 +1549,13 @@ const file_buildozer_proto_v1_job_proto_rawDesc = "" +
 	"\fcompleted_at\x18\b \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\vcompletedAt\x12>\n" +
 	"\fruntime_used\x18\t \x01(\v2\x1b.buildozer.proto.v1.RuntimeR\vruntimeUsed\x12\x1b\n" +
 	"\texit_code\x18\n" +
-	" \x01(\x05R\bexitCode\"X\n" +
+	" \x01(\x05R\bexitCode\x125\n" +
+	"\aoutputs\x18\v \x03(\v2\x1b.buildozer.proto.v1.JobDataR\aoutputs\"r\n" +
 	"\tJobStatus\x12\x1a\n" +
-	"\x16JOB_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11JOB_STATUS_FAILED\x10\x01\x12\x18\n" +
-	"\x14JOB_STATUS_CANCELLED\x10\x02\"\xf9\x02\n" +
+	"\x16JOB_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14JOB_STATUS_COMPLETED\x10\x01\x12\x15\n" +
+	"\x11JOB_STATUS_FAILED\x10\x02\x12\x18\n" +
+	"\x14JOB_STATUS_CANCELLED\x10\x03\"\xf9\x02\n" +
 	"\x0fJobDataTransfer\x12@\n" +
 	"\x0finput_data_size\x18\x01 \x01(\v2\x18.buildozer.proto.v1.SizeR\rinputDataSize\x12B\n" +
 	"\x10output_data_size\x18\x02 \x01(\v2\x18.buildozer.proto.v1.SizeR\x0eoutputDataSize\x12N\n" +
@@ -1385,79 +1593,86 @@ func file_buildozer_proto_v1_job_proto_rawDescGZIP() []byte {
 }
 
 var file_buildozer_proto_v1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_buildozer_proto_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_buildozer_proto_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_buildozer_proto_v1_job_proto_goTypes = []any{
 	(JobProgress_JobStatus)(0),   // 0: buildozer.proto.v1.JobProgress.JobStatus
 	(JobResult_JobStatus)(0),     // 1: buildozer.proto.v1.JobResult.JobStatus
 	(*Job)(nil),                  // 2: buildozer.proto.v1.Job
 	(*CppCompileJob)(nil),        // 3: buildozer.proto.v1.CppCompileJob
 	(*CppLinkJob)(nil),           // 4: buildozer.proto.v1.CppLinkJob
-	(*JobProgress)(nil),          // 5: buildozer.proto.v1.JobProgress
-	(*JobTimings)(nil),           // 6: buildozer.proto.v1.JobTimings
-	(*JobResult)(nil),            // 7: buildozer.proto.v1.JobResult
-	(*JobDataTransfer)(nil),      // 8: buildozer.proto.v1.JobDataTransfer
-	(*JobExecutionMetrics)(nil),  // 9: buildozer.proto.v1.JobExecutionMetrics
-	(*JobStatistics)(nil),        // 10: buildozer.proto.v1.JobStatistics
-	(*JobDependency)(nil),        // 11: buildozer.proto.v1.JobDependency
-	(*Runtime)(nil),              // 12: buildozer.proto.v1.Runtime
-	(*Hash)(nil),                 // 13: buildozer.proto.v1.Hash
-	(*TimeStamp)(nil),            // 14: buildozer.proto.v1.TimeStamp
-	(*TimeDuration)(nil),         // 15: buildozer.proto.v1.TimeDuration
-	(*JobData)(nil),              // 16: buildozer.proto.v1.JobData
-	(*Percentage)(nil),           // 17: buildozer.proto.v1.Percentage
-	(*TimeRange)(nil),            // 18: buildozer.proto.v1.TimeRange
-	(*Size)(nil),                 // 19: buildozer.proto.v1.Size
-	(*ResourceUsage)(nil),        // 20: buildozer.proto.v1.ResourceUsage
-	(*CacheQueryStatistics)(nil), // 21: buildozer.proto.v1.CacheQueryStatistics
+	(*CppArchiveJob)(nil),        // 5: buildozer.proto.v1.CppArchiveJob
+	(*JobProgress)(nil),          // 6: buildozer.proto.v1.JobProgress
+	(*JobTimings)(nil),           // 7: buildozer.proto.v1.JobTimings
+	(*JobResult)(nil),            // 8: buildozer.proto.v1.JobResult
+	(*JobDataTransfer)(nil),      // 9: buildozer.proto.v1.JobDataTransfer
+	(*JobExecutionMetrics)(nil),  // 10: buildozer.proto.v1.JobExecutionMetrics
+	(*JobStatistics)(nil),        // 11: buildozer.proto.v1.JobStatistics
+	(*JobDependency)(nil),        // 12: buildozer.proto.v1.JobDependency
+	(*Runtime)(nil),              // 13: buildozer.proto.v1.Runtime
+	(*RuntimeMatchQuery)(nil),    // 14: buildozer.proto.v1.RuntimeMatchQuery
+	(*Hash)(nil),                 // 15: buildozer.proto.v1.Hash
+	(*TimeStamp)(nil),            // 16: buildozer.proto.v1.TimeStamp
+	(*TimeDuration)(nil),         // 17: buildozer.proto.v1.TimeDuration
+	(*JobData)(nil),              // 18: buildozer.proto.v1.JobData
+	(*Percentage)(nil),           // 19: buildozer.proto.v1.Percentage
+	(*TimeRange)(nil),            // 20: buildozer.proto.v1.TimeRange
+	(*Size)(nil),                 // 21: buildozer.proto.v1.Size
+	(*ResourceUsage)(nil),        // 22: buildozer.proto.v1.ResourceUsage
+	(*CacheQueryStatistics)(nil), // 23: buildozer.proto.v1.CacheQueryStatistics
 }
 var file_buildozer_proto_v1_job_proto_depIdxs = []int32{
-	12, // 0: buildozer.proto.v1.Job.runtime:type_name -> buildozer.proto.v1.Runtime
-	3,  // 1: buildozer.proto.v1.Job.cpp_compile:type_name -> buildozer.proto.v1.CppCompileJob
-	4,  // 2: buildozer.proto.v1.Job.cpp_link:type_name -> buildozer.proto.v1.CppLinkJob
-	13, // 3: buildozer.proto.v1.Job.content_hash:type_name -> buildozer.proto.v1.Hash
-	14, // 4: buildozer.proto.v1.Job.submitted_at:type_name -> buildozer.proto.v1.TimeStamp
-	15, // 5: buildozer.proto.v1.Job.timeout:type_name -> buildozer.proto.v1.TimeDuration
-	16, // 6: buildozer.proto.v1.Job.inputs:type_name -> buildozer.proto.v1.JobData
-	0,  // 7: buildozer.proto.v1.JobProgress.status:type_name -> buildozer.proto.v1.JobProgress.JobStatus
-	17, // 8: buildozer.proto.v1.JobProgress.progress_percent:type_name -> buildozer.proto.v1.Percentage
-	14, // 9: buildozer.proto.v1.JobProgress.updated_at:type_name -> buildozer.proto.v1.TimeStamp
-	18, // 10: buildozer.proto.v1.JobTimings.pending_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 11: buildozer.proto.v1.JobTimings.ready_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 12: buildozer.proto.v1.JobTimings.scheduled_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 13: buildozer.proto.v1.JobTimings.input_transfer_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 14: buildozer.proto.v1.JobTimings.running_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 15: buildozer.proto.v1.JobTimings.completed_time_range:type_name -> buildozer.proto.v1.TimeRange
-	18, // 16: buildozer.proto.v1.JobTimings.output_transfer_time_range:type_name -> buildozer.proto.v1.TimeRange
-	14, // 17: buildozer.proto.v1.JobTimings.failed_at:type_name -> buildozer.proto.v1.TimeStamp
-	14, // 18: buildozer.proto.v1.JobTimings.cancelled_at:type_name -> buildozer.proto.v1.TimeStamp
-	15, // 19: buildozer.proto.v1.JobTimings.pending_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 20: buildozer.proto.v1.JobTimings.ready_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 21: buildozer.proto.v1.JobTimings.scheduled_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 22: buildozer.proto.v1.JobTimings.input_transfer_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 23: buildozer.proto.v1.JobTimings.running_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 24: buildozer.proto.v1.JobTimings.output_transfer_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 25: buildozer.proto.v1.JobTimings.total_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 26: buildozer.proto.v1.JobTimings.wall_clock_duration:type_name -> buildozer.proto.v1.TimeDuration
-	15, // 27: buildozer.proto.v1.JobTimings.compute_duration:type_name -> buildozer.proto.v1.TimeDuration
-	1,  // 28: buildozer.proto.v1.JobResult.status:type_name -> buildozer.proto.v1.JobResult.JobStatus
-	14, // 29: buildozer.proto.v1.JobResult.started_at:type_name -> buildozer.proto.v1.TimeStamp
-	14, // 30: buildozer.proto.v1.JobResult.completed_at:type_name -> buildozer.proto.v1.TimeStamp
-	12, // 31: buildozer.proto.v1.JobResult.runtime_used:type_name -> buildozer.proto.v1.Runtime
-	19, // 32: buildozer.proto.v1.JobDataTransfer.input_data_size:type_name -> buildozer.proto.v1.Size
-	19, // 33: buildozer.proto.v1.JobDataTransfer.output_data_size:type_name -> buildozer.proto.v1.Size
-	19, // 34: buildozer.proto.v1.JobDataTransfer.total_data_transferred:type_name -> buildozer.proto.v1.Size
-	19, // 35: buildozer.proto.v1.JobDataTransfer.network_input_size:type_name -> buildozer.proto.v1.Size
-	19, // 36: buildozer.proto.v1.JobDataTransfer.network_output_size:type_name -> buildozer.proto.v1.Size
-	20, // 37: buildozer.proto.v1.JobExecutionMetrics.resource_usage:type_name -> buildozer.proto.v1.ResourceUsage
-	6,  // 38: buildozer.proto.v1.JobStatistics.timings:type_name -> buildozer.proto.v1.JobTimings
-	8,  // 39: buildozer.proto.v1.JobStatistics.data_transfer:type_name -> buildozer.proto.v1.JobDataTransfer
-	21, // 40: buildozer.proto.v1.JobStatistics.cache_query_statistics:type_name -> buildozer.proto.v1.CacheQueryStatistics
-	9,  // 41: buildozer.proto.v1.JobStatistics.execution_metrics:type_name -> buildozer.proto.v1.JobExecutionMetrics
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	13, // 0: buildozer.proto.v1.Job.runtime:type_name -> buildozer.proto.v1.Runtime
+	14, // 1: buildozer.proto.v1.Job.runtime_match_query:type_name -> buildozer.proto.v1.RuntimeMatchQuery
+	3,  // 2: buildozer.proto.v1.Job.cpp_compile:type_name -> buildozer.proto.v1.CppCompileJob
+	4,  // 3: buildozer.proto.v1.Job.cpp_link:type_name -> buildozer.proto.v1.CppLinkJob
+	5,  // 4: buildozer.proto.v1.Job.cpp_archive:type_name -> buildozer.proto.v1.CppArchiveJob
+	15, // 5: buildozer.proto.v1.Job.content_hash:type_name -> buildozer.proto.v1.Hash
+	16, // 6: buildozer.proto.v1.Job.submitted_at:type_name -> buildozer.proto.v1.TimeStamp
+	17, // 7: buildozer.proto.v1.Job.timeout:type_name -> buildozer.proto.v1.TimeDuration
+	18, // 8: buildozer.proto.v1.Job.inputs:type_name -> buildozer.proto.v1.JobData
+	18, // 9: buildozer.proto.v1.Job.outputs:type_name -> buildozer.proto.v1.JobData
+	0,  // 10: buildozer.proto.v1.JobProgress.status:type_name -> buildozer.proto.v1.JobProgress.JobStatus
+	19, // 11: buildozer.proto.v1.JobProgress.progress_percent:type_name -> buildozer.proto.v1.Percentage
+	16, // 12: buildozer.proto.v1.JobProgress.updated_at:type_name -> buildozer.proto.v1.TimeStamp
+	8,  // 13: buildozer.proto.v1.JobProgress.result:type_name -> buildozer.proto.v1.JobResult
+	20, // 14: buildozer.proto.v1.JobTimings.pending_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 15: buildozer.proto.v1.JobTimings.ready_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 16: buildozer.proto.v1.JobTimings.scheduled_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 17: buildozer.proto.v1.JobTimings.input_transfer_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 18: buildozer.proto.v1.JobTimings.running_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 19: buildozer.proto.v1.JobTimings.completed_time_range:type_name -> buildozer.proto.v1.TimeRange
+	20, // 20: buildozer.proto.v1.JobTimings.output_transfer_time_range:type_name -> buildozer.proto.v1.TimeRange
+	16, // 21: buildozer.proto.v1.JobTimings.failed_at:type_name -> buildozer.proto.v1.TimeStamp
+	16, // 22: buildozer.proto.v1.JobTimings.cancelled_at:type_name -> buildozer.proto.v1.TimeStamp
+	17, // 23: buildozer.proto.v1.JobTimings.pending_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 24: buildozer.proto.v1.JobTimings.ready_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 25: buildozer.proto.v1.JobTimings.scheduled_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 26: buildozer.proto.v1.JobTimings.input_transfer_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 27: buildozer.proto.v1.JobTimings.running_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 28: buildozer.proto.v1.JobTimings.output_transfer_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 29: buildozer.proto.v1.JobTimings.total_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 30: buildozer.proto.v1.JobTimings.wall_clock_duration:type_name -> buildozer.proto.v1.TimeDuration
+	17, // 31: buildozer.proto.v1.JobTimings.compute_duration:type_name -> buildozer.proto.v1.TimeDuration
+	1,  // 32: buildozer.proto.v1.JobResult.status:type_name -> buildozer.proto.v1.JobResult.JobStatus
+	16, // 33: buildozer.proto.v1.JobResult.started_at:type_name -> buildozer.proto.v1.TimeStamp
+	16, // 34: buildozer.proto.v1.JobResult.completed_at:type_name -> buildozer.proto.v1.TimeStamp
+	13, // 35: buildozer.proto.v1.JobResult.runtime_used:type_name -> buildozer.proto.v1.Runtime
+	18, // 36: buildozer.proto.v1.JobResult.outputs:type_name -> buildozer.proto.v1.JobData
+	21, // 37: buildozer.proto.v1.JobDataTransfer.input_data_size:type_name -> buildozer.proto.v1.Size
+	21, // 38: buildozer.proto.v1.JobDataTransfer.output_data_size:type_name -> buildozer.proto.v1.Size
+	21, // 39: buildozer.proto.v1.JobDataTransfer.total_data_transferred:type_name -> buildozer.proto.v1.Size
+	21, // 40: buildozer.proto.v1.JobDataTransfer.network_input_size:type_name -> buildozer.proto.v1.Size
+	21, // 41: buildozer.proto.v1.JobDataTransfer.network_output_size:type_name -> buildozer.proto.v1.Size
+	22, // 42: buildozer.proto.v1.JobExecutionMetrics.resource_usage:type_name -> buildozer.proto.v1.ResourceUsage
+	7,  // 43: buildozer.proto.v1.JobStatistics.timings:type_name -> buildozer.proto.v1.JobTimings
+	9,  // 44: buildozer.proto.v1.JobStatistics.data_transfer:type_name -> buildozer.proto.v1.JobDataTransfer
+	23, // 45: buildozer.proto.v1.JobStatistics.cache_query_statistics:type_name -> buildozer.proto.v1.CacheQueryStatistics
+	10, // 46: buildozer.proto.v1.JobStatistics.execution_metrics:type_name -> buildozer.proto.v1.JobExecutionMetrics
+	47, // [47:47] is the sub-list for method output_type
+	47, // [47:47] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_buildozer_proto_v1_job_proto_init() }
@@ -1469,8 +1684,11 @@ func file_buildozer_proto_v1_job_proto_init() {
 	file_buildozer_proto_v1_runtime_proto_init()
 	file_buildozer_proto_v1_vocabulary_proto_init()
 	file_buildozer_proto_v1_job_proto_msgTypes[0].OneofWrappers = []any{
+		(*Job_Runtime)(nil),
+		(*Job_RuntimeMatchQuery)(nil),
 		(*Job_CppCompile)(nil),
 		(*Job_CppLink)(nil),
+		(*Job_CppArchive)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1478,7 +1696,7 @@ func file_buildozer_proto_v1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buildozer_proto_v1_job_proto_rawDesc), len(file_buildozer_proto_v1_job_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

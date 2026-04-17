@@ -3,6 +3,9 @@ package native
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,54 +41,184 @@ func NewNativeCppRuntime(toolchain *Toolchain, workDir string) *NativeCppRuntime
 	return &NativeCppRuntime{
 		Logger:    Log().Child(fmt.Sprintf("cpp-native-%s", compilerName)),
 		toolchain: toolchain,
-		executor:  NewExecutor(toolchain.CompilerPath, workDir),
+		executor:  NewExecutor(toolchain.CompilerPath, toolchain.ArchiverPath, workDir),
 	}
 }
 
 // Execute executes a C/C++ job according to the runtime.Runtime interface.
-// It accepts protocol buffer job specifications (CppCompileJob or CppLinkJob),
-// converts them to concrete types, delegates to the executor, and returns results.
-// Supported job types:
-// - *v1.CppCompileJob: Compilation of source files to object files
-// - *v1.CppLinkJob: Linking of object files to executables or libraries
-// Returns an error if the request is nil or an unsupported job type is encountered.
+// The C++ runtime only works with reference data (no embedded content).
+// It expects inputs to be JobDataReference without embedded content, and produces outputs as references.
+// This avoids unnecessary copies when using the runtime.
 func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRequest) (*runtime.ExecutionResult, error) {
+	// Validate that all inputs are references (no embedded content)
+	if err := r.validateInputsAreReferences(req); err != nil {
+		return nil, err
+	}
+
+	return r.execute(ctx, req, r.executor, "")
+}
+
+// validateInputsAreReferences ensures all inputs are job data references without embedded content.
+// The C++ runtime only accepts reference data to avoid copies.
+func (r *NativeCppRuntime) validateInputsAreReferences(req *runtime.ExecutionRequest) error {
+	if req == nil || req.FullJob == nil {
+		return nil // No inputs to validate
+	}
+
+	for i, input := range req.FullJob.Inputs {
+		if input == nil {
+			continue
+		}
+
+		// Check that the input is a reference (JobDataReference)
+		_, isReference := input.Data.(*v1.JobData_Reference)
+		if !isReference {
+			return r.Errorf("input[%d] must be a reference (JobDataReference), got %T: C++ runtime only accepts reference data to avoid copies", i, input.Data)
+		}
+	}
+
+	return nil
+}
+
+func (r *NativeCppRuntime) execute(ctx context.Context, req *runtime.ExecutionRequest, executor *Executor, workDir string) (*runtime.ExecutionResult, error) {
 	if req == nil {
 		return nil, r.Errorf("execution request is nil")
 	}
 
-	var stdout, stderr []byte
-	var exitCode int
+	if req.FullJob == nil {
+		return nil, r.Errorf("full job is nil")
+	}
+
+	// Extract the job spec from the oneof wrapper and execute
+	var execResult *runtime.ExecutionResult
 	var err error
 
-	switch job := req.Job.(type) {
-	case *v1.CppCompileJob:
-		r.Info("executing C/C++ compile job", "sources", len(job.SourceFiles), "output", job.OutputFile)
-		compileJob := r.protoCompileJobToConcrete(job)
-		stdout, stderr, exitCode, err = r.executor.ExecuteCompileJob(ctx, compileJob, req.ProgressCallback)
+	switch spec := req.FullJob.JobSpec.(type) {
+	case *v1.Job_CppCompile:
+		if spec.CppCompile == nil {
+			return nil, r.Errorf("cpp compile job is nil")
+		}
+
+		// Ensure output directories exist for compile job
+		if err := r.ensureOutputDirectories(ctx, spec.CppCompile, workDir); err != nil {
+			return nil, err
+		}
+
+		r.Info("executing C/C++ compile job", "sources", len(spec.CppCompile.SourceFiles), "output", spec.CppCompile.OutputFile)
+
+		// Debug log detailed compile job information
+		r.Debug("Compile job details",
+			"sourceFileCount", len(spec.CppCompile.SourceFiles),
+			"includeCount", len(spec.CppCompile.IncludeDirs),
+			"defineCount", len(spec.CppCompile.Defines),
+			"compilerArgCount", len(spec.CppCompile.CompilerArgs),
+			"outputFile", spec.CppCompile.OutputFile,
+		)
+		if len(spec.CppCompile.SourceFiles) > 0 {
+			r.Debug("Compile job source files", "files", spec.CppCompile.SourceFiles)
+		}
+		if len(spec.CppCompile.IncludeDirs) > 0 {
+			r.Debug("Compile job include directories", "dirs", spec.CppCompile.IncludeDirs)
+		}
+		if len(spec.CppCompile.Defines) > 0 {
+			r.Debug("Compile job preprocessor defines", "defines", spec.CppCompile.Defines)
+		}
+		if len(spec.CppCompile.CompilerArgs) > 0 {
+			r.Debug("Compile job compiler arguments", "args", spec.CppCompile.CompilerArgs)
+		}
+
+		compileJob := r.protoCompileJobToConcrete(spec.CppCompile)
+		execResult, err = executor.ExecuteCompileJob(ctx, compileJob, req.ProgressCallback)
 		if err != nil {
 			return nil, err
 		}
 
-	case *v1.CppLinkJob:
-		r.Info("executing C/C++ link job", "objects", len(job.ObjectFiles), "output", job.OutputFile)
-		linkJob := r.protoLinkJobToConcrete(job)
-		stdout, stderr, exitCode, err = r.executor.ExecuteLinkJob(ctx, linkJob, req.ProgressCallback)
+	case *v1.Job_CppLink:
+		if spec.CppLink == nil {
+			return nil, r.Errorf("cpp link job is nil")
+		}
+
+		// Ensure output directories exist for link job
+		if err := r.ensureOutputDirectories(ctx, spec.CppLink, workDir); err != nil {
+			return nil, err
+		}
+
+		r.Info("executing C/C++ link job", "objects", len(spec.CppLink.ObjectFiles), "output", spec.CppLink.OutputFile)
+
+		// Debug log detailed link job information
+		r.Debug("Link job details",
+			"objectFileCount", len(spec.CppLink.ObjectFiles),
+			"libraryFileCount", len(spec.CppLink.LibraryFiles),
+			"libraryCount", len(spec.CppLink.Libraries),
+			"libDirCount", len(spec.CppLink.LibraryDirs),
+			"linkerArgCount", len(spec.CppLink.LinkerArgs),
+			"isSharedLibrary", spec.CppLink.IsSharedLibrary,
+			"outputFile", spec.CppLink.OutputFile,
+		)
+		if len(spec.CppLink.ObjectFiles) > 0 {
+			r.Debug("Link job object files", "files", spec.CppLink.ObjectFiles)
+		}
+		if len(spec.CppLink.LibraryFiles) > 0 {
+			r.Debug("Link job library files (full paths)", "files", spec.CppLink.LibraryFiles)
+		}
+		if len(spec.CppLink.Libraries) > 0 {
+			r.Debug("Link job named libraries (-l flags)", "libs", spec.CppLink.Libraries)
+		}
+		if len(spec.CppLink.LibraryDirs) > 0 {
+			r.Debug("Link job library directories", "dirs", spec.CppLink.LibraryDirs)
+		}
+		if len(spec.CppLink.LinkerArgs) > 0 {
+			r.Debug("Link job linker arguments", "args", spec.CppLink.LinkerArgs)
+		}
+
+		linkJob := r.protoLinkJobToConcrete(spec.CppLink)
+		execResult, err = executor.ExecuteLinkJob(ctx, linkJob, req.ProgressCallback)
+		if err != nil {
+			return nil, err
+		}
+
+	case *v1.Job_CppArchive:
+		if spec.CppArchive == nil {
+			return nil, r.Errorf("cpp archive job is nil")
+		}
+
+		// Ensure output directories exist for archive job
+		if err := r.ensureOutputDirectories(ctx, spec.CppArchive, workDir); err != nil {
+			return nil, err
+		}
+
+		r.Info("executing C/C++ archive job", "inputs", len(spec.CppArchive.InputFiles), "output", spec.CppArchive.OutputFile)
+
+		// Debug log detailed archive job information
+		r.Debug("Archive job details",
+			"inputFileCount", len(spec.CppArchive.InputFiles),
+			"arFlagCount", len(spec.CppArchive.ArFlags),
+			"outputFile", spec.CppArchive.OutputFile,
+		)
+		if len(spec.CppArchive.InputFiles) > 0 {
+			r.Debug("Archive job input files", "files", spec.CppArchive.InputFiles)
+		}
+		if len(spec.CppArchive.ArFlags) > 0 {
+			r.Debug("Archive job ar flags (tool arguments)", "args", spec.CppArchive.ArFlags)
+		}
+
+		archiveJob := r.protoArchiveJobToConcrete(spec.CppArchive)
+		execResult, err = executor.ExecuteArchiveJob(ctx, archiveJob, req.ProgressCallback)
 		if err != nil {
 			return nil, err
 		}
 
 	default:
-		return nil, r.Errorf("unsupported job type: %T", job)
+		return nil, r.Errorf("unsupported job type: %T", req.FullJob.JobSpec)
 	}
 
-	return &runtime.ExecutionResult{
-		ExitCode:    exitCode,
-		Stdout:      stdout,
-		Stderr:      stderr,
-		Output:      make(map[string][]byte),
-		ExecutionID: r.RuntimeID(),
-	}, nil
+	// Executor has already collected output files and populated ExecutionResult.Output
+	// Just set the ExecutionID and return directly
+	if execResult != nil {
+		execResult.ExecutionID = r.RuntimeID()
+	}
+
+	return execResult, nil
 }
 
 // Available checks whether this runtime is available and functional.
@@ -93,12 +226,6 @@ func (r *NativeCppRuntime) Execute(ctx context.Context, req *runtime.ExecutionRe
 // Returns true if the compiler is available, false otherwise.
 // An error is only returned if there's a fatal system error; compiler unavailability is not an error.
 func (r *NativeCppRuntime) Available(ctx context.Context) (bool, error) {
-	executor := NewExecutor(r.toolchain.CompilerPath, "/tmp")
-	_, _, exitCode, err := executor.executeCommand(ctx, []string{"--version"}, nil)
-	if err != nil || exitCode != 0 {
-		return false, nil
-	}
-	r.Debug("compiler available", "compiler", r.toolchain.Compiler)
 	return true, nil
 }
 
@@ -132,19 +259,19 @@ func (r *NativeCppRuntime) Metadata(ctx context.Context) (*runtime.Metadata, err
 
 	return &runtime.Metadata{
 		RuntimeID:   r.RuntimeID(),
-		RuntimeType: fmt.Sprintf("native-%s", compilerName),
+		RuntimeType: fmt.Sprintf("native_linux-%s", compilerName),
 		Language:    langStr,
 		Version:     r.toolchain.CompilerVersion,
 		TargetOS:    "linux",
 		TargetArch:  string(r.toolchain.Architecture),
 		IsNative:    true,
-		Description: fmt.Sprintf("Native %s %s (%s)", compilerName, r.toolchain.CompilerVersion, r.toolchain.Architecture),
+		Description: fmt.Sprintf("Native linux %s %s (%s)", compilerName, r.toolchain.CompilerVersion, r.toolchain.Architecture),
 		Details:     fmt.Sprintf("path=%s", r.toolchain.CompilerPath),
 	}, nil
 }
 
 // RuntimeID returns a unique identifier for this runtime instance.
-// Format: native-<language>-<compiler>-<version>-<cruntime>-<cruntimeVersion>-[<stdlib>-]<arch>
+// Format: native_linux-<language>-<compiler>-<version>-<cruntime>-<cruntimeVersion>-[<stdlib>-]<arch>
 // The ID is deterministic and includes:
 // - Language: "c" or "cpp"
 // - Compiler name: "gcc", "clang"
@@ -155,9 +282,9 @@ func (r *NativeCppRuntime) Metadata(ctx context.Context) (*runtime.Metadata, err
 // - Target architecture: "x86_64", "aarch64", "arm"
 // Examples:
 //
-//	native-c-gcc-10.2.1-glibc-2.31-x86_64 (C with GCC)
-//	native-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64 (C++ with GCC)
-//	native-cpp-clang-11.0.1-glibc-2.31-libc++-x86_64 (C++ with Clang)
+//	native_linux-c-gcc-10.2.1-glibc-2.31-x86_64 (C with GCC)
+//	native_linux-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64 (C++ with GCC)
+//	native_linux-cpp-clang-11.0.1-glibc-2.31-libc++-x86_64 (C++ with Clang)
 func (r *NativeCppRuntime) RuntimeID() string {
 	// Language: "c" or "cpp"
 	languageName := "c"
@@ -183,8 +310,12 @@ func (r *NativeCppRuntime) RuntimeID() string {
 		cruntimeName = "musl"
 	}
 
+	// TODO: detect platform
+	platform := "native_linux"
+
 	// Build the ID: native-<language>-<compiler>-<version>-<cruntime>-<cruntimeVersion>
-	id := fmt.Sprintf("native-%s-%s-%s-%s-%s",
+	id := fmt.Sprintf("%s-%s-%s-%s-%s-%s",
+		platform,
 		languageName,
 		compilerName,
 		r.toolchain.CompilerVersion,
@@ -207,6 +338,49 @@ func (r *NativeCppRuntime) RuntimeID() string {
 	id = fmt.Sprintf("%s-%s", id, r.toolchain.Architecture)
 
 	return id
+}
+
+// ensureOutputDirectories creates parent directories for all output files specified in the job.
+// This ensures that compilers can write output files to subdirectories without failing
+// on "No such file or directory" errors.
+// Supports CppCompileJob, CppLinkJob, and CppArchiveJob output files.
+func (r *NativeCppRuntime) ensureOutputDirectories(ctx context.Context, job interface{}, workDir string) error {
+	switch j := job.(type) {
+	case *v1.CppCompileJob:
+		if j != nil && j.OutputFile != "" {
+			outputPath := j.OutputFile
+			if !filepath.IsAbs(outputPath) {
+				outputPath = filepath.Join(workDir, outputPath)
+			}
+			outputDir := filepath.Dir(outputPath)
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return r.Errorf("failed to create output directory %s: %w", outputDir, err)
+			}
+		}
+	case *v1.CppLinkJob:
+		if j != nil && j.OutputFile != "" {
+			outputPath := j.OutputFile
+			if !filepath.IsAbs(outputPath) {
+				outputPath = filepath.Join(workDir, outputPath)
+			}
+			outputDir := filepath.Dir(outputPath)
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return r.Errorf("failed to create output directory %s: %w", outputDir, err)
+			}
+		}
+	case *v1.CppArchiveJob:
+		if j != nil && j.OutputFile != "" {
+			outputPath := j.OutputFile
+			if !filepath.IsAbs(outputPath) {
+				outputPath = filepath.Join(workDir, outputPath)
+			}
+			outputDir := filepath.Dir(outputPath)
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return r.Errorf("failed to create output directory %s: %w", outputDir, err)
+			}
+		}
+	}
+	return nil
 }
 
 // protoCompileJobToConcrete converts a protocol buffer CppCompileJob to a concrete CompileJob.
@@ -246,10 +420,21 @@ func (r *NativeCppRuntime) protoCompileJobToConcrete(proto *v1.CppCompileJob) *C
 func (r *NativeCppRuntime) protoLinkJobToConcrete(proto *v1.CppLinkJob) *LinkJob {
 	return &LinkJob{
 		ObjectFiles:   proto.ObjectFiles,
+		LibraryFiles:  proto.LibraryFiles,
 		Libraries:     proto.Libraries,
 		LinkerFlags:   proto.LinkerArgs,
 		OutputFile:    proto.OutputFile,
 		SharedLibrary: proto.IsSharedLibrary,
+	}
+}
+
+// protoArchiveJobToConcrete converts a protocol buffer CppArchiveJob to a concrete ArchiveJob.
+// This method translates between the protocol representation and the internal representation.
+func (r *NativeCppRuntime) protoArchiveJobToConcrete(proto *v1.CppArchiveJob) *ArchiveJob {
+	return &ArchiveJob{
+		InputFiles: proto.InputFiles,
+		ArFlags:    proto.ArFlags,
+		OutputFile: proto.OutputFile,
 	}
 }
 
@@ -275,6 +460,14 @@ func (r *NativeCppRuntime) ProtoCompiler() v1.CppCompiler {
 	default:
 		return v1.CppCompiler_CPP_COMPILER_UNSPECIFIED
 	}
+}
+
+func (r *NativeCppRuntime) ProtoCompilerVersion() *v1.Version {
+	return ParseVersionString(r.toolchain.CompilerVersion)
+}
+
+func (r *NativeCppRuntime) ProtoCRuntimeVersion() *v1.Version {
+	return ParseVersionString(r.toolchain.CRuntimeVersion)
 }
 
 // ProtoArchitecture converts internal Architecture to protocol buffer enum
@@ -323,6 +516,155 @@ func (r *NativeCppRuntime) ProtoCppAbi() v1.CppAbi {
 	default:
 		return v1.CppAbi_CPP_ABI_UNSPECIFIED
 	}
+}
+
+func (r *NativeCppRuntime) ProtoCppToolchain() v1.RuntimeToolchain {
+	switch r.toolchain.Language {
+	case LanguageC:
+		return v1.RuntimeToolchain_RUNTIME_TOOLCHAIN_C
+	case LanguageCpp:
+		return v1.RuntimeToolchain_RUNTIME_TOOLCHAIN_CPP
+	default:
+		return v1.RuntimeToolchain_RUNTIME_TOOLCHAIN_UNSPECIFIED
+	}
+}
+
+func (r *NativeCppRuntime) Proto(ctx context.Context) (*v1.Runtime, error) {
+	return &v1.Runtime{
+		Id:        r.RuntimeID(),
+		Platform:  v1.RuntimePlatform_RUNTIME_PLATFORM_NATIVE_LINUX,
+		Toolchain: r.ProtoCppToolchain(),
+		ToolchainSpec: &v1.Runtime_Cpp{
+			Cpp: &v1.CppToolchain{
+				Language:        r.ProtoLanguage(),
+				Compiler:        r.ProtoCompiler(),
+				CompilerVersion: r.ProtoCompilerVersion(),
+				Architecture:    r.ProtoArchitecture(),
+				CRuntime:        r.ProtoCRuntime(),
+				CRuntimeVersion: r.ProtoCRuntimeVersion(),
+				CppStdlib:       r.ProtoCppStdlib(),
+				CppAbi:          r.ProtoCppAbi(),
+				AbiModifiers:    r.toolchain.AbiModifiers,
+			},
+		},
+	}, nil
+}
+
+func (r *NativeCppRuntime) MatchesQuery(ctx context.Context, query *v1.RuntimeMatchQuery) (bool, error) {
+	if query == nil {
+		return false, fmt.Errorf("runtime query is nil")
+	}
+
+	if len(query.Platforms) > 0 && !slices.Contains(query.Platforms, v1.RuntimePlatform_RUNTIME_PLATFORM_NATIVE_LINUX) {
+		r.Debug("query does not match platform", "queryPlatforms", query.Platforms)
+		return false, nil
+	}
+
+	if len(query.Toolchains) > 0 && !slices.Contains(query.Toolchains, r.ProtoCppToolchain()) {
+		r.Debug("query does not match toolchain", "queryToolchains", query.Toolchains, "runtimeToolchain", r.ProtoCppToolchain())
+		return false, nil
+	}
+
+	return r.matchesRuntimeParameters(query.Params)
+}
+
+func (r *NativeCppRuntime) matchesRuntimeParameters(params map[string]*v1.StringArray) (bool, error) {
+	for key, acceptedValues := range params {
+		if matches, err := r.matchesRuntimeParameter(key, acceptedValues.Values); err != nil {
+			return false, err
+		} else if !matches {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func (r *NativeCppRuntime) matchesRuntimeParameter(key string, acceptedValues []string) (bool, error) {
+	switch key {
+	case "compiler":
+		return r.matchesCompiler(acceptedValues)
+	case "compiler_version":
+		return r.matchesCompilerVersion(acceptedValues)
+	case "cruntime":
+		fallthrough
+	case "c_runtime":
+		return r.matchesCRuntime(acceptedValues)
+	case "cruntime_version":
+		fallthrough
+	case "c_runtime_version":
+		return r.matchesCRuntimeVersion(acceptedValues)
+	case "cpp_stdlib":
+		return r.matchesCppStdlib(acceptedValues)
+	case "cpp_abi":
+		return r.matchesCppAbi(acceptedValues)
+	case "architecture":
+		return r.matchesArchitecture(acceptedValues)
+	}
+
+	return false, fmt.Errorf("unknown runtime parameter: %s", key)
+}
+
+func (r *NativeCppRuntime) matchesCompiler(acceptedValues []string) (bool, error) {
+	protoCompiler := r.ProtoCompiler().String()
+	compiler := r.toolchain.Compiler.String()
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCompiler) || slices.Contains(acceptedValues, compiler)
+	r.Debug("matching compiler", "protoCompiler", protoCompiler, "compiler", compiler, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesCompilerVersion(acceptedValues []string) (bool, error) {
+	protoCompilerVersion := r.ProtoCompilerVersion()
+	compilerVersion := r.toolchain.CompilerVersion
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCompilerVersion.String()) || slices.Contains(acceptedValues, compilerVersion)
+	r.Debug("matching compiler version", "protoCompilerVersion", protoCompilerVersion, "compilerVersion", compilerVersion, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesCRuntime(acceptedValues []string) (bool, error) {
+	protoCRuntime := r.ProtoCRuntime().String()
+	cruntime := r.toolchain.CRuntime.String()
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCRuntime) || slices.Contains(acceptedValues, cruntime)
+	r.Debug("matching C runtime", "protoCRuntime", protoCRuntime, "cruntime", cruntime, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesCRuntimeVersion(acceptedValues []string) (bool, error) {
+	protoCRuntimeVersion := r.ProtoCRuntimeVersion()
+	cruntimeVersion := r.toolchain.CRuntimeVersion
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCRuntimeVersion.String()) || slices.Contains(acceptedValues, cruntimeVersion)
+	r.Debug("matching C runtime version", "protoCRuntimeVersion", protoCRuntimeVersion, "cruntimeVersion", cruntimeVersion, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesCppStdlib(acceptedValues []string) (bool, error) {
+	protoCppStdlib := r.ProtoCppStdlib().String()
+	cppStdlib := r.toolchain.CppStdlib.String()
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCppStdlib) || slices.Contains(acceptedValues, cppStdlib)
+	r.Debug("matching C++ stdlib", "protoCppStdlib", protoCppStdlib, "cppStdlib", cppStdlib, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesCppAbi(acceptedValues []string) (bool, error) {
+	protoCppAbi := r.ProtoCppAbi().String()
+	cppAbi := r.toolchain.CppAbi.String()
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoCppAbi) || slices.Contains(acceptedValues, cppAbi)
+	r.Debug("matching C++ ABI", "protoCppAbi", protoCppAbi, "cppAbi", cppAbi, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+func (r *NativeCppRuntime) matchesArchitecture(acceptedValues []string) (bool, error) {
+	protoArchitecture := r.ProtoArchitecture().String()
+	architecture := r.toolchain.Architecture.String()
+	matches := len(acceptedValues) == 0 || slices.Contains(acceptedValues, protoArchitecture) || slices.Contains(acceptedValues, architecture)
+	r.Debug("matching architecture", "protoArchitecture", protoArchitecture, "architecture", architecture, "acceptedValues", acceptedValues, "acceptedValuesCount", len(acceptedValues), "matches", matches)
+	return matches, nil
+}
+
+// Close releases any resources held by this runtime.
+// For the native C/C++ runtime, this is a no-op as there are no persistent resources.
+func (r *NativeCppRuntime) Close() error {
+	return nil
 }
 
 // ParseVersionString parses a version string like "10.2.1" into a proto Version message

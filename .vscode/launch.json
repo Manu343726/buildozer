@@ -17,15 +17,14 @@
       "logOutput": "rpc"
     },
     {
-      "name": "Debug Client Daemon (Network)",
+      "name": "Debug Client Daemon (count=2)",
       "type": "go",
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/cmd/buildozer-client",
-      "args": ["daemon"],
+      "args": ["daemon", "--count=2"],
       "env": {
-        "BUILDOZER_LOG_LEVEL": "debug",
-        "BUILDOZER_DAEMON_PORT": "6789"
+        "BUILDOZER_LOG_LEVEL": "debug"
       },
       "showLog": true,
       "cwd": "${workspaceFolder}",
@@ -57,6 +56,101 @@
       "env": {
         "BUILDOZER_LOG_LEVEL": "debug"
       },
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "make: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug GCC Driver (math.c → math.o)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/drivers/cpp/gcc",
+      "args": [
+        "--buildozer-log-level=debug",
+        "-c",
+        "examples/cmake_project/src/math.c",
+        "-o",
+        "math.o"
+      ],
+      "env": {},
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "make: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug G++ Driver (Calculator.cpp → calculator.o)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/drivers/cpp/gxx",
+      "args": [
+        "--buildozer-log-level=debug",
+        "-c",
+        "examples/cmake_project/src/Calculator.cpp",
+        "-o",
+        "calculator.o"
+      ],
+      "env": {},
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "make: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug Clang Driver (math.c → math.o)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/drivers/cpp/clang",
+      "args": [
+        "--buildozer-log-level=debug",
+        "-c",
+        "examples/cmake_project/src/math.c",
+        "-o",
+        "clang_math.o"
+      ],
+      "env": {},
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "make: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug Clang++ Driver (Calculator.cpp → clang_calculator.o)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/drivers/cpp/clangxx",
+      "args": [
+        "--buildozer-log-level=debug",
+        "-c",
+        "examples/cmake_project/src/Calculator.cpp",
+        "-o",
+        "clang_calculator.o"
+      ],
+      "env": {},
+      "showLog": true,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "make: build",
+      "logOutput": "rpc"
+    },
+    {
+      "name": "Debug AR Driver (create archive)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/drivers/cpp/ar",
+      "args": [
+        "--buildozer-log-level=debug",
+        "qc",
+        "libmath.a",
+        "math.o",
+        "calculator.o"
+      ],
+      "env": {},
       "showLog": true,
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "make: build",

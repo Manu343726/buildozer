@@ -5,6 +5,8 @@ package runtime
 import (
 	"context"
 	"time"
+
+	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 )
 
 // ProgressType indicates the type of progress update being reported.
@@ -47,25 +49,30 @@ type Progress struct {
 type ProgressCallback func(ctx context.Context, progress *Progress) error
 
 // ExecutionRequest represents a generic request to execute a job on a runtime.
-// The request is opaque to the runtime registry; each Runtime implementation
-// knows how to interpret and execute job specifications for its language/type.
+// The request contains the full Job proto with all inputs embedded as JobData.
+// Each Runtime implementation is responsible for:
+// - Creating its own execution context (working directory, temp files)
+// - Extracting input files from JobData
+// - Setting up output directories
+// - Executing the job in the appropriate environment
+// - Optionally cleaning up after execution
 type ExecutionRequest struct {
-	// Job specifies what to execute. Format and interpretation depends on the runtime.
-	// For C/C++: protobufs CppCompileJob or CppLinkJob
-	// For Go: GoCompileJob (future)
-	// For Rust: RustCompileJob (future)
-	// Implementation detail: can be marshaled proto, JSON, or runtime-specific format.
-	Job interface{}
-
-	// Input contains input artifacts needed for execution.
-	// Map keys are artifact IDs, values are artifact content.
-	Input map[string][]byte
+	// FullJob is the complete protocol buffer Job message with all inputs embedded.
+	// Contains the job specification (CppCompileJob, CppLinkJob) and JobData inputs.
+	// The runtime is responsible for extracting inputs and executing the job.
+	FullJob *v1.Job
 
 	// ProgressCallback is an optional callback for real-time progress reporting during execution.
 	// If provided, the runtime will invoke this callback with Progress updates as they occur.
 	// Implementations should report output data, log messages, and status changes.
 	// The callback may be nil if progress reporting is not needed.
 	ProgressCallback ProgressCallback
+
+	// CompletionCallback is an optional callback invoked when job execution completes.
+	// Called after the job finishes (success or failure) to handle finalization like
+	// output materialization and verification. Takes the job and execution result.
+	// The callback may be nil if completion handling is not needed.
+	CompletionCallback func(context.Context, *v1.Job, *ExecutionResult) error
 }
 
 // ExecutionResult represents the result of executing a job.
@@ -80,8 +87,14 @@ type ExecutionResult struct {
 	Stderr []byte
 
 	// Output contains output artifacts produced by execution.
-	// Map keys are artifact IDs, values are artifact content.
-	Output map[string][]byte
+	// For sandboxed/remote runtimes: array of JobData with content filled.
+	// For local unsandboxed runtimes: empty (files already on disk in WorkDir).
+	Output []*v1.JobData
+
+	// WorkDir is the working directory where execution occurred.
+	// For local unsandboxed runtimes, this is the temp directory where files were written.
+	// Used to collect output files for materialization.
+	WorkDir string
 
 	// ExecutionID is an optional identifier for this execution (for logging/debugging).
 	ExecutionID string
@@ -138,8 +151,20 @@ type Runtime interface {
 	// Metadata returns metadata about this runtime for matching and identification.
 	Metadata(ctx context.Context) (*Metadata, error)
 
+	// Proto returns a *v1.Runtime proto representation of this runtime for API responses.
+	Proto(ctx context.Context) (*v1.Runtime, error)
+
 	// RuntimeID returns the unique identifier for this runtime.
 	RuntimeID() string
+
+	// MatchesQuery checks if this runtime matches the given RuntimeMatchQuery based on its metadata.
+	MatchesQuery(ctx context.Context, query *v1.RuntimeMatchQuery) (bool, error)
+
+	// Close releases any resources held by this runtime.
+	// For example, temporary directories, network connections, or containers.
+	// After Close is called, the runtime should not be used for further operations.
+	// Calling Close on an already-closed runtime should not cause an error.
+	Close() error
 }
 
 // AvailabilityError represents an error when a runtime is not available.

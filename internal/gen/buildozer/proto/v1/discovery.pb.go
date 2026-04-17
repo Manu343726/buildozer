@@ -21,6 +21,108 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// DaemonState represents the current state of a daemon
+type DaemonState int32
+
+const (
+	// Daemon is idle and ready for work
+	DaemonState_DAEMON_STATE_IDLE DaemonState = 0
+	// Daemon is currently processing jobs
+	DaemonState_DAEMON_STATE_BUSY DaemonState = 1
+	// Daemon is unhealthy or experiencing issues
+	DaemonState_DAEMON_STATE_UNHEALTHY DaemonState = 2
+)
+
+// Enum value maps for DaemonState.
+var (
+	DaemonState_name = map[int32]string{
+		0: "DAEMON_STATE_IDLE",
+		1: "DAEMON_STATE_BUSY",
+		2: "DAEMON_STATE_UNHEALTHY",
+	}
+	DaemonState_value = map[string]int32{
+		"DAEMON_STATE_IDLE":      0,
+		"DAEMON_STATE_BUSY":      1,
+		"DAEMON_STATE_UNHEALTHY": 2,
+	}
+)
+
+func (x DaemonState) Enum() *DaemonState {
+	p := new(DaemonState)
+	*p = x
+	return p
+}
+
+func (x DaemonState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DaemonState) Descriptor() protoreflect.EnumDescriptor {
+	return file_buildozer_proto_v1_discovery_proto_enumTypes[0].Descriptor()
+}
+
+func (DaemonState) Type() protoreflect.EnumType {
+	return &file_buildozer_proto_v1_discovery_proto_enumTypes[0]
+}
+
+func (x DaemonState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DaemonState.Descriptor instead.
+func (DaemonState) EnumDescriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{0}
+}
+
+// AnnouncementType indicates whether an announcement is a request or response
+type AnnouncementType int32
+
+const (
+	// Initial announcement sent on network quiet (REQUEST type)
+	AnnouncementType_ANNOUNCEMENT_TYPE_REQUEST AnnouncementType = 0
+	// Response to another peer's announcement (RESPONSE type)
+	AnnouncementType_ANNOUNCEMENT_TYPE_RESPONSE AnnouncementType = 1
+)
+
+// Enum value maps for AnnouncementType.
+var (
+	AnnouncementType_name = map[int32]string{
+		0: "ANNOUNCEMENT_TYPE_REQUEST",
+		1: "ANNOUNCEMENT_TYPE_RESPONSE",
+	}
+	AnnouncementType_value = map[string]int32{
+		"ANNOUNCEMENT_TYPE_REQUEST":  0,
+		"ANNOUNCEMENT_TYPE_RESPONSE": 1,
+	}
+)
+
+func (x AnnouncementType) Enum() *AnnouncementType {
+	p := new(AnnouncementType)
+	*p = x
+	return p
+}
+
+func (x AnnouncementType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AnnouncementType) Descriptor() protoreflect.EnumDescriptor {
+	return file_buildozer_proto_v1_discovery_proto_enumTypes[1].Descriptor()
+}
+
+func (AnnouncementType) Type() protoreflect.EnumType {
+	return &file_buildozer_proto_v1_discovery_proto_enumTypes[1]
+}
+
+func (x AnnouncementType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AnnouncementType.Descriptor instead.
+func (AnnouncementType) EnumDescriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{1}
+}
+
 // Status of the discovery trigger
 type TriggerDiscoveryResponse_Status int32
 
@@ -55,11 +157,11 @@ func (x TriggerDiscoveryResponse_Status) String() string {
 }
 
 func (TriggerDiscoveryResponse_Status) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_discovery_proto_enumTypes[0].Descriptor()
+	return file_buildozer_proto_v1_discovery_proto_enumTypes[2].Descriptor()
 }
 
 func (TriggerDiscoveryResponse_Status) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_discovery_proto_enumTypes[0]
+	return &file_buildozer_proto_v1_discovery_proto_enumTypes[2]
 }
 
 func (x TriggerDiscoveryResponse_Status) Number() protoreflect.EnumNumber {
@@ -68,7 +170,7 @@ func (x TriggerDiscoveryResponse_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TriggerDiscoveryResponse_Status.Descriptor instead.
 func (TriggerDiscoveryResponse_Status) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{6, 0}
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{5, 0}
 }
 
 // PeerCapabilities describes what a peer can do
@@ -171,35 +273,49 @@ func (x *PeerCapabilities) GetMaxCacheSizeMb() uint32 {
 	return 0
 }
 
-// PeerMetadata contains peer version and configuration info
-type PeerMetadata struct {
+// Peer contains all information about a discovered peer
+type Peer struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version supported by this peer
-	ProtocolVersion string `protobuf:"bytes,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// Buildozer binary version on this peer
-	BuildozerVersion string `protobuf:"bytes,2,opt,name=buildozer_version,json=buildozerVersion,proto3" json:"buildozer_version,omitempty"`
-	// Operating system (Linux, Darwin, Windows)
-	OperatingSystem string `protobuf:"bytes,3,opt,name=operating_system,json=operatingSystem,proto3" json:"operating_system,omitempty"`
-	// Architecture (x86_64, aarch64, etc.)
-	Architecture  string `protobuf:"bytes,4,opt,name=architecture,proto3" json:"architecture,omitempty"`
+	// Unique peer identifier (required)
+	PeerId string `protobuf:"bytes,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
+	// gRPC API endpoint (required)
+	ApiUri *ApiUri `protobuf:"bytes,2,opt,name=api_uri,json=apiUri,proto3" json:"api_uri,omitempty"`
+	// Optional: Peer hostname
+	Hostname *string `protobuf:"bytes,3,opt,name=hostname,proto3,oneof" json:"hostname,omitempty"`
+	// Optional: Last time this peer announced itself
+	LastSeen *TimeStamp `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3,oneof" json:"last_seen,omitempty"`
+	// Optional: Is this peer currently online/responsive?
+	IsOnline *bool `protobuf:"varint,5,opt,name=is_online,json=isOnline,proto3,oneof" json:"is_online,omitempty"`
+	// Optional: Available runtimes on this peer
+	AvailableRuntimes []*Runtime `protobuf:"bytes,6,rep,name=available_runtimes,json=availableRuntimes,proto3" json:"available_runtimes,omitempty"`
+	// Optional: Protocol version supported by this peer
+	ProtocolVersion *string `protobuf:"bytes,7,opt,name=protocol_version,json=protocolVersion,proto3,oneof" json:"protocol_version,omitempty"`
+	// Optional: Buildozer binary version on this peer
+	BuildozerVersion *string `protobuf:"bytes,8,opt,name=buildozer_version,json=buildozerVersion,proto3,oneof" json:"buildozer_version,omitempty"`
+	// Optional: Operating system (Linux, Darwin, Windows)
+	OperatingSystem *string `protobuf:"bytes,9,opt,name=operating_system,json=operatingSystem,proto3,oneof" json:"operating_system,omitempty"`
+	// Optional: Architecture (x86_64, aarch64, etc.)
+	Architecture *string `protobuf:"bytes,10,opt,name=architecture,proto3,oneof" json:"architecture,omitempty"`
+	// Optional: Is this the local daemon that handled this request?
+	IsLocal       *bool `protobuf:"varint,11,opt,name=is_local,json=isLocal,proto3,oneof" json:"is_local,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PeerMetadata) Reset() {
-	*x = PeerMetadata{}
+func (x *Peer) Reset() {
+	*x = Peer{}
 	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PeerMetadata) String() string {
+func (x *Peer) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PeerMetadata) ProtoMessage() {}
+func (*Peer) ProtoMessage() {}
 
-func (x *PeerMetadata) ProtoReflect() protoreflect.Message {
+func (x *Peer) ProtoReflect() protoreflect.Message {
 	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -211,137 +327,86 @@ func (x *PeerMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PeerMetadata.ProtoReflect.Descriptor instead.
-func (*PeerMetadata) Descriptor() ([]byte, []int) {
+// Deprecated: Use Peer.ProtoReflect.Descriptor instead.
+func (*Peer) Descriptor() ([]byte, []int) {
 	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *PeerMetadata) GetProtocolVersion() string {
-	if x != nil {
-		return x.ProtocolVersion
-	}
-	return ""
-}
-
-func (x *PeerMetadata) GetBuildozerVersion() string {
-	if x != nil {
-		return x.BuildozerVersion
-	}
-	return ""
-}
-
-func (x *PeerMetadata) GetOperatingSystem() string {
-	if x != nil {
-		return x.OperatingSystem
-	}
-	return ""
-}
-
-func (x *PeerMetadata) GetArchitecture() string {
-	if x != nil {
-		return x.Architecture
-	}
-	return ""
-}
-
-// PeerInfo contains information about a known peer
-type PeerInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique peer identifier
-	PeerId string `protobuf:"bytes,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
-	// Peer hostname
-	Hostname string `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	// gRPC API endpoint
-	GrpcUri *ApiUri `protobuf:"bytes,3,opt,name=grpc_uri,json=grpcUri,proto3" json:"grpc_uri,omitempty"`
-	// Optional: REST API endpoint
-	RestApiUri *ApiUri `protobuf:"bytes,4,opt,name=rest_api_uri,json=restApiUri,proto3" json:"rest_api_uri,omitempty"`
-	// Last time this peer announced itself
-	LastSeen *TimeStamp `protobuf:"bytes,5,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
-	// Is this peer currently online/responsive?
-	IsOnline bool `protobuf:"varint,6,opt,name=is_online,json=isOnline,proto3" json:"is_online,omitempty"`
-	// Available runtimes on this peer
-	AvailableRuntimes []*Runtime `protobuf:"bytes,7,rep,name=available_runtimes,json=availableRuntimes,proto3" json:"available_runtimes,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *PeerInfo) Reset() {
-	*x = PeerInfo{}
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PeerInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PeerInfo) ProtoMessage() {}
-
-func (x *PeerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PeerInfo.ProtoReflect.Descriptor instead.
-func (*PeerInfo) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PeerInfo) GetPeerId() string {
+func (x *Peer) GetPeerId() string {
 	if x != nil {
 		return x.PeerId
 	}
 	return ""
 }
 
-func (x *PeerInfo) GetHostname() string {
+func (x *Peer) GetApiUri() *ApiUri {
 	if x != nil {
-		return x.Hostname
+		return x.ApiUri
+	}
+	return nil
+}
+
+func (x *Peer) GetHostname() string {
+	if x != nil && x.Hostname != nil {
+		return *x.Hostname
 	}
 	return ""
 }
 
-func (x *PeerInfo) GetGrpcUri() *ApiUri {
-	if x != nil {
-		return x.GrpcUri
-	}
-	return nil
-}
-
-func (x *PeerInfo) GetRestApiUri() *ApiUri {
-	if x != nil {
-		return x.RestApiUri
-	}
-	return nil
-}
-
-func (x *PeerInfo) GetLastSeen() *TimeStamp {
+func (x *Peer) GetLastSeen() *TimeStamp {
 	if x != nil {
 		return x.LastSeen
 	}
 	return nil
 }
 
-func (x *PeerInfo) GetIsOnline() bool {
-	if x != nil {
-		return x.IsOnline
+func (x *Peer) GetIsOnline() bool {
+	if x != nil && x.IsOnline != nil {
+		return *x.IsOnline
 	}
 	return false
 }
 
-func (x *PeerInfo) GetAvailableRuntimes() []*Runtime {
+func (x *Peer) GetAvailableRuntimes() []*Runtime {
 	if x != nil {
 		return x.AvailableRuntimes
 	}
 	return nil
+}
+
+func (x *Peer) GetProtocolVersion() string {
+	if x != nil && x.ProtocolVersion != nil {
+		return *x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *Peer) GetBuildozerVersion() string {
+	if x != nil && x.BuildozerVersion != nil {
+		return *x.BuildozerVersion
+	}
+	return ""
+}
+
+func (x *Peer) GetOperatingSystem() string {
+	if x != nil && x.OperatingSystem != nil {
+		return *x.OperatingSystem
+	}
+	return ""
+}
+
+func (x *Peer) GetArchitecture() string {
+	if x != nil && x.Architecture != nil {
+		return *x.Architecture
+	}
+	return ""
+}
+
+func (x *Peer) GetIsLocal() bool {
+	if x != nil && x.IsLocal != nil {
+		return *x.IsLocal
+	}
+	return false
 }
 
 // ListPeersRequest requests the list of known peers
@@ -355,7 +420,7 @@ type ListPeersRequest struct {
 
 func (x *ListPeersRequest) Reset() {
 	*x = ListPeersRequest{}
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -367,7 +432,7 @@ func (x *ListPeersRequest) String() string {
 func (*ListPeersRequest) ProtoMessage() {}
 
 func (x *ListPeersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[3]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -380,7 +445,7 @@ func (x *ListPeersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPeersRequest.ProtoReflect.Descriptor instead.
 func (*ListPeersRequest) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{3}
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListPeersRequest) GetRequesterInfo() *RequesterInfo {
@@ -394,7 +459,7 @@ func (x *ListPeersRequest) GetRequesterInfo() *RequesterInfo {
 type ListPeersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// List of discovered peers
-	Peers []*PeerInfo `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	Peers []*Peer `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
 	// Number of peers in the list
 	Count         int32 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -403,7 +468,7 @@ type ListPeersResponse struct {
 
 func (x *ListPeersResponse) Reset() {
 	*x = ListPeersResponse{}
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -415,7 +480,7 @@ func (x *ListPeersResponse) String() string {
 func (*ListPeersResponse) ProtoMessage() {}
 
 func (x *ListPeersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[4]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -428,10 +493,10 @@ func (x *ListPeersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPeersResponse.ProtoReflect.Descriptor instead.
 func (*ListPeersResponse) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{4}
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListPeersResponse) GetPeers() []*PeerInfo {
+func (x *ListPeersResponse) GetPeers() []*Peer {
 	if x != nil {
 		return x.Peers
 	}
@@ -456,7 +521,7 @@ type TriggerDiscoveryRequest struct {
 
 func (x *TriggerDiscoveryRequest) Reset() {
 	*x = TriggerDiscoveryRequest{}
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -468,7 +533,7 @@ func (x *TriggerDiscoveryRequest) String() string {
 func (*TriggerDiscoveryRequest) ProtoMessage() {}
 
 func (x *TriggerDiscoveryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[5]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -481,7 +546,7 @@ func (x *TriggerDiscoveryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerDiscoveryRequest.ProtoReflect.Descriptor instead.
 func (*TriggerDiscoveryRequest) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{5}
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TriggerDiscoveryRequest) GetRequesterInfo() *RequesterInfo {
@@ -504,7 +569,7 @@ type TriggerDiscoveryResponse struct {
 
 func (x *TriggerDiscoveryResponse) Reset() {
 	*x = TriggerDiscoveryResponse{}
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -516,7 +581,7 @@ func (x *TriggerDiscoveryResponse) String() string {
 func (*TriggerDiscoveryResponse) ProtoMessage() {}
 
 func (x *TriggerDiscoveryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[6]
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -529,7 +594,7 @@ func (x *TriggerDiscoveryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerDiscoveryResponse.ProtoReflect.Descriptor instead.
 func (*TriggerDiscoveryResponse) Descriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{6}
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TriggerDiscoveryResponse) GetMessage() string {
@@ -546,6 +611,178 @@ func (x *TriggerDiscoveryResponse) GetStatus() TriggerDiscoveryResponse_Status {
 	return TriggerDiscoveryResponse_SUCCESS
 }
 
+// DaemonStatus contains the current status of a daemon
+type DaemonStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Current state of the daemon
+	State DaemonState `protobuf:"varint,1,opt,name=state,proto3,enum=buildozer.proto.v1.DaemonState" json:"state,omitempty"`
+	// Load percentage (0-100)
+	LoadPercentage uint32 `protobuf:"varint,2,opt,name=load_percentage,json=loadPercentage,proto3" json:"load_percentage,omitempty"`
+	// Number of active jobs
+	ActiveJobs uint32 `protobuf:"varint,3,opt,name=active_jobs,json=activeJobs,proto3" json:"active_jobs,omitempty"`
+	// Uptime in seconds
+	UptimeSeconds uint64 `protobuf:"varint,4,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DaemonStatus) Reset() {
+	*x = DaemonStatus{}
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DaemonStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DaemonStatus) ProtoMessage() {}
+
+func (x *DaemonStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DaemonStatus.ProtoReflect.Descriptor instead.
+func (*DaemonStatus) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DaemonStatus) GetState() DaemonState {
+	if x != nil {
+		return x.State
+	}
+	return DaemonState_DAEMON_STATE_IDLE
+}
+
+func (x *DaemonStatus) GetLoadPercentage() uint32 {
+	if x != nil {
+		return x.LoadPercentage
+	}
+	return 0
+}
+
+func (x *DaemonStatus) GetActiveJobs() uint32 {
+	if x != nil {
+		return x.ActiveJobs
+	}
+	return 0
+}
+
+func (x *DaemonStatus) GetUptimeSeconds() uint64 {
+	if x != nil {
+		return x.UptimeSeconds
+	}
+	return 0
+}
+
+// AnnouncementEvent is sent by daemons to announce their presence to peers
+// This is sent via UDP multicast to 239.0.0.1:5354
+type AnnouncementEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Timestamp when announcement was created
+	Timestamp *TimeStamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// Peer information for this announcement
+	Peer *Peer `protobuf:"bytes,2,opt,name=peer,proto3" json:"peer,omitempty"`
+	// Type of announcement (REQUEST or RESPONSE)
+	Type AnnouncementType `protobuf:"varint,3,opt,name=type,proto3,enum=buildozer.proto.v1.AnnouncementType" json:"type,omitempty"`
+	// Peer ID of the peer that initiated this announcement cycle
+	// For REQUEST type: the originating peer's ID
+	// For RESPONSE type: the peer_id of the REQUEST that triggered this response
+	InitiatorPeerId string `protobuf:"bytes,4,opt,name=initiator_peer_id,json=initiatorPeerId,proto3" json:"initiator_peer_id,omitempty"`
+	// List of peer IDs that should be ignored (suppress response)
+	// Used to avoid redundant announcements to peers we've already announced to recently
+	// REQUEST sender can include peers it recently heard from, so responders skip them
+	IgnorePeerIds []string `protobuf:"bytes,5,rep,name=ignore_peer_ids,json=ignorePeerIds,proto3" json:"ignore_peer_ids,omitempty"`
+	// List of known peers this daemon is aware of (full peer information)
+	// Used for gossip protocol to share knowledge about other peers in the network
+	// Receiving peers can use this to discover peers and register their information
+	// Example: A broadcasts with known_peers=[B, C]; B learns about C's endpoints, runtimes, etc
+	KnownPeers    []*Peer `protobuf:"bytes,6,rep,name=known_peers,json=knownPeers,proto3" json:"known_peers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnnouncementEvent) Reset() {
+	*x = AnnouncementEvent{}
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnnouncementEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnnouncementEvent) ProtoMessage() {}
+
+func (x *AnnouncementEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_discovery_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnnouncementEvent.ProtoReflect.Descriptor instead.
+func (*AnnouncementEvent) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_discovery_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AnnouncementEvent) GetTimestamp() *TimeStamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *AnnouncementEvent) GetPeer() *Peer {
+	if x != nil {
+		return x.Peer
+	}
+	return nil
+}
+
+func (x *AnnouncementEvent) GetType() AnnouncementType {
+	if x != nil {
+		return x.Type
+	}
+	return AnnouncementType_ANNOUNCEMENT_TYPE_REQUEST
+}
+
+func (x *AnnouncementEvent) GetInitiatorPeerId() string {
+	if x != nil {
+		return x.InitiatorPeerId
+	}
+	return ""
+}
+
+func (x *AnnouncementEvent) GetIgnorePeerIds() []string {
+	if x != nil {
+		return x.IgnorePeerIds
+	}
+	return nil
+}
+
+func (x *AnnouncementEvent) GetKnownPeers() []*Peer {
+	if x != nil {
+		return x.KnownPeers
+	}
+	return nil
+}
+
 var File_buildozer_proto_v1_discovery_proto protoreflect.FileDescriptor
 
 const file_buildozer_proto_v1_discovery_proto_rawDesc = "" +
@@ -558,25 +795,34 @@ const file_buildozer_proto_v1_discovery_proto_rawDesc = "" +
 	"\x12running_jobs_count\x18\x04 \x01(\rR\x10runningJobsCount\x12J\n" +
 	"\x12available_runtimes\x18\x05 \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\x11availableRuntimes\x12\"\n" +
 	"\rcache_size_mb\x18\x06 \x01(\rR\vcacheSizeMb\x12)\n" +
-	"\x11max_cache_size_mb\x18\a \x01(\rR\x0emaxCacheSizeMb\"\xb5\x01\n" +
-	"\fPeerMetadata\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\tR\x0fprotocolVersion\x12+\n" +
-	"\x11buildozer_version\x18\x02 \x01(\tR\x10buildozerVersion\x12)\n" +
-	"\x10operating_system\x18\x03 \x01(\tR\x0foperatingSystem\x12\"\n" +
-	"\farchitecture\x18\x04 \x01(\tR\farchitecture\"\xd9\x02\n" +
-	"\bPeerInfo\x12\x17\n" +
-	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12\x1a\n" +
-	"\bhostname\x18\x02 \x01(\tR\bhostname\x125\n" +
-	"\bgrpc_uri\x18\x03 \x01(\v2\x1a.buildozer.proto.v1.ApiUriR\agrpcUri\x12<\n" +
-	"\frest_api_uri\x18\x04 \x01(\v2\x1a.buildozer.proto.v1.ApiUriR\n" +
-	"restApiUri\x12:\n" +
-	"\tlast_seen\x18\x05 \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\blastSeen\x12\x1b\n" +
-	"\tis_online\x18\x06 \x01(\bR\bisOnline\x12J\n" +
-	"\x12available_runtimes\x18\a \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\x11availableRuntimes\"\\\n" +
+	"\x11max_cache_size_mb\x18\a \x01(\rR\x0emaxCacheSizeMb\"\x86\x05\n" +
+	"\x04Peer\x12\x17\n" +
+	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x123\n" +
+	"\aapi_uri\x18\x02 \x01(\v2\x1a.buildozer.proto.v1.ApiUriR\x06apiUri\x12\x1f\n" +
+	"\bhostname\x18\x03 \x01(\tH\x00R\bhostname\x88\x01\x01\x12?\n" +
+	"\tlast_seen\x18\x04 \x01(\v2\x1d.buildozer.proto.v1.TimeStampH\x01R\blastSeen\x88\x01\x01\x12 \n" +
+	"\tis_online\x18\x05 \x01(\bH\x02R\bisOnline\x88\x01\x01\x12J\n" +
+	"\x12available_runtimes\x18\x06 \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\x11availableRuntimes\x12.\n" +
+	"\x10protocol_version\x18\a \x01(\tH\x03R\x0fprotocolVersion\x88\x01\x01\x120\n" +
+	"\x11buildozer_version\x18\b \x01(\tH\x04R\x10buildozerVersion\x88\x01\x01\x12.\n" +
+	"\x10operating_system\x18\t \x01(\tH\x05R\x0foperatingSystem\x88\x01\x01\x12'\n" +
+	"\farchitecture\x18\n" +
+	" \x01(\tH\x06R\farchitecture\x88\x01\x01\x12\x1e\n" +
+	"\bis_local\x18\v \x01(\bH\aR\aisLocal\x88\x01\x01B\v\n" +
+	"\t_hostnameB\f\n" +
+	"\n" +
+	"_last_seenB\f\n" +
+	"\n" +
+	"_is_onlineB\x13\n" +
+	"\x11_protocol_versionB\x14\n" +
+	"\x12_buildozer_versionB\x13\n" +
+	"\x11_operating_systemB\x0f\n" +
+	"\r_architectureB\v\n" +
+	"\t_is_local\"\\\n" +
 	"\x10ListPeersRequest\x12H\n" +
-	"\x0erequester_info\x18\x01 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"]\n" +
-	"\x11ListPeersResponse\x122\n" +
-	"\x05peers\x18\x01 \x03(\v2\x1c.buildozer.proto.v1.PeerInfoR\x05peers\x12\x14\n" +
+	"\x0erequester_info\x18\x01 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"Y\n" +
+	"\x11ListPeersResponse\x12.\n" +
+	"\x05peers\x18\x01 \x03(\v2\x18.buildozer.proto.v1.PeerR\x05peers\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\"c\n" +
 	"\x17TriggerDiscoveryRequest\x12H\n" +
 	"\x0erequester_info\x18\x01 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"\xb9\x01\n" +
@@ -587,7 +833,28 @@ const file_buildozer_proto_v1_discovery_proto_rawDesc = "" +
 	"\aSUCCESS\x10\x00\x12\x13\n" +
 	"\x0fALREADY_RUNNING\x10\x01\x12\n" +
 	"\n" +
-	"\x06FAILED\x10\x022\xdb\x01\n" +
+	"\x06FAILED\x10\x02\"\xb6\x01\n" +
+	"\fDaemonStatus\x125\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1f.buildozer.proto.v1.DaemonStateR\x05state\x12'\n" +
+	"\x0fload_percentage\x18\x02 \x01(\rR\x0eloadPercentage\x12\x1f\n" +
+	"\vactive_jobs\x18\x03 \x01(\rR\n" +
+	"activeJobs\x12%\n" +
+	"\x0euptime_seconds\x18\x04 \x01(\x04R\ruptimeSeconds\"\xc7\x02\n" +
+	"\x11AnnouncementEvent\x12;\n" +
+	"\ttimestamp\x18\x01 \x01(\v2\x1d.buildozer.proto.v1.TimeStampR\ttimestamp\x12,\n" +
+	"\x04peer\x18\x02 \x01(\v2\x18.buildozer.proto.v1.PeerR\x04peer\x128\n" +
+	"\x04type\x18\x03 \x01(\x0e2$.buildozer.proto.v1.AnnouncementTypeR\x04type\x12*\n" +
+	"\x11initiator_peer_id\x18\x04 \x01(\tR\x0finitiatorPeerId\x12&\n" +
+	"\x0fignore_peer_ids\x18\x05 \x03(\tR\rignorePeerIds\x129\n" +
+	"\vknown_peers\x18\x06 \x03(\v2\x18.buildozer.proto.v1.PeerR\n" +
+	"knownPeers*W\n" +
+	"\vDaemonState\x12\x15\n" +
+	"\x11DAEMON_STATE_IDLE\x10\x00\x12\x15\n" +
+	"\x11DAEMON_STATE_BUSY\x10\x01\x12\x1a\n" +
+	"\x16DAEMON_STATE_UNHEALTHY\x10\x02*Q\n" +
+	"\x10AnnouncementType\x12\x1d\n" +
+	"\x19ANNOUNCEMENT_TYPE_REQUEST\x10\x00\x12\x1e\n" +
+	"\x1aANNOUNCEMENT_TYPE_RESPONSE\x10\x012\xdb\x01\n" +
 	"\x10DiscoveryService\x12X\n" +
 	"\tListPeers\x12$.buildozer.proto.v1.ListPeersRequest\x1a%.buildozer.proto.v1.ListPeersResponse\x12m\n" +
 	"\x10TriggerDiscovery\x12+.buildozer.proto.v1.TriggerDiscoveryRequest\x1a,.buildozer.proto.v1.TriggerDiscoveryResponseB\xdb\x01\n" +
@@ -605,41 +872,48 @@ func file_buildozer_proto_v1_discovery_proto_rawDescGZIP() []byte {
 	return file_buildozer_proto_v1_discovery_proto_rawDescData
 }
 
-var file_buildozer_proto_v1_discovery_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_buildozer_proto_v1_discovery_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_buildozer_proto_v1_discovery_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_buildozer_proto_v1_discovery_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_buildozer_proto_v1_discovery_proto_goTypes = []any{
-	(TriggerDiscoveryResponse_Status)(0), // 0: buildozer.proto.v1.TriggerDiscoveryResponse.Status
-	(*PeerCapabilities)(nil),             // 1: buildozer.proto.v1.PeerCapabilities
-	(*PeerMetadata)(nil),                 // 2: buildozer.proto.v1.PeerMetadata
-	(*PeerInfo)(nil),                     // 3: buildozer.proto.v1.PeerInfo
-	(*ListPeersRequest)(nil),             // 4: buildozer.proto.v1.ListPeersRequest
-	(*ListPeersResponse)(nil),            // 5: buildozer.proto.v1.ListPeersResponse
-	(*TriggerDiscoveryRequest)(nil),      // 6: buildozer.proto.v1.TriggerDiscoveryRequest
-	(*TriggerDiscoveryResponse)(nil),     // 7: buildozer.proto.v1.TriggerDiscoveryResponse
-	(*Runtime)(nil),                      // 8: buildozer.proto.v1.Runtime
-	(*ApiUri)(nil),                       // 9: buildozer.proto.v1.ApiUri
-	(*TimeStamp)(nil),                    // 10: buildozer.proto.v1.TimeStamp
-	(*RequesterInfo)(nil),                // 11: buildozer.proto.v1.RequesterInfo
+	(DaemonState)(0),                     // 0: buildozer.proto.v1.DaemonState
+	(AnnouncementType)(0),                // 1: buildozer.proto.v1.AnnouncementType
+	(TriggerDiscoveryResponse_Status)(0), // 2: buildozer.proto.v1.TriggerDiscoveryResponse.Status
+	(*PeerCapabilities)(nil),             // 3: buildozer.proto.v1.PeerCapabilities
+	(*Peer)(nil),                         // 4: buildozer.proto.v1.Peer
+	(*ListPeersRequest)(nil),             // 5: buildozer.proto.v1.ListPeersRequest
+	(*ListPeersResponse)(nil),            // 6: buildozer.proto.v1.ListPeersResponse
+	(*TriggerDiscoveryRequest)(nil),      // 7: buildozer.proto.v1.TriggerDiscoveryRequest
+	(*TriggerDiscoveryResponse)(nil),     // 8: buildozer.proto.v1.TriggerDiscoveryResponse
+	(*DaemonStatus)(nil),                 // 9: buildozer.proto.v1.DaemonStatus
+	(*AnnouncementEvent)(nil),            // 10: buildozer.proto.v1.AnnouncementEvent
+	(*Runtime)(nil),                      // 11: buildozer.proto.v1.Runtime
+	(*ApiUri)(nil),                       // 12: buildozer.proto.v1.ApiUri
+	(*TimeStamp)(nil),                    // 13: buildozer.proto.v1.TimeStamp
+	(*RequesterInfo)(nil),                // 14: buildozer.proto.v1.RequesterInfo
 }
 var file_buildozer_proto_v1_discovery_proto_depIdxs = []int32{
-	8,  // 0: buildozer.proto.v1.PeerCapabilities.available_runtimes:type_name -> buildozer.proto.v1.Runtime
-	9,  // 1: buildozer.proto.v1.PeerInfo.grpc_uri:type_name -> buildozer.proto.v1.ApiUri
-	9,  // 2: buildozer.proto.v1.PeerInfo.rest_api_uri:type_name -> buildozer.proto.v1.ApiUri
-	10, // 3: buildozer.proto.v1.PeerInfo.last_seen:type_name -> buildozer.proto.v1.TimeStamp
-	8,  // 4: buildozer.proto.v1.PeerInfo.available_runtimes:type_name -> buildozer.proto.v1.Runtime
-	11, // 5: buildozer.proto.v1.ListPeersRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	3,  // 6: buildozer.proto.v1.ListPeersResponse.peers:type_name -> buildozer.proto.v1.PeerInfo
-	11, // 7: buildozer.proto.v1.TriggerDiscoveryRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	0,  // 8: buildozer.proto.v1.TriggerDiscoveryResponse.status:type_name -> buildozer.proto.v1.TriggerDiscoveryResponse.Status
-	4,  // 9: buildozer.proto.v1.DiscoveryService.ListPeers:input_type -> buildozer.proto.v1.ListPeersRequest
-	6,  // 10: buildozer.proto.v1.DiscoveryService.TriggerDiscovery:input_type -> buildozer.proto.v1.TriggerDiscoveryRequest
-	5,  // 11: buildozer.proto.v1.DiscoveryService.ListPeers:output_type -> buildozer.proto.v1.ListPeersResponse
-	7,  // 12: buildozer.proto.v1.DiscoveryService.TriggerDiscovery:output_type -> buildozer.proto.v1.TriggerDiscoveryResponse
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 0: buildozer.proto.v1.PeerCapabilities.available_runtimes:type_name -> buildozer.proto.v1.Runtime
+	12, // 1: buildozer.proto.v1.Peer.api_uri:type_name -> buildozer.proto.v1.ApiUri
+	13, // 2: buildozer.proto.v1.Peer.last_seen:type_name -> buildozer.proto.v1.TimeStamp
+	11, // 3: buildozer.proto.v1.Peer.available_runtimes:type_name -> buildozer.proto.v1.Runtime
+	14, // 4: buildozer.proto.v1.ListPeersRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	4,  // 5: buildozer.proto.v1.ListPeersResponse.peers:type_name -> buildozer.proto.v1.Peer
+	14, // 6: buildozer.proto.v1.TriggerDiscoveryRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	2,  // 7: buildozer.proto.v1.TriggerDiscoveryResponse.status:type_name -> buildozer.proto.v1.TriggerDiscoveryResponse.Status
+	0,  // 8: buildozer.proto.v1.DaemonStatus.state:type_name -> buildozer.proto.v1.DaemonState
+	13, // 9: buildozer.proto.v1.AnnouncementEvent.timestamp:type_name -> buildozer.proto.v1.TimeStamp
+	4,  // 10: buildozer.proto.v1.AnnouncementEvent.peer:type_name -> buildozer.proto.v1.Peer
+	1,  // 11: buildozer.proto.v1.AnnouncementEvent.type:type_name -> buildozer.proto.v1.AnnouncementType
+	4,  // 12: buildozer.proto.v1.AnnouncementEvent.known_peers:type_name -> buildozer.proto.v1.Peer
+	5,  // 13: buildozer.proto.v1.DiscoveryService.ListPeers:input_type -> buildozer.proto.v1.ListPeersRequest
+	7,  // 14: buildozer.proto.v1.DiscoveryService.TriggerDiscovery:input_type -> buildozer.proto.v1.TriggerDiscoveryRequest
+	6,  // 15: buildozer.proto.v1.DiscoveryService.ListPeers:output_type -> buildozer.proto.v1.ListPeersResponse
+	8,  // 16: buildozer.proto.v1.DiscoveryService.TriggerDiscovery:output_type -> buildozer.proto.v1.TriggerDiscoveryResponse
+	15, // [15:17] is the sub-list for method output_type
+	13, // [13:15] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_buildozer_proto_v1_discovery_proto_init() }
@@ -649,13 +923,14 @@ func file_buildozer_proto_v1_discovery_proto_init() {
 	}
 	file_buildozer_proto_v1_runtime_proto_init()
 	file_buildozer_proto_v1_vocabulary_proto_init()
+	file_buildozer_proto_v1_discovery_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buildozer_proto_v1_discovery_proto_rawDesc), len(file_buildozer_proto_v1_discovery_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   7,
+			NumEnums:      3,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

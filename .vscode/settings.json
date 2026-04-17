@@ -22,4 +22,16 @@
   },
   "go.lintTool": "golangci-lint",
   "go.lintOnSave": "package",
+  "cmake.sourceDirectory": "/workspaces/buildozer/examples/cmake_project",
+  "workbench.colorCustomizations": {
+    "editor.foreground": "#cccccc",
+    "editor.background": "#000000",
+    "terminal.background": "#000000",
+    "terminal.foreground": "#cccccc",
+    "debugConsole.sourceForeground": "#cccccc",
+    "debugConsoleInputBorder": "#666666",
+    "debugConsoleErrorIconForeground": "#ff9999",
+    "editorForeground": "#cccccc",
+    "editorBackground": "#000000"
+  }
 }

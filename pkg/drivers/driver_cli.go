@@ -4,6 +4,7 @@ package drivers
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Manu343726/buildozer/pkg/driver"
 	"github.com/spf13/cobra"
@@ -79,6 +80,27 @@ func runDriver(cmd *cobra.Command, args []string, d driver.Driver) error {
 
 	// Extract generic driver configuration
 	commonCfg := ExtractCommonConfig()
+
+	// If VERBOSE environment variable is set (any value, including empty), configure verbose log level
+	// This matches CMake/make behavior where presence of VERBOSE enables verbose output
+	if _, ok := os.LookupEnv("VERBOSE"); ok {
+		// Determine the log level to use when verbose is enabled
+		// Default to "debug" if no environment variables are set
+		verboseLogLevel := "debug"
+
+		// Check driver-agnostic variable first
+		if envLevel := os.Getenv("BUILDOZER_DRIVER_VERBOSE_LOG_LEVEL"); envLevel != "" {
+			verboseLogLevel = envLevel
+		}
+
+		// Check driver-specific variable (takes precedence over driver-agnostic)
+		driverSpecificVar := fmt.Sprintf("BUILDOZER_%s_VERBOSE_LOG_LEVEL", strings.ToUpper(d.Name()))
+		if envLevel := os.Getenv(driverSpecificVar); envLevel != "" {
+			verboseLogLevel = envLevel
+		}
+
+		commonCfg.LogLevel = verboseLogLevel
+	}
 
 	// Validate arguments using driver-specific validator
 	if err := d.ValidateArgs(parsedArgs); err != nil {

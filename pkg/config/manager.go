@@ -144,19 +144,21 @@ func Get() *Config {
 	return ConfigManager().Get()
 }
 
-// FindConfigFile searches for a .buildozer configuration file starting from startDir
+// FindConfigFile searches for a .buildozer or .buildozer.yaml configuration file starting from startDir
 // and searching up through parent directories until finding the file or reaching the root.
 // This mimics the behavior of .clang-format file discovery.
 //
 // Returns:
-//   - The path to the .buildozer file if found
+//   - The path to the .buildozer or .buildozer.yaml file if found
 //   - Empty string if not found
 //   - An error if there's a filesystem issue
 //
 // Search order:
 //  1. startDir/.buildozer
-//  2. startDir/../.buildozer
-//  3. Continue up the directory tree until root is reached
+//  2. startDir/.buildozer.yaml
+//  3. startDir/../.buildozer
+//  4. startDir/../.buildozer.yaml
+//  5. Continue up the directory tree until root is reached
 func FindConfigFile(startDir string) (string, error) {
 	if startDir == "" {
 		var err error
@@ -184,6 +186,15 @@ func FindConfigFile(startDir string) (string, error) {
 			return "", fmt.Errorf("failed to check for config file at %s: %w", configPath, err)
 		}
 
+		configPathYaml := filepath.Join(currentDir, ".buildozer.yaml")
+		if _, err := os.Stat(configPathYaml); err == nil {
+			// File found
+			return configPathYaml, nil
+		} else if !os.IsNotExist(err) {
+			// Some other error occurred
+			return "", fmt.Errorf("failed to check for config file at %s: %w", configPathYaml, err)
+		}
+
 		// Move to parent directory
 		parentDir := filepath.Dir(currentDir)
 		if parentDir == currentDir {
@@ -197,7 +208,7 @@ func FindConfigFile(startDir string) (string, error) {
 	return "", nil
 }
 
-// LoadDriverConfig loads the .buildozer config file from cwd or parent directories
+// LoadDriverConfig loads the .buildozer or .buildozer.yaml config file from cwd or parent directories
 // and returns the parsed configuration. If no config file is found, returns an
 // empty/default config.
 func LoadDriverConfig(startDir string) (*Config, string, error) {

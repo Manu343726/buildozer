@@ -10,6 +10,7 @@ import (
 	"github.com/Manu343726/buildozer/pkg/daemon"
 	"github.com/Manu343726/buildozer/pkg/driver"
 	"github.com/Manu343726/buildozer/pkg/logging"
+	"github.com/Manu343726/buildozer/pkg/staging"
 )
 
 // DriverConfig contains build context and configuration for driver execution.
@@ -29,6 +30,8 @@ type DriverConfig struct {
 	ConfigPath string
 	// InitialRuntime: optional runtime ID to use directly
 	InitialRuntime string
+	// LoggingDir: directory for driver log files (default: ~/.cache/buildozer/logs)
+	LoggingDir string
 }
 
 // RunDriver is the generic driver orchestration function.
@@ -50,6 +53,46 @@ type DriverConfig struct {
 //
 // Returns the exit code (0 for success, non-zero for failure)
 func RunDriver(ctx context.Context, d driver.Driver, args []string, config *DriverConfig) int {
+	// Configure driver logging early with custom config using driver name and config settings
+	// Logger is always debug, stdout sink level is configurable by CLI flag, file sink is always debug
+	loggingDir := config.LoggingDir
+	if loggingDir == "" {
+		loggingDir = "~/.cache/buildozer/logs"
+	}
+	loggingDir = logging.ExpandHome(loggingDir)
+
+	driverLoggingConfig := logging.LoggingConfig{
+		GlobalLevel: "debug",
+		LoggingDir:  loggingDir,
+		Sinks: []logging.SinkConfig{
+			{
+				Name:  "stdout",
+				Type:  "stdout",
+				Level: config.LogLevel, // Use CLI flag (defaults to "warn")
+			},
+			{
+				Name:       "file-" + d.Name(),
+				Type:       "file",
+				Level:      "debug",
+				Filename:   d.Name() + ".log",
+				MaxSizeB:   50 * 1024 * 1024, // 50MB
+				MaxFiles:   5,
+				MaxAgeDays: 30,
+			},
+		},
+		Loggers: []logging.LoggerConfig{
+			{
+				Name:  "buildozer",
+				Level: "debug", // Logger always debug
+				Sinks: []string{"stdout", "file-" + d.Name()},
+			},
+		},
+	}
+	if err := logging.InitializeGlobal(driverLoggingConfig); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		return 1
+	}
+
 	log := Log().Child(d.Name())
 	log.Info(fmt.Sprintf("%s driver started", d.Name()), "numArgs", len(args), "standalone", config.Standalone)
 
@@ -96,15 +139,11 @@ func RunDriver(ctx context.Context, d driver.Driver, args []string, config *Driv
 	}
 
 	// Parse command line arguments (driver-specific)
+	log.Debug("Original command line arguments", "args", args)
 	parsed := d.ParseCommandLine(args)
-	log.Debug("Parsed command line")
 
-	// Set log level if specified
-	if config.LogLevel != "" {
-		level := logging.ParseLevel(config.LogLevel)
-		logging.SetGlobalLevel(level)
-		log.Debug("Log level set", "level", config.LogLevel)
-	}
+	// Note: Logging is configured in RunDriver() at the start
+	// with custom config: logger at debug, stdout sink configurable, file sink at debug
 
 	// Handle --version flag
 	if isVersionFlag(args) {
@@ -118,94 +157,75 @@ func RunDriver(ctx context.Context, d driver.Driver, args []string, config *Driv
 		workDir, _ = os.Getwd()
 	}
 
-	// Create the RuntimeResolver using daemon address from config
+	// Create the RuntimeResolver for drivers to use during CreateJob
 	resolver := NewRuntimeResolver(config.DaemonHost, config.DaemonPort)
 	log.Debug("Created RuntimeResolver", "daemonHost", config.DaemonHost, "daemonPort", config.DaemonPort)
 
-	// Resolve runtime using the generic framework
-	configPath := config.ConfigPath
-	if configPath == "" {
-		// Let RuntimeResolver search for config
-		configPath = workDir
+	// Create RuntimeContext with resolver for driver-side resolution
+	rtCtx := &driver.RuntimeContext{
+		Resolver:   resolver,
+		DaemonHost: config.DaemonHost,
+		DaemonPort: config.DaemonPort,
+		ConfigPath: config.ConfigPath,
+		WorkDir:    workDir,
 	}
 
-	resolutionResult := resolver.Resolve(ctx, configPath, workDir, config.InitialRuntime, args, d)
-	log.Debug("Runtime resolution result",
-		"hasError", resolutionResult.Error != "",
-		"hasWarning", resolutionResult.Warning != "",
-		"isNative", resolutionResult.IsNative,
-		"foundRuntime", resolutionResult.FoundRuntime != nil)
-
-	// Handle errors
-	if resolutionResult.Error != "" {
-		fmt.Fprintf(os.Stderr, "%s %s\n", d.ErrorPrefix(), resolutionResult.Error)
+	// Create job (driver-specific) - driver is responsible for runtime resolution inside CreateJob
+	job, err := d.CreateJob(ctx, parsed, workDir, rtCtx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s failed to create job: %v\n", d.ErrorPrefix(), err)
 		return 1
 	}
 
-	// Handle warnings
-	if resolutionResult.Warning != "" {
-		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", d.Name(), resolutionResult.Warning)
+	if job == nil {
+		fmt.Fprintf(os.Stderr, "%s failed to create job: job is nil\n", d.ErrorPrefix())
+		return 1
 	}
 
-	// Validate runtime using driver's ValidateRuntime method
-	if resolutionResult.FoundRuntime != nil {
-		isValid, reason := d.ValidateRuntime(resolutionResult.FoundRuntime)
-		if !isValid {
-			fmt.Fprintf(os.Stderr, "%s %s\n", d.ErrorPrefix(), reason)
-			return 1
-		}
+	// Verify job inputs are accessible on disk before submitting
+	log.Debug("Verifying job inputs on disk", "jobID", job.Id, "inputCount", len(job.Inputs))
+	stager := staging.NewJobDataStager(job.Cwd)
+	if err := stager.VerifyJobInputs(ctx, job, staging.VerificationModeSaved); err != nil {
+		fmt.Fprintf(os.Stderr, "%s input verification failed: %v\n", d.ErrorPrefix(), err)
+		return 1
+	}
+	log.Debug("Job inputs verified", "jobID", job.Id)
+
+	// Enrich context with driver information for requester identification
+	driverCtx := context.WithValue(ctx, ContextKeyDriverName, d.Name())
+	driverCtx = context.WithValue(driverCtx, ContextKeyDriverVersion, d.Version())
+
+	log.Debug("About to submit job to daemon", "jobID", job.Id, "daemonHost", config.DaemonHost, "daemonPort", config.DaemonPort)
+
+	// Submit job with driver identification
+	confirmation, stream, err := SubmitJob(driverCtx, config.DaemonHost, config.DaemonPort, job)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s failed to submit job: %v\n", d.ErrorPrefix(), err)
+		return 1
 	}
 
-	// Runtime was found and validated
-	if resolutionResult.FoundRuntime != nil {
-		log.Info("Runtime resolved successfully",
-			"runtimeID", resolutionResult.FoundRuntime.GetId(),
-			"isNative", resolutionResult.IsNative)
-
-		// Create job (driver-specific)
-		job, err := d.CreateJob(ctx, parsed, resolutionResult.FoundRuntime, workDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to create job: %v\n", d.ErrorPrefix(), err)
-			return 1
-		}
-
-		if job == nil {
-			fmt.Fprintf(os.Stderr, "%s failed to create job: job is nil\n", d.ErrorPrefix())
-			return 1
-		}
-
-		// Submit job
-		submitResp, err := SubmitJob(ctx, config.DaemonHost, config.DaemonPort, job)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to submit job: %v\n", d.ErrorPrefix(), err)
-			return 1
-		}
-
-		if !submitResp.Accepted {
-			fmt.Fprintf(os.Stderr, "%s job rejected by daemon: %s\n", d.ErrorPrefix(), submitResp.ErrorMessage)
-			return 1
-		}
-
-		log.Info("Job submitted, watching for progress", "jobID", job.Id)
-
-		// Watch job progress and stream output to stdout
-		result, exitCode, err := WatchAndStreamJobProgress(ctx, config.DaemonHost, config.DaemonPort, job.Id)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s failed to watch job progress: %v\n", d.ErrorPrefix(), err)
-			return 1
-		}
-
-		if result != nil {
-			log.Debug("Job completed with result", "jobID", job.Id, "exitCode", result.ExitCode)
-			return int(result.ExitCode)
-		}
-
-		return exitCode
+	if !confirmation.Accepted {
+		fmt.Fprintf(os.Stderr, "%s job rejected by daemon: %s\n", d.ErrorPrefix(), confirmation.ErrorMessage)
+		return 1
 	}
 
-	// No runtime found and no error was reported - unexpected state
-	fmt.Fprintf(os.Stderr, "%s unable to resolve compiler runtime\n", d.ErrorPrefix())
-	return 1
+	Log().Info("Job submitted, watching for progress", "jobID", job.Id)
+
+	// Stream job progress from the submission response stream and stream output to stdout (with driver context)
+	result, exitCode, err := WatchAndStreamJobProgressFromStream(driverCtx, stream, config.DaemonHost, config.DaemonPort, job.Id, workDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s failed to watch job progress: %v\n", d.ErrorPrefix(), err)
+		return 1
+	}
+
+	// Use the exit code returned from WatchAndStreamJobProgressWithOutputDir
+	// which is set based on the final job status (COMPLETED=0, FAILED=1, CANCELLED=1)
+	// The result object contains additional details but we trust the status-based exit code
+	if result != nil {
+		log.Debug("Job completed with result", "jobID", job.Id, "status", result.Status, "exitCode", exitCode)
+	}
+
+	return exitCode
 }
 
 // ListCompatibleRuntimes lists compatible runtimes for the given driver.

@@ -1,28 +1,36 @@
 package native
 
 // Language represents the C/C++ language variant.
-type Language int
+type Language string
 
 const (
 	// LanguageUnspecified indicates an unspecified language.
-	LanguageUnspecified Language = iota
+	LanguageUnspecified Language = "unspecified"
 	// LanguageC represents the C programming language.
-	LanguageC
+	LanguageC Language = "c"
 	// LanguageCpp represents the C++ programming language.
-	LanguageCpp
+	LanguageCpp Language = "cpp"
 )
 
+func (l Language) String() string {
+	return string(l)
+}
+
 // Compiler represents the C/C++ compiler implementation.
-type Compiler int
+type Compiler string
 
 const (
 	// CompilerUnspecified indicates an unspecified compiler.
-	CompilerUnspecified Compiler = iota
+	CompilerUnspecified Compiler = "unspecified"
 	// CompilerGCC represents the GNU Compiler Collection (GCC).
-	CompilerGCC
+	CompilerGCC Compiler = "gcc"
 	// CompilerClang represents the Clang/LLVM compiler.
-	CompilerClang
+	CompilerClang Compiler = "clang"
 )
+
+func (c Compiler) String() string {
+	return string(c)
+}
 
 // Architecture represents the target CPU architecture that the compiler targets.
 type Architecture string
@@ -38,39 +46,55 @@ const (
 	ArchitectureARM Architecture = "arm"
 )
 
+func (a Architecture) String() string {
+	return string(a)
+}
+
 // CRuntime represents the C standard library implementation.
-type CRuntime int
+type CRuntime string
 
 const (
 	// CRuntimeUnspecified indicates an unspecified C runtime.
-	CRuntimeUnspecified CRuntime = iota
+	CRuntimeUnspecified CRuntime = "unspecified"
 	// CRuntimeGlibc represents the GNU C Library (glibc), standard on Linux.
-	CRuntimeGlibc
+	CRuntimeGlibc CRuntime = "glibc"
 	// CRuntimeMusl represents the musl C library, used in Alpine Linux and embedded systems.
-	CRuntimeMusl
+	CRuntimeMusl CRuntime = "musl"
 )
 
+func (c CRuntime) String() string {
+	return string(c)
+}
+
 // CppStdlib represents the C++ standard library implementation.
-type CppStdlib int
+type CppStdlib string
 
 const (
 	// CppStdlibUnspecified indicates an unspecified C++ standard library.
-	CppStdlibUnspecified CppStdlib = iota
+	CppStdlibUnspecified CppStdlib = "unspecified"
 	// CppStdlibLibstdcxx represents GCC's libstdc++ standard library.
-	CppStdlibLibstdcxx
+	CppStdlibLibstdcxx CppStdlib = "libstdc++"
 	// CppStdlibLibcxx represents LLVM/Clang's libc++ standard library.
-	CppStdlibLibcxx
+	CppStdlibLibcxx CppStdlib = "libc++"
 )
 
+func (c CppStdlib) String() string {
+	return string(c)
+}
+
 // CppAbi represents the C++ ABI (Application Binary Interface) specification.
-type CppAbi int
+type CppAbi string
 
 const (
 	// CppAbiUnspecified indicates an unspecified C++ ABI.
-	CppAbiUnspecified CppAbi = iota
+	CppAbiUnspecified CppAbi = "unspecified"
 	// CppAbiItanium represents the Itanium C++ ABI (used on UNIX-like systems by GCC and Clang).
-	CppAbiItanium
+	CppAbiItanium CppAbi = "itanium"
 )
+
+func (a CppAbi) String() string {
+	return string(a)
+}
 
 // Toolchain represents a complete C/C++ compilation environment specifying the compiler,
 // target architecture, and runtime libraries.
@@ -81,6 +105,8 @@ type Toolchain struct {
 	Compiler Compiler
 	// CompilerPath is the filesystem path to the compiler executable.
 	CompilerPath string
+	// ArchiverPath is the filesystem path to the archiver executable (e.g., ar).
+	ArchiverPath string
 	// CompilerVersion is the version string of the compiler (e.g., "11.2.0").
 	CompilerVersion string
 	// Architecture is the target CPU architecture.
@@ -116,6 +142,8 @@ type CompileJob struct {
 type LinkJob struct {
 	// ObjectFiles is a list of object files to link.
 	ObjectFiles []string
+	// LibraryFiles is a list of full-path library files to link (e.g., "lib/libmath.a").
+	LibraryFiles []string
 	// Libraries is a list of library names to link against (e.g., "m", "pthread").
 	Libraries []string
 	// LinkerFlags is a list of additional linker command-line flags.
@@ -124,6 +152,16 @@ type LinkJob struct {
 	OutputFile string
 	// SharedLibrary indicates whether to produce a shared library instead of an executable.
 	SharedLibrary bool
+}
+
+// ArchiveJob specifies a C/C++ static library archive operation.
+type ArchiveJob struct {
+	// InputFiles is a list of object files to add to the archive.
+	InputFiles []string
+	// ArFlags is a list of ar command flags (e.g., "r", "u", "c", "v").
+	ArFlags []string
+	// OutputFile is the path where the archive file (.a) will be written.
+	OutputFile string
 }
 
 // ExecutionOutput contains the result of executing a compilation or linking job.

@@ -31,57 +31,29 @@ type PeerDiscoveryConfig struct {
 func DefaultPeerDiscoveryConfig() PeerDiscoveryConfig {
 	return PeerDiscoveryConfig{
 		Enabled:          true,
-		MDNSIntervalSecs: 30,
+		MDNSIntervalSecs: 300, // 5 minutes by default
 	}
 }
 
-// CppDriverConfig holds C/C++ compiler driver configuration
+// CppDriverConfig is deprecated - use driver-specific config structs in each driver package instead.
+// Kept for reference only.
 type CppDriverConfig struct {
-	// CompilerVersion specifies the preferred compiler version (e.g., "9", "10", "11", "gcc-9")
-	CompilerVersion string `json:"compiler_version" yaml:"compiler_version"`
-
-	// CompilerType specifies the preferred compiler type if multiple are available (e.g., "gcc", "clang")
-	CompilerType string `json:"compiler_type" yaml:"compiler_type"`
-
-	// CRuntime specifies the C runtime to use (e.g., "glibc", "musl")
-	CRuntime string `json:"c_runtime" yaml:"c_runtime"`
-
-	// CppStdLib specifies the C++ standard library (e.g., "libstdc++", "libc++")
-	CppStdLib string `json:"cpp_stdlib" yaml:"cpp_stdlib"`
-
-	// Architecture specifies the target architecture (e.g., "x86_64", "aarch64", "armv7")
-	Architecture string `json:"architecture" yaml:"architecture"`
-}
-
-// DriversConfig holds driver-specific configuration
-type DriversConfig struct {
-	// Gcc configuration for gcc driver
-	Gcc CppDriverConfig `json:"gcc" yaml:"gcc"`
-
-	// Gxx configuration for g++ driver
-	Gxx CppDriverConfig `json:"g++" yaml:"g++"`
-
-	// Make configuration for make driver (future)
-	// Make *MakeDriverConfig `json:"make" yaml:"make"`
-}
-
-// DefaultDriversConfig returns default driver configuration
-func DefaultDriversConfig() DriversConfig {
-	return DriversConfig{
-		Gcc: CppDriverConfig{},
-		Gxx: CppDriverConfig{},
-	}
+	CompilerVersion string
+	CRuntime        string
+	CRuntimeVersion string
+	CppStdLib       string
+	Architecture    string
 }
 
 // Config holds the effective configuration from all sources (flags, env vars, config file)
 // It composes config structs from different packages
 type Config struct {
-	Standalone    bool                  `json:"standalone" yaml:"standalone"`
-	Daemon        daemon.DaemonConfig   `json:"daemon" yaml:"daemon"`
-	Logging       logging.LoggingConfig `json:"logging" yaml:"logging"`
-	Cache         CacheConfig           `json:"cache" yaml:"cache"`
-	PeerDiscovery PeerDiscoveryConfig   `json:"peer_discovery" yaml:"peer_discovery"`
-	Drivers       DriversConfig         `json:"drivers" yaml:"drivers"`
+	Standalone    bool                              `json:"standalone" yaml:"standalone" mapstructure:"standalone"`             // If true, runs in standalone mode without daemonizing
+	Daemon        daemon.DaemonConfig               `json:"daemon" yaml:"daemon" mapstructure:"daemon"`                         // Daemon-related configuration
+	Logging       logging.LoggingConfig             `json:"logging" yaml:"logging" mapstructure:"logging"`                      // Logging-related configuration
+	Cache         CacheConfig                       `json:"cache" yaml:"cache" mapstructure:"cache"`                            // Cache-related configuration
+	PeerDiscovery PeerDiscoveryConfig               `json:"peer_discovery" yaml:"peer_discovery" mapstructure:"peer_discovery"` // Peer discovery configuration
+	Drivers       map[string]map[string]interface{} `json:"drivers" yaml:"drivers" mapstructure:"drivers"`                      // Driver-specific configuration, maps driver name to config map
 }
 
 // DefaultConfig returns the default configuration with all defaults applied from each package
@@ -92,7 +64,7 @@ func DefaultConfig() Config {
 		Logging:       logging.DefaultLoggingConfig(),
 		Cache:         DefaultCacheConfig(),
 		PeerDiscovery: DefaultPeerDiscoveryConfig(),
-		Drivers:       DefaultDriversConfig(),
+		Drivers:       make(map[string]map[string]interface{}),
 	}
 }
 

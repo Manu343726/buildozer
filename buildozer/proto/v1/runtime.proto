@@ -6,6 +6,32 @@ import "buildozer/proto/v1/vocabulary.proto";
 
 option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
 
+// RuntimePlatform represents the execution platform (hardware and OS combination)
+enum RuntimePlatform {
+  // Unspecified runtime platform
+  RUNTIME_PLATFORM_UNSPECIFIED = 0;
+  // Native execution on Linux
+  RUNTIME_PLATFORM_NATIVE_LINUX = 1;
+  // Docker containerized execution on Linux
+  RUNTIME_PLATFORM_DOCKER_LINUX = 2;
+  // Future: RUNTIME_PLATFORM_NATIVE_WINDOWS = 3, etc.
+}
+
+// RuntimeToolchain represents the programming language family / toolchain type
+enum RuntimeToolchain {
+  // Unspecified runtime toolchain
+  RUNTIME_TOOLCHAIN_UNSPECIFIED = 0;
+  // C programming language toolchain
+  RUNTIME_TOOLCHAIN_C = 1;
+  // C++ programming language toolchain
+  RUNTIME_TOOLCHAIN_CPP = 2;
+  // Go programming language toolchain
+  RUNTIME_TOOLCHAIN_GO = 3;
+  // Rust programming language toolchain
+  RUNTIME_TOOLCHAIN_RUST = 4;
+  // Future: other toolchains can be added here
+}
+
 // CppLanguage represents C/C++ language variants
 enum CppLanguage {
   // Unspecified C/C++ language
@@ -177,7 +203,7 @@ message DockerRuntimeMetadata {
   optional DockerfileRecipe recipe = 4;
 
   // Optional: Runtime metadata of the linux native runtime that this Docker image replicates (if applicable)
-  optional LinuxNativeRuntimeMetadata linux_native_equivalent = 5;
+  optional LinuxNativeRuntimeMetadata native_linux_equivalent = 5;
 }
 
 // LinuxNativeRuntimeMetadata provides information about a native runtime on Linux
@@ -200,18 +226,28 @@ message LinuxNativeRuntimeMetadata {
 message RuntimeMetadata {
   oneof metadata {
     DockerRuntimeMetadata docker = 1;
-    LinuxNativeRuntimeMetadata linux_native = 2;
+    LinuxNativeRuntimeMetadata native_linux = 2;
   }
 }
 
 // Runtime represents an executable environment where jobs run.
-// Contains the toolchain specification (C++, Go, Rust, etc.) and resource constraints.
+// Combines platform (native_linux, docker_linux, etc.) with toolchain (C, C++, Go, Rust, etc.).
+// Runtime ID format: platform_os-toolchain-[compiler-version-...]
+// Example: native_linux-cpp-gcc-11.2.0-glibc-2.31-libstdc++-x86_64
+// Note: AR (static archiver) is part of C toolchain, not a separate toolchain type.
 message Runtime {
-  // Unique identifier for this runtime (SHA256 of toolchain || recipe || constraints)
+  // Unique identifier for this runtime (platform-toolchain specific format)
+  // Examples: native_linux-c-gcc-10.2.1-glibc-2.31-x86_64
   string id = 1;
 
+  // Runtime execution platform (hardware/OS combination)
+  RuntimePlatform platform = 2;
+
+  // Runtime toolchain family (language type)
+  RuntimeToolchain toolchain = 3;
+
   // Concrete toolchain specification (oneof discriminates the type)
-  oneof toolchain {
+  oneof toolchain_spec {
     CppToolchain cpp = 10;
     GoToolchain go = 11;
     RustToolchain rust = 12;
@@ -227,14 +263,15 @@ message Runtime {
   // Optional: Human-readable description
   optional string description = 22;
 
-  // Whether this runtime is available natively on the peer (vs. Docker-only)
-  bool is_native = 23;
-
   // If Docker-based: Docker image digest
-  optional Signature docker_image_digest = 24;
+  optional Signature docker_image_digest = 23;
 
   // Current load and utilization of the runtime
-  RuntimeLoad load = 25;
+  RuntimeLoad load = 24;
+
+  // List of peer endpoints (host:port) that support this runtime
+  // Empty for local runtimes; populated with peer endpoints when aggregating remote runtimes
+  repeated string peer_ids = 25;
 }
 
 // RuntimeService provides RPC methods for querying runtimes available on the daemon
@@ -244,6 +281,9 @@ service RuntimeService {
 
   // GetRuntime returns details about a specific runtime
   rpc GetRuntime(GetRuntimeRequest) returns (GetRuntimeResponse);
+
+  // Match returns runtimes matching the given query
+  rpc Match(MatchRuntimesRequest) returns (MatchRuntimesResponse);
 }
 
 // ListRuntimesRequest requests the list of available runtimes
@@ -255,6 +295,9 @@ message ListRuntimesRequest {
   // If true, only return runtimes available on this daemon
   // If false (default), include runtimes from peer daemons in the network
   bool local_only = 2;
+
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
 }
 
 // ListRuntimesResponse returns the list of available runtimes
@@ -270,6 +313,9 @@ message ListRuntimesResponse {
 message GetRuntimeRequest {
   // Runtime ID to query
   string runtime_id = 1;
+
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 2;
 }
 
 // GetRuntimeResponse returns details about a specific runtime
@@ -279,4 +325,59 @@ message GetRuntimeResponse {
 
   // Error message if runtime not found
   optional string error = 2;
+}
+
+// MatchRuntimesRequest requests runtimes matching a query
+message MatchRuntimesRequest {
+  // Runtime match query specifying required characteristics
+  RuntimeMatchQuery query = 1;
+
+  // If true, only match against local runtimes
+  // If false (default), include runtimes from peer daemons in the network
+  bool local_only = 2;
+
+  // Metadata about the requester making this request
+  RequesterInfo requester_info = 3;
+}
+
+// MatchRuntimesResponse returns runtimes matching the query
+message MatchRuntimesResponse {
+  // Runtimes matching the query
+  repeated Runtime runtimes = 1;
+
+  // Human-readable notes about the match
+  string notes = 2;
+
+  // Error message if matching failed
+  optional string error = 3;
+}
+
+// StringArray is a wrapper around repeated strings for use as map values in protobuf
+// (protobuf maps don't support repeated types as values until proto3)
+message StringArray {
+  // List of string values (empty means "any value acceptable")
+  repeated string values = 1;
+}
+
+// RuntimeMatchQuery declaratively describes which runtimes can satisfy a job's requirements.
+// This is used during scheduling to find compatible runtimes without requiring a specific runtime ID.
+// Example: AR (archiver) doesn't care which compiler produced objects, only that they target glibc 2.31/x86_64.
+message RuntimeMatchQuery {
+  // Required runtime platforms (e.g., [NATIVE_LINUX])
+  // Must be in this list; empty list means no restriction
+  repeated RuntimePlatform platforms = 1;
+
+  // Required runtime toolchains (e.g., [C, CPP])
+  // Toolchain must be in this list; empty list means no restriction
+  repeated RuntimeToolchain toolchains = 2;
+
+  // Toolchain-specific matching parameters
+  // Key examples: "c_runtime", "c_runtime_version", "architecture", "cpp_stdlib"
+  // Values: list of acceptable string values for that parameter
+  // Empty StringArray (no values in the array) = parameter is optional, any value acceptable
+  // For exact proto field representation:
+  //   c_runtime: ["glibc"]           -> must match glibc
+  //   architecture: ["x86_64"]       -> must match x86_64
+  //   cpp_stdlib: []                 -> don't care (accept any or none)
+  map<string, StringArray> params = 3;
 }

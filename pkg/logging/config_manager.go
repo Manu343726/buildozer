@@ -397,11 +397,12 @@ func (m *LocalConfigManager) addSinkInternal(ctx context.Context, sinkName, sink
 		fullPath := filepath.Join(m.registry.loggingDir, filePath)
 		var err error
 		handler, err = sinks.FileSink(sinks.FileSinkConfig{
-			Path:       fullPath,
-			MaxSizeB:   100 * 1024 * 1024, // Default to 100MB
-			MaxFiles:   10,                // Default to 10 backups
-			MaxAgeDays: 0,                 // No age-based rotation by default
-			JSONFormat: false,
+			Path:                          fullPath,
+			MaxSizeB:                      100 * 1024 * 1024, // Default to 100MB
+			MaxFiles:                      10,                // Default to 10 backups
+			MaxAgeDays:                    0,                 // No age-based rotation by default
+			JSONFormat:                    false,
+			OmitLoggerNameIfSourceEnabled: true, // Omit logger name by default when source is enabled
 			HandlerOpts: &slog.HandlerOptions{
 				Level: level,
 			},

@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/Manu343726/buildozer/pkg/cli"
+	pkgconfig "github.com/Manu343726/buildozer/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -15,39 +15,20 @@ func NewQueueCommand() *cobra.Command {
 
 - Pending jobs: Waiting to be scheduled
 - Running jobs: Currently executing
-- Completed jobs: Recently finished jobs
-- Failed jobs: Jobs that failed to execute
 
-For each job, shows:
+For each queued job, shows:
 - Job ID
-- Status (pending/running/completed/failed)
-- Time submitted
-- Expected completion time
-- Assigned executor/peer
+- Current status
+- Time in queue
+- Queue position/priority
 
 Use --standalone to query in-process daemon queue (no separate daemon needed).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			standalone, _ := IsStandaloneMode(cmd)
-
-			if standalone {
-				fmt.Println("[STANDALONE] Job Queue (in-process daemon):")
-				fmt.Println("============================================")
-				fmt.Println("Pending: 0 jobs")
-				fmt.Println("Running: 0 jobs")
-				fmt.Println("Completed: 0 jobs")
-				fmt.Println("Failed: 0 jobs")
-				return nil
+			commands, err := cli.NewQueueCommands(pkgconfig.Get())
+			if err != nil {
+				return err
 			}
-
-			// TODO: Connect to daemon and call IntrospectionService.GetJobQueue()
-			fmt.Println("Job Queue:")
-			fmt.Println("==========")
-			fmt.Println("Pending: 0 jobs")
-			fmt.Println("Running: 0 jobs")
-			fmt.Println("Completed: 0 jobs")
-			fmt.Println("Failed: 0 jobs")
-			fmt.Println("(Queue stats not yet implemented)")
-			return nil
+			return commands.Show()
 		},
 	}
 }

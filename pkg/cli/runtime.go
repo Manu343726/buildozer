@@ -11,6 +11,7 @@ import (
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 	"github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1/protov1connect"
 	"github.com/Manu343726/buildozer/pkg/config"
+	"github.com/Manu343726/buildozer/pkg/daemon"
 	"github.com/Manu343726/buildozer/pkg/logging"
 )
 
@@ -37,15 +38,19 @@ func (rc *RuntimeCommands) List(localOnly bool) error {
 		return fmt.Errorf("configuration not initialized")
 	}
 
-	daemonURL := fmt.Sprintf("http://%s:%d", cfg.Daemon.Host, cfg.Daemon.Port)
+	daemonURL := daemon.RpcURL(cfg.Daemon.Host, cfg.Daemon.Port)
 	client := protov1connect.NewRuntimeServiceClient(http.DefaultClient, daemonURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Query the daemon for available runtimes
+	// Query the daemon for available runtimes with CLI requester identification
 	resp, err := client.ListRuntimes(ctx, connect.NewRequest(&v1.ListRuntimesRequest{
 		LocalOnly: localOnly,
+		RequesterInfo: &v1.RequesterInfo{
+			RequesterId:   "cli",
+			RequesterType: "cli",
+		},
 	}))
 	if err != nil {
 		return fmt.Errorf("failed to query daemon runtimes: %w", err)
@@ -90,15 +95,19 @@ func (rc *RuntimeCommands) Info(runtimeID string) error {
 		return fmt.Errorf("configuration not initialized")
 	}
 
-	daemonURL := fmt.Sprintf("http://%s:%d", cfg.Daemon.Host, cfg.Daemon.Port)
+	daemonURL := daemon.RpcURL(cfg.Daemon.Host, cfg.Daemon.Port)
 	client := protov1connect.NewRuntimeServiceClient(http.DefaultClient, daemonURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Query the daemon for the specific runtime
+	// Query the daemon for the specific runtime with CLI requester identification
 	resp, err := client.GetRuntime(ctx, connect.NewRequest(&v1.GetRuntimeRequest{
 		RuntimeId: runtimeID,
+		RequesterInfo: &v1.RequesterInfo{
+			RequesterId:   "cli",
+			RequesterType: "cli",
+		},
 	}))
 	if err != nil {
 		return fmt.Errorf("failed to query daemon for runtime: %w", err)
@@ -124,11 +133,13 @@ func (rc *RuntimeCommands) Info(runtimeID string) error {
 // displayRuntime shows details about a single runtime
 func displayRuntime(num int, rt *v1.Runtime) {
 	fmt.Printf("%d. %s\n", num, rt.Id)
+	fmt.Printf("   Platform:    %s\n", rt.Platform.String())
+	fmt.Printf("   Toolchain:   %s\n", rt.Toolchain.String())
 
 	// Display toolchain-specific details
-	switch toolchain := rt.Toolchain.(type) {
+	switch toolchainSpec := rt.ToolchainSpec.(type) {
 	case *v1.Runtime_Cpp:
-		cpp := toolchain.Cpp
+		cpp := toolchainSpec.Cpp
 		if cpp != nil {
 			lang := "Unknown"
 			switch cpp.Language {
@@ -191,20 +202,28 @@ func displayRuntime(num int, rt *v1.Runtime) {
 		}
 	case *v1.Runtime_Go:
 		fmt.Printf("   Type:        Go\n")
-		if toolchain.Go != nil {
-			fmt.Printf("   Go Version:  %s\n", formatVersion(toolchain.Go.GoVersion))
-			fmt.Printf("   GOOS:        %s\n", toolchain.Go.Goos)
-			fmt.Printf("   GOARCH:      %s\n", toolchain.Go.Goarch)
+		if toolchainSpec.Go != nil {
+			fmt.Printf("   Go Version:  %s\n", formatVersion(toolchainSpec.Go.GoVersion))
+			fmt.Printf("   GOOS:        %s\n", toolchainSpec.Go.Goos)
+			fmt.Printf("   GOARCH:      %s\n", toolchainSpec.Go.Goarch)
 		}
 	case *v1.Runtime_Rust:
 		fmt.Printf("   Type:        Rust\n")
-		if toolchain.Rust != nil {
-			fmt.Printf("   Rust Version: %s\n", formatVersion(toolchain.Rust.RustVersion))
-			fmt.Printf("   Target:      %s\n", toolchain.Rust.TargetTriple)
+		if toolchainSpec.Rust != nil {
+			fmt.Printf("   Rust Version: %s\n", formatVersion(toolchainSpec.Rust.RustVersion))
+			fmt.Printf("   Target:      %s\n", toolchainSpec.Rust.TargetTriple)
 		}
 	}
 
-	fmt.Printf("   Native:      %v\n", rt.IsNative)
+	fmt.Printf("   Platform:    %s\n", rt.Platform.String())
+
+	// Display peers that support this runtime
+	if len(rt.PeerIds) > 0 {
+		fmt.Printf("   Peers (total %d):\n", len(rt.PeerIds))
+		for _, peerEndpoint := range rt.PeerIds {
+			fmt.Printf("     - %s\n", peerEndpoint)
+		}
+	}
 
 	if rt.Description != nil && *rt.Description != "" {
 		fmt.Printf("   Description: %s\n", *rt.Description)
@@ -240,7 +259,7 @@ func displayRuntimeSummary(runtimes []*v1.Runtime) {
 
 	for _, rt := range runtimes {
 		// Count by type
-		switch rt.Toolchain.(type) {
+		switch rt.ToolchainSpec.(type) {
 		case *v1.Runtime_Cpp:
 			typeCount["C/C++"]++
 			if cpp := rt.GetCpp(); cpp != nil {

@@ -21,6 +21,120 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// RuntimePlatform represents the execution platform (hardware and OS combination)
+type RuntimePlatform int32
+
+const (
+	// Unspecified runtime platform
+	RuntimePlatform_RUNTIME_PLATFORM_UNSPECIFIED RuntimePlatform = 0
+	// Native execution on Linux
+	RuntimePlatform_RUNTIME_PLATFORM_NATIVE_LINUX RuntimePlatform = 1
+	// Docker containerized execution on Linux
+	RuntimePlatform_RUNTIME_PLATFORM_DOCKER_LINUX RuntimePlatform = 2 // Future: RUNTIME_PLATFORM_NATIVE_WINDOWS = 3, etc.
+)
+
+// Enum value maps for RuntimePlatform.
+var (
+	RuntimePlatform_name = map[int32]string{
+		0: "RUNTIME_PLATFORM_UNSPECIFIED",
+		1: "RUNTIME_PLATFORM_NATIVE_LINUX",
+		2: "RUNTIME_PLATFORM_DOCKER_LINUX",
+	}
+	RuntimePlatform_value = map[string]int32{
+		"RUNTIME_PLATFORM_UNSPECIFIED":  0,
+		"RUNTIME_PLATFORM_NATIVE_LINUX": 1,
+		"RUNTIME_PLATFORM_DOCKER_LINUX": 2,
+	}
+)
+
+func (x RuntimePlatform) Enum() *RuntimePlatform {
+	p := new(RuntimePlatform)
+	*p = x
+	return p
+}
+
+func (x RuntimePlatform) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RuntimePlatform) Descriptor() protoreflect.EnumDescriptor {
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[0].Descriptor()
+}
+
+func (RuntimePlatform) Type() protoreflect.EnumType {
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[0]
+}
+
+func (x RuntimePlatform) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RuntimePlatform.Descriptor instead.
+func (RuntimePlatform) EnumDescriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{0}
+}
+
+// RuntimeToolchain represents the programming language family / toolchain type
+type RuntimeToolchain int32
+
+const (
+	// Unspecified runtime toolchain
+	RuntimeToolchain_RUNTIME_TOOLCHAIN_UNSPECIFIED RuntimeToolchain = 0
+	// C programming language toolchain
+	RuntimeToolchain_RUNTIME_TOOLCHAIN_C RuntimeToolchain = 1
+	// C++ programming language toolchain
+	RuntimeToolchain_RUNTIME_TOOLCHAIN_CPP RuntimeToolchain = 2
+	// Go programming language toolchain
+	RuntimeToolchain_RUNTIME_TOOLCHAIN_GO RuntimeToolchain = 3
+	// Rust programming language toolchain
+	RuntimeToolchain_RUNTIME_TOOLCHAIN_RUST RuntimeToolchain = 4 // Future: other toolchains can be added here
+)
+
+// Enum value maps for RuntimeToolchain.
+var (
+	RuntimeToolchain_name = map[int32]string{
+		0: "RUNTIME_TOOLCHAIN_UNSPECIFIED",
+		1: "RUNTIME_TOOLCHAIN_C",
+		2: "RUNTIME_TOOLCHAIN_CPP",
+		3: "RUNTIME_TOOLCHAIN_GO",
+		4: "RUNTIME_TOOLCHAIN_RUST",
+	}
+	RuntimeToolchain_value = map[string]int32{
+		"RUNTIME_TOOLCHAIN_UNSPECIFIED": 0,
+		"RUNTIME_TOOLCHAIN_C":           1,
+		"RUNTIME_TOOLCHAIN_CPP":         2,
+		"RUNTIME_TOOLCHAIN_GO":          3,
+		"RUNTIME_TOOLCHAIN_RUST":        4,
+	}
+)
+
+func (x RuntimeToolchain) Enum() *RuntimeToolchain {
+	p := new(RuntimeToolchain)
+	*p = x
+	return p
+}
+
+func (x RuntimeToolchain) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RuntimeToolchain) Descriptor() protoreflect.EnumDescriptor {
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[1].Descriptor()
+}
+
+func (RuntimeToolchain) Type() protoreflect.EnumType {
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[1]
+}
+
+func (x RuntimeToolchain) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RuntimeToolchain.Descriptor instead.
+func (RuntimeToolchain) EnumDescriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{1}
+}
+
 // CppLanguage represents C/C++ language variants
 type CppLanguage int32
 
@@ -58,11 +172,11 @@ func (x CppLanguage) String() string {
 }
 
 func (CppLanguage) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[0].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[2].Descriptor()
 }
 
 func (CppLanguage) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[0]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[2]
 }
 
 func (x CppLanguage) Number() protoreflect.EnumNumber {
@@ -71,7 +185,7 @@ func (x CppLanguage) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CppLanguage.Descriptor instead.
 func (CppLanguage) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{0}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{2}
 }
 
 // CppCompiler represents C/C++ compiler implementations
@@ -111,11 +225,11 @@ func (x CppCompiler) String() string {
 }
 
 func (CppCompiler) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[1].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[3].Descriptor()
 }
 
 func (CppCompiler) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[1]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[3]
 }
 
 func (x CppCompiler) Number() protoreflect.EnumNumber {
@@ -124,7 +238,7 @@ func (x CppCompiler) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CppCompiler.Descriptor instead.
 func (CppCompiler) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{1}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{3}
 }
 
 // CpuArchitecture represents target CPU architectures
@@ -168,11 +282,11 @@ func (x CpuArchitecture) String() string {
 }
 
 func (CpuArchitecture) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[2].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[4].Descriptor()
 }
 
 func (CpuArchitecture) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[2]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[4]
 }
 
 func (x CpuArchitecture) Number() protoreflect.EnumNumber {
@@ -181,7 +295,7 @@ func (x CpuArchitecture) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CpuArchitecture.Descriptor instead.
 func (CpuArchitecture) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{2}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{4}
 }
 
 // CRuntime represents C runtime implementations
@@ -221,11 +335,11 @@ func (x CRuntime) String() string {
 }
 
 func (CRuntime) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[3].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[5].Descriptor()
 }
 
 func (CRuntime) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[3]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[5]
 }
 
 func (x CRuntime) Number() protoreflect.EnumNumber {
@@ -234,7 +348,7 @@ func (x CRuntime) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CRuntime.Descriptor instead.
 func (CRuntime) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{3}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{5}
 }
 
 // CppAbi represents C++ ABI (Application Binary Interface) specifications
@@ -270,11 +384,11 @@ func (x CppAbi) String() string {
 }
 
 func (CppAbi) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[4].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[6].Descriptor()
 }
 
 func (CppAbi) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[4]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[6]
 }
 
 func (x CppAbi) Number() protoreflect.EnumNumber {
@@ -283,7 +397,7 @@ func (x CppAbi) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CppAbi.Descriptor instead.
 func (CppAbi) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{4}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{6}
 }
 
 // CppStdlib represents C++ standard library implementations
@@ -323,11 +437,11 @@ func (x CppStdlib) String() string {
 }
 
 func (CppStdlib) Descriptor() protoreflect.EnumDescriptor {
-	return file_buildozer_proto_v1_runtime_proto_enumTypes[5].Descriptor()
+	return file_buildozer_proto_v1_runtime_proto_enumTypes[7].Descriptor()
 }
 
 func (CppStdlib) Type() protoreflect.EnumType {
-	return &file_buildozer_proto_v1_runtime_proto_enumTypes[5]
+	return &file_buildozer_proto_v1_runtime_proto_enumTypes[7]
 }
 
 func (x CppStdlib) Number() protoreflect.EnumNumber {
@@ -336,7 +450,7 @@ func (x CppStdlib) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CppStdlib.Descriptor instead.
 func (CppStdlib) EnumDescriptor() ([]byte, []int) {
-	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{5}
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{7}
 }
 
 // CppToolchain describes a C/C++ compilation environment
@@ -855,7 +969,7 @@ type DockerRuntimeMetadata struct {
 	// Optional: Dockerfile recipe used to build this image (if available)
 	Recipe *DockerfileRecipe `protobuf:"bytes,4,opt,name=recipe,proto3,oneof" json:"recipe,omitempty"`
 	// Optional: Runtime metadata of the linux native runtime that this Docker image replicates (if applicable)
-	LinuxNativeEquivalent *LinuxNativeRuntimeMetadata `protobuf:"bytes,5,opt,name=linux_native_equivalent,json=linuxNativeEquivalent,proto3,oneof" json:"linux_native_equivalent,omitempty"`
+	NativeLinuxEquivalent *LinuxNativeRuntimeMetadata `protobuf:"bytes,5,opt,name=native_linux_equivalent,json=nativeLinuxEquivalent,proto3,oneof" json:"native_linux_equivalent,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -918,9 +1032,9 @@ func (x *DockerRuntimeMetadata) GetRecipe() *DockerfileRecipe {
 	return nil
 }
 
-func (x *DockerRuntimeMetadata) GetLinuxNativeEquivalent() *LinuxNativeRuntimeMetadata {
+func (x *DockerRuntimeMetadata) GetNativeLinuxEquivalent() *LinuxNativeRuntimeMetadata {
 	if x != nil {
-		return x.LinuxNativeEquivalent
+		return x.NativeLinuxEquivalent
 	}
 	return nil
 }
@@ -1022,7 +1136,7 @@ type RuntimeMetadata struct {
 	// Types that are valid to be assigned to Metadata:
 	//
 	//	*RuntimeMetadata_Docker
-	//	*RuntimeMetadata_LinuxNative
+	//	*RuntimeMetadata_NativeLinux
 	Metadata      isRuntimeMetadata_Metadata `protobuf_oneof:"metadata"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1074,10 +1188,10 @@ func (x *RuntimeMetadata) GetDocker() *DockerRuntimeMetadata {
 	return nil
 }
 
-func (x *RuntimeMetadata) GetLinuxNative() *LinuxNativeRuntimeMetadata {
+func (x *RuntimeMetadata) GetNativeLinux() *LinuxNativeRuntimeMetadata {
 	if x != nil {
-		if x, ok := x.Metadata.(*RuntimeMetadata_LinuxNative); ok {
-			return x.LinuxNative
+		if x, ok := x.Metadata.(*RuntimeMetadata_NativeLinux); ok {
+			return x.NativeLinux
 		}
 	}
 	return nil
@@ -1091,40 +1205,49 @@ type RuntimeMetadata_Docker struct {
 	Docker *DockerRuntimeMetadata `protobuf:"bytes,1,opt,name=docker,proto3,oneof"`
 }
 
-type RuntimeMetadata_LinuxNative struct {
-	LinuxNative *LinuxNativeRuntimeMetadata `protobuf:"bytes,2,opt,name=linux_native,json=linuxNative,proto3,oneof"`
+type RuntimeMetadata_NativeLinux struct {
+	NativeLinux *LinuxNativeRuntimeMetadata `protobuf:"bytes,2,opt,name=native_linux,json=nativeLinux,proto3,oneof"`
 }
 
 func (*RuntimeMetadata_Docker) isRuntimeMetadata_Metadata() {}
 
-func (*RuntimeMetadata_LinuxNative) isRuntimeMetadata_Metadata() {}
+func (*RuntimeMetadata_NativeLinux) isRuntimeMetadata_Metadata() {}
 
 // Runtime represents an executable environment where jobs run.
-// Contains the toolchain specification (C++, Go, Rust, etc.) and resource constraints.
+// Combines platform (native_linux, docker_linux, etc.) with toolchain (C, C++, Go, Rust, etc.).
+// Runtime ID format: platform_os-toolchain-[compiler-version-...]
+// Example: native_linux-cpp-gcc-11.2.0-glibc-2.31-libstdc++-x86_64
+// Note: AR (static archiver) is part of C toolchain, not a separate toolchain type.
 type Runtime struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique identifier for this runtime (SHA256 of toolchain || recipe || constraints)
+	// Unique identifier for this runtime (platform-toolchain specific format)
+	// Examples: native_linux-c-gcc-10.2.1-glibc-2.31-x86_64
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Runtime execution platform (hardware/OS combination)
+	Platform RuntimePlatform `protobuf:"varint,2,opt,name=platform,proto3,enum=buildozer.proto.v1.RuntimePlatform" json:"platform,omitempty"`
+	// Runtime toolchain family (language type)
+	Toolchain RuntimeToolchain `protobuf:"varint,3,opt,name=toolchain,proto3,enum=buildozer.proto.v1.RuntimeToolchain" json:"toolchain,omitempty"`
 	// Concrete toolchain specification (oneof discriminates the type)
 	//
-	// Types that are valid to be assigned to Toolchain:
+	// Types that are valid to be assigned to ToolchainSpec:
 	//
 	//	*Runtime_Cpp
 	//	*Runtime_Go
 	//	*Runtime_Rust
-	Toolchain isRuntime_Toolchain `protobuf_oneof:"toolchain"`
+	ToolchainSpec isRuntime_ToolchainSpec `protobuf_oneof:"toolchain_spec"`
 	// Optional: Runtime recipe (if not native, or if needs per-job customization)
 	Recipe *RuntimeRecipe `protobuf:"bytes,20,opt,name=recipe,proto3,oneof" json:"recipe,omitempty"`
 	// Resource constraints for this runtime
 	ResourceLimit *ResourceLimit `protobuf:"bytes,21,opt,name=resource_limit,json=resourceLimit,proto3" json:"resource_limit,omitempty"`
 	// Optional: Human-readable description
 	Description *string `protobuf:"bytes,22,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	// Whether this runtime is available natively on the peer (vs. Docker-only)
-	IsNative bool `protobuf:"varint,23,opt,name=is_native,json=isNative,proto3" json:"is_native,omitempty"`
 	// If Docker-based: Docker image digest
-	DockerImageDigest *Signature `protobuf:"bytes,24,opt,name=docker_image_digest,json=dockerImageDigest,proto3,oneof" json:"docker_image_digest,omitempty"`
+	DockerImageDigest *Signature `protobuf:"bytes,23,opt,name=docker_image_digest,json=dockerImageDigest,proto3,oneof" json:"docker_image_digest,omitempty"`
 	// Current load and utilization of the runtime
-	Load          *RuntimeLoad `protobuf:"bytes,25,opt,name=load,proto3" json:"load,omitempty"`
+	Load *RuntimeLoad `protobuf:"bytes,24,opt,name=load,proto3" json:"load,omitempty"`
+	// List of peer endpoints (host:port) that support this runtime
+	// Empty for local runtimes; populated with peer endpoints when aggregating remote runtimes
+	PeerIds       []string `protobuf:"bytes,25,rep,name=peer_ids,json=peerIds,proto3" json:"peer_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1166,16 +1289,30 @@ func (x *Runtime) GetId() string {
 	return ""
 }
 
-func (x *Runtime) GetToolchain() isRuntime_Toolchain {
+func (x *Runtime) GetPlatform() RuntimePlatform {
+	if x != nil {
+		return x.Platform
+	}
+	return RuntimePlatform_RUNTIME_PLATFORM_UNSPECIFIED
+}
+
+func (x *Runtime) GetToolchain() RuntimeToolchain {
 	if x != nil {
 		return x.Toolchain
+	}
+	return RuntimeToolchain_RUNTIME_TOOLCHAIN_UNSPECIFIED
+}
+
+func (x *Runtime) GetToolchainSpec() isRuntime_ToolchainSpec {
+	if x != nil {
+		return x.ToolchainSpec
 	}
 	return nil
 }
 
 func (x *Runtime) GetCpp() *CppToolchain {
 	if x != nil {
-		if x, ok := x.Toolchain.(*Runtime_Cpp); ok {
+		if x, ok := x.ToolchainSpec.(*Runtime_Cpp); ok {
 			return x.Cpp
 		}
 	}
@@ -1184,7 +1321,7 @@ func (x *Runtime) GetCpp() *CppToolchain {
 
 func (x *Runtime) GetGo() *GoToolchain {
 	if x != nil {
-		if x, ok := x.Toolchain.(*Runtime_Go); ok {
+		if x, ok := x.ToolchainSpec.(*Runtime_Go); ok {
 			return x.Go
 		}
 	}
@@ -1193,7 +1330,7 @@ func (x *Runtime) GetGo() *GoToolchain {
 
 func (x *Runtime) GetRust() *RustToolchain {
 	if x != nil {
-		if x, ok := x.Toolchain.(*Runtime_Rust); ok {
+		if x, ok := x.ToolchainSpec.(*Runtime_Rust); ok {
 			return x.Rust
 		}
 	}
@@ -1221,13 +1358,6 @@ func (x *Runtime) GetDescription() string {
 	return ""
 }
 
-func (x *Runtime) GetIsNative() bool {
-	if x != nil {
-		return x.IsNative
-	}
-	return false
-}
-
 func (x *Runtime) GetDockerImageDigest() *Signature {
 	if x != nil {
 		return x.DockerImageDigest
@@ -1242,8 +1372,15 @@ func (x *Runtime) GetLoad() *RuntimeLoad {
 	return nil
 }
 
-type isRuntime_Toolchain interface {
-	isRuntime_Toolchain()
+func (x *Runtime) GetPeerIds() []string {
+	if x != nil {
+		return x.PeerIds
+	}
+	return nil
+}
+
+type isRuntime_ToolchainSpec interface {
+	isRuntime_ToolchainSpec()
 }
 
 type Runtime_Cpp struct {
@@ -1258,11 +1395,11 @@ type Runtime_Rust struct {
 	Rust *RustToolchain `protobuf:"bytes,12,opt,name=rust,proto3,oneof"` // Future: JavaToolchain java = 13, PythonToolchain python = 14, etc.
 }
 
-func (*Runtime_Cpp) isRuntime_Toolchain() {}
+func (*Runtime_Cpp) isRuntime_ToolchainSpec() {}
 
-func (*Runtime_Go) isRuntime_Toolchain() {}
+func (*Runtime_Go) isRuntime_ToolchainSpec() {}
 
-func (*Runtime_Rust) isRuntime_Toolchain() {}
+func (*Runtime_Rust) isRuntime_ToolchainSpec() {}
 
 // ListRuntimesRequest requests the list of available runtimes
 type ListRuntimesRequest struct {
@@ -1272,7 +1409,9 @@ type ListRuntimesRequest struct {
 	ToolchainFilter *string `protobuf:"bytes,1,opt,name=toolchain_filter,json=toolchainFilter,proto3,oneof" json:"toolchain_filter,omitempty"`
 	// If true, only return runtimes available on this daemon
 	// If false (default), include runtimes from peer daemons in the network
-	LocalOnly     bool `protobuf:"varint,2,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
+	LocalOnly bool `protobuf:"varint,2,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
+	// Metadata about the requester making this request
+	RequesterInfo *RequesterInfo `protobuf:"bytes,3,opt,name=requester_info,json=requesterInfo,proto3" json:"requester_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1319,6 +1458,13 @@ func (x *ListRuntimesRequest) GetLocalOnly() bool {
 		return x.LocalOnly
 	}
 	return false
+}
+
+func (x *ListRuntimesRequest) GetRequesterInfo() *RequesterInfo {
+	if x != nil {
+		return x.RequesterInfo
+	}
+	return nil
 }
 
 // ListRuntimesResponse returns the list of available runtimes
@@ -1380,7 +1526,9 @@ func (x *ListRuntimesResponse) GetDetectionNotes() string {
 type GetRuntimeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Runtime ID to query
-	RuntimeId     string `protobuf:"bytes,1,opt,name=runtime_id,json=runtimeId,proto3" json:"runtime_id,omitempty"`
+	RuntimeId string `protobuf:"bytes,1,opt,name=runtime_id,json=runtimeId,proto3" json:"runtime_id,omitempty"`
+	// Metadata about the requester making this request
+	RequesterInfo *RequesterInfo `protobuf:"bytes,2,opt,name=requester_info,json=requesterInfo,proto3" json:"requester_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1420,6 +1568,13 @@ func (x *GetRuntimeRequest) GetRuntimeId() string {
 		return x.RuntimeId
 	}
 	return ""
+}
+
+func (x *GetRuntimeRequest) GetRequesterInfo() *RequesterInfo {
+	if x != nil {
+		return x.RequesterInfo
+	}
+	return nil
 }
 
 // GetRuntimeResponse returns details about a specific runtime
@@ -1477,6 +1632,258 @@ func (x *GetRuntimeResponse) GetError() string {
 	return ""
 }
 
+// MatchRuntimesRequest requests runtimes matching a query
+type MatchRuntimesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Runtime match query specifying required characteristics
+	Query *RuntimeMatchQuery `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// If true, only match against local runtimes
+	// If false (default), include runtimes from peer daemons in the network
+	LocalOnly bool `protobuf:"varint,2,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
+	// Metadata about the requester making this request
+	RequesterInfo *RequesterInfo `protobuf:"bytes,3,opt,name=requester_info,json=requesterInfo,proto3" json:"requester_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MatchRuntimesRequest) Reset() {
+	*x = MatchRuntimesRequest{}
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MatchRuntimesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MatchRuntimesRequest) ProtoMessage() {}
+
+func (x *MatchRuntimesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MatchRuntimesRequest.ProtoReflect.Descriptor instead.
+func (*MatchRuntimesRequest) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *MatchRuntimesRequest) GetQuery() *RuntimeMatchQuery {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *MatchRuntimesRequest) GetLocalOnly() bool {
+	if x != nil {
+		return x.LocalOnly
+	}
+	return false
+}
+
+func (x *MatchRuntimesRequest) GetRequesterInfo() *RequesterInfo {
+	if x != nil {
+		return x.RequesterInfo
+	}
+	return nil
+}
+
+// MatchRuntimesResponse returns runtimes matching the query
+type MatchRuntimesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Runtimes matching the query
+	Runtimes []*Runtime `protobuf:"bytes,1,rep,name=runtimes,proto3" json:"runtimes,omitempty"`
+	// Human-readable notes about the match
+	Notes string `protobuf:"bytes,2,opt,name=notes,proto3" json:"notes,omitempty"`
+	// Error message if matching failed
+	Error         *string `protobuf:"bytes,3,opt,name=error,proto3,oneof" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MatchRuntimesResponse) Reset() {
+	*x = MatchRuntimesResponse{}
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MatchRuntimesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MatchRuntimesResponse) ProtoMessage() {}
+
+func (x *MatchRuntimesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MatchRuntimesResponse.ProtoReflect.Descriptor instead.
+func (*MatchRuntimesResponse) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *MatchRuntimesResponse) GetRuntimes() []*Runtime {
+	if x != nil {
+		return x.Runtimes
+	}
+	return nil
+}
+
+func (x *MatchRuntimesResponse) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
+}
+
+func (x *MatchRuntimesResponse) GetError() string {
+	if x != nil && x.Error != nil {
+		return *x.Error
+	}
+	return ""
+}
+
+// StringArray is a wrapper around repeated strings for use as map values in protobuf
+// (protobuf maps don't support repeated types as values until proto3)
+type StringArray struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// List of string values (empty means "any value acceptable")
+	Values        []string `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StringArray) Reset() {
+	*x = StringArray{}
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StringArray) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StringArray) ProtoMessage() {}
+
+func (x *StringArray) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StringArray.ProtoReflect.Descriptor instead.
+func (*StringArray) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *StringArray) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// RuntimeMatchQuery declaratively describes which runtimes can satisfy a job's requirements.
+// This is used during scheduling to find compatible runtimes without requiring a specific runtime ID.
+// Example: AR (archiver) doesn't care which compiler produced objects, only that they target glibc 2.31/x86_64.
+type RuntimeMatchQuery struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required runtime platforms (e.g., [NATIVE_LINUX])
+	// Must be in this list; empty list means no restriction
+	Platforms []RuntimePlatform `protobuf:"varint,1,rep,packed,name=platforms,proto3,enum=buildozer.proto.v1.RuntimePlatform" json:"platforms,omitempty"`
+	// Required runtime toolchains (e.g., [C, CPP])
+	// Toolchain must be in this list; empty list means no restriction
+	Toolchains []RuntimeToolchain `protobuf:"varint,2,rep,packed,name=toolchains,proto3,enum=buildozer.proto.v1.RuntimeToolchain" json:"toolchains,omitempty"`
+	// Toolchain-specific matching parameters
+	// Key examples: "c_runtime", "c_runtime_version", "architecture", "cpp_stdlib"
+	// Values: list of acceptable string values for that parameter
+	// Empty StringArray (no values in the array) = parameter is optional, any value acceptable
+	// For exact proto field representation:
+	//
+	//	c_runtime: ["glibc"]           -> must match glibc
+	//	architecture: ["x86_64"]       -> must match x86_64
+	//	cpp_stdlib: []                 -> don't care (accept any or none)
+	Params        map[string]*StringArray `protobuf:"bytes,3,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeMatchQuery) Reset() {
+	*x = RuntimeMatchQuery{}
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeMatchQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeMatchQuery) ProtoMessage() {}
+
+func (x *RuntimeMatchQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_buildozer_proto_v1_runtime_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeMatchQuery.ProtoReflect.Descriptor instead.
+func (*RuntimeMatchQuery) Descriptor() ([]byte, []int) {
+	return file_buildozer_proto_v1_runtime_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RuntimeMatchQuery) GetPlatforms() []RuntimePlatform {
+	if x != nil {
+		return x.Platforms
+	}
+	return nil
+}
+
+func (x *RuntimeMatchQuery) GetToolchains() []RuntimeToolchain {
+	if x != nil {
+		return x.Toolchains
+	}
+	return nil
+}
+
+func (x *RuntimeMatchQuery) GetParams() map[string]*StringArray {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
 var File_buildozer_proto_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_buildozer_proto_v1_runtime_proto_rawDesc = "" +
@@ -1526,10 +1933,10 @@ const file_buildozer_proto_v1_runtime_proto_rawDesc = "" +
 	"\n" +
 	"base_image\x18\x03 \x01(\tH\x00R\tbaseImage\x88\x01\x01\x12A\n" +
 	"\x06recipe\x18\x04 \x01(\v2$.buildozer.proto.v1.DockerfileRecipeH\x01R\x06recipe\x88\x01\x01\x12k\n" +
-	"\x17linux_native_equivalent\x18\x05 \x01(\v2..buildozer.proto.v1.LinuxNativeRuntimeMetadataH\x02R\x15linuxNativeEquivalent\x88\x01\x01B\r\n" +
+	"\x17native_linux_equivalent\x18\x05 \x01(\v2..buildozer.proto.v1.LinuxNativeRuntimeMetadataH\x02R\x15nativeLinuxEquivalent\x88\x01\x01B\r\n" +
 	"\v_base_imageB\t\n" +
 	"\a_recipeB\x1a\n" +
-	"\x18_linux_native_equivalent\"\xa1\x03\n" +
+	"\x18_native_linux_equivalent\"\xa1\x03\n" +
 	"\x1aLinuxNativeRuntimeMetadata\x12%\n" +
 	"\x0ekernel_version\x18\x01 \x01(\tR\rkernelVersion\x129\n" +
 	"\tc_library\x18\x02 \x01(\x0e2\x1c.buildozer.proto.v1.CRuntimeR\bcLibrary\x12G\n" +
@@ -1539,42 +1946,77 @@ const file_buildozer_proto_v1_runtime_proto_rawDesc = "" +
 	"\x1alinux_distribution_version\x18\x06 \x01(\v2\x1b.buildozer.proto.v1.VersionR\x18linuxDistributionVersion\"\xb7\x01\n" +
 	"\x0fRuntimeMetadata\x12C\n" +
 	"\x06docker\x18\x01 \x01(\v2).buildozer.proto.v1.DockerRuntimeMetadataH\x00R\x06docker\x12S\n" +
-	"\flinux_native\x18\x02 \x01(\v2..buildozer.proto.v1.LinuxNativeRuntimeMetadataH\x00R\vlinuxNativeB\n" +
+	"\fnative_linux\x18\x02 \x01(\v2..buildozer.proto.v1.LinuxNativeRuntimeMetadataH\x00R\vnativeLinuxB\n" +
 	"\n" +
-	"\bmetadata\"\xd2\x04\n" +
+	"\bmetadata\"\xda\x05\n" +
 	"\aRuntime\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12?\n" +
+	"\bplatform\x18\x02 \x01(\x0e2#.buildozer.proto.v1.RuntimePlatformR\bplatform\x12B\n" +
+	"\ttoolchain\x18\x03 \x01(\x0e2$.buildozer.proto.v1.RuntimeToolchainR\ttoolchain\x124\n" +
 	"\x03cpp\x18\n" +
 	" \x01(\v2 .buildozer.proto.v1.CppToolchainH\x00R\x03cpp\x121\n" +
 	"\x02go\x18\v \x01(\v2\x1f.buildozer.proto.v1.GoToolchainH\x00R\x02go\x127\n" +
 	"\x04rust\x18\f \x01(\v2!.buildozer.proto.v1.RustToolchainH\x00R\x04rust\x12>\n" +
 	"\x06recipe\x18\x14 \x01(\v2!.buildozer.proto.v1.RuntimeRecipeH\x01R\x06recipe\x88\x01\x01\x12H\n" +
 	"\x0eresource_limit\x18\x15 \x01(\v2!.buildozer.proto.v1.ResourceLimitR\rresourceLimit\x12%\n" +
-	"\vdescription\x18\x16 \x01(\tH\x02R\vdescription\x88\x01\x01\x12\x1b\n" +
-	"\tis_native\x18\x17 \x01(\bR\bisNative\x12R\n" +
-	"\x13docker_image_digest\x18\x18 \x01(\v2\x1d.buildozer.proto.v1.SignatureH\x03R\x11dockerImageDigest\x88\x01\x01\x123\n" +
-	"\x04load\x18\x19 \x01(\v2\x1f.buildozer.proto.v1.RuntimeLoadR\x04loadB\v\n" +
-	"\ttoolchainB\t\n" +
+	"\vdescription\x18\x16 \x01(\tH\x02R\vdescription\x88\x01\x01\x12R\n" +
+	"\x13docker_image_digest\x18\x17 \x01(\v2\x1d.buildozer.proto.v1.SignatureH\x03R\x11dockerImageDigest\x88\x01\x01\x123\n" +
+	"\x04load\x18\x18 \x01(\v2\x1f.buildozer.proto.v1.RuntimeLoadR\x04load\x12\x19\n" +
+	"\bpeer_ids\x18\x19 \x03(\tR\apeerIdsB\x10\n" +
+	"\x0etoolchain_specB\t\n" +
 	"\a_recipeB\x0e\n" +
 	"\f_descriptionB\x16\n" +
-	"\x14_docker_image_digest\"y\n" +
+	"\x14_docker_image_digest\"\xc3\x01\n" +
 	"\x13ListRuntimesRequest\x12.\n" +
 	"\x10toolchain_filter\x18\x01 \x01(\tH\x00R\x0ftoolchainFilter\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"local_only\x18\x02 \x01(\bR\tlocalOnlyB\x13\n" +
+	"local_only\x18\x02 \x01(\bR\tlocalOnly\x12H\n" +
+	"\x0erequester_info\x18\x03 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfoB\x13\n" +
 	"\x11_toolchain_filter\"x\n" +
 	"\x14ListRuntimesResponse\x127\n" +
 	"\bruntimes\x18\x01 \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\bruntimes\x12'\n" +
-	"\x0fdetection_notes\x18\x02 \x01(\tR\x0edetectionNotes\"2\n" +
+	"\x0fdetection_notes\x18\x02 \x01(\tR\x0edetectionNotes\"|\n" +
 	"\x11GetRuntimeRequest\x12\x1d\n" +
 	"\n" +
-	"runtime_id\x18\x01 \x01(\tR\truntimeId\"\x81\x01\n" +
+	"runtime_id\x18\x01 \x01(\tR\truntimeId\x12H\n" +
+	"\x0erequester_info\x18\x02 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"\x81\x01\n" +
 	"\x12GetRuntimeResponse\x12:\n" +
 	"\aruntime\x18\x01 \x01(\v2\x1b.buildozer.proto.v1.RuntimeH\x00R\aruntime\x88\x01\x01\x12\x19\n" +
 	"\x05error\x18\x02 \x01(\tH\x01R\x05error\x88\x01\x01B\n" +
 	"\n" +
 	"\b_runtimeB\b\n" +
-	"\x06_error*U\n" +
+	"\x06_error\"\xbc\x01\n" +
+	"\x14MatchRuntimesRequest\x12;\n" +
+	"\x05query\x18\x01 \x01(\v2%.buildozer.proto.v1.RuntimeMatchQueryR\x05query\x12\x1d\n" +
+	"\n" +
+	"local_only\x18\x02 \x01(\bR\tlocalOnly\x12H\n" +
+	"\x0erequester_info\x18\x03 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"\x8b\x01\n" +
+	"\x15MatchRuntimesResponse\x127\n" +
+	"\bruntimes\x18\x01 \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\bruntimes\x12\x14\n" +
+	"\x05notes\x18\x02 \x01(\tR\x05notes\x12\x19\n" +
+	"\x05error\x18\x03 \x01(\tH\x00R\x05error\x88\x01\x01B\b\n" +
+	"\x06_error\"%\n" +
+	"\vStringArray\x12\x16\n" +
+	"\x06values\x18\x01 \x03(\tR\x06values\"\xc3\x02\n" +
+	"\x11RuntimeMatchQuery\x12A\n" +
+	"\tplatforms\x18\x01 \x03(\x0e2#.buildozer.proto.v1.RuntimePlatformR\tplatforms\x12D\n" +
+	"\n" +
+	"toolchains\x18\x02 \x03(\x0e2$.buildozer.proto.v1.RuntimeToolchainR\n" +
+	"toolchains\x12I\n" +
+	"\x06params\x18\x03 \x03(\v21.buildozer.proto.v1.RuntimeMatchQuery.ParamsEntryR\x06params\x1aZ\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.buildozer.proto.v1.StringArrayR\x05value:\x028\x01*y\n" +
+	"\x0fRuntimePlatform\x12 \n" +
+	"\x1cRUNTIME_PLATFORM_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dRUNTIME_PLATFORM_NATIVE_LINUX\x10\x01\x12!\n" +
+	"\x1dRUNTIME_PLATFORM_DOCKER_LINUX\x10\x02*\x9f\x01\n" +
+	"\x10RuntimeToolchain\x12!\n" +
+	"\x1dRUNTIME_TOOLCHAIN_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13RUNTIME_TOOLCHAIN_C\x10\x01\x12\x19\n" +
+	"\x15RUNTIME_TOOLCHAIN_CPP\x10\x02\x12\x18\n" +
+	"\x14RUNTIME_TOOLCHAIN_GO\x10\x03\x12\x1a\n" +
+	"\x16RUNTIME_TOOLCHAIN_RUST\x10\x04*U\n" +
 	"\vCppLanguage\x12\x1c\n" +
 	"\x18CPP_LANGUAGE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eCPP_LANGUAGE_C\x10\x01\x12\x14\n" +
@@ -1598,11 +2040,12 @@ const file_buildozer_proto_v1_runtime_proto_rawDesc = "" +
 	"\tCppStdlib\x12\x1a\n" +
 	"\x16CPP_STDLIB_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CPP_STDLIB_LIBSTDCXX\x10\x01\x12\x15\n" +
-	"\x11CPP_STDLIB_LIBCXX\x10\x022\xd0\x01\n" +
+	"\x11CPP_STDLIB_LIBCXX\x10\x022\xae\x02\n" +
 	"\x0eRuntimeService\x12a\n" +
 	"\fListRuntimes\x12'.buildozer.proto.v1.ListRuntimesRequest\x1a(.buildozer.proto.v1.ListRuntimesResponse\x12[\n" +
 	"\n" +
-	"GetRuntime\x12%.buildozer.proto.v1.GetRuntimeRequest\x1a&.buildozer.proto.v1.GetRuntimeResponseB\xd9\x01\n" +
+	"GetRuntime\x12%.buildozer.proto.v1.GetRuntimeRequest\x1a&.buildozer.proto.v1.GetRuntimeResponse\x12\\\n" +
+	"\x05Match\x12(.buildozer.proto.v1.MatchRuntimesRequest\x1a).buildozer.proto.v1.MatchRuntimesResponseB\xd9\x01\n" +
 	"\x16com.buildozer.proto.v1B\fRuntimeProtoP\x01ZGgithub.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1;protov1\xa2\x02\x03BPX\xaa\x02\x12Buildozer.Proto.V1\xca\x02\x12Buildozer\\Proto\\V1\xe2\x02\x1eBuildozer\\Proto\\V1\\GPBMetadata\xea\x02\x14Buildozer::Proto::V1b\x06proto3"
 
 var (
@@ -1617,76 +2060,97 @@ func file_buildozer_proto_v1_runtime_proto_rawDescGZIP() []byte {
 	return file_buildozer_proto_v1_runtime_proto_rawDescData
 }
 
-var file_buildozer_proto_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_buildozer_proto_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_buildozer_proto_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_buildozer_proto_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_buildozer_proto_v1_runtime_proto_goTypes = []any{
-	(CppLanguage)(0),                   // 0: buildozer.proto.v1.CppLanguage
-	(CppCompiler)(0),                   // 1: buildozer.proto.v1.CppCompiler
-	(CpuArchitecture)(0),               // 2: buildozer.proto.v1.CpuArchitecture
-	(CRuntime)(0),                      // 3: buildozer.proto.v1.CRuntime
-	(CppAbi)(0),                        // 4: buildozer.proto.v1.CppAbi
-	(CppStdlib)(0),                     // 5: buildozer.proto.v1.CppStdlib
-	(*CppToolchain)(nil),               // 6: buildozer.proto.v1.CppToolchain
-	(*GoToolchain)(nil),                // 7: buildozer.proto.v1.GoToolchain
-	(*RustToolchain)(nil),              // 8: buildozer.proto.v1.RustToolchain
-	(*DockerfileRecipe)(nil),           // 9: buildozer.proto.v1.DockerfileRecipe
-	(*RuntimeRecipe)(nil),              // 10: buildozer.proto.v1.RuntimeRecipe
-	(*ResourceLimit)(nil),              // 11: buildozer.proto.v1.ResourceLimit
-	(*RuntimeLoad)(nil),                // 12: buildozer.proto.v1.RuntimeLoad
-	(*DockerRuntimeMetadata)(nil),      // 13: buildozer.proto.v1.DockerRuntimeMetadata
-	(*LinuxNativeRuntimeMetadata)(nil), // 14: buildozer.proto.v1.LinuxNativeRuntimeMetadata
-	(*RuntimeMetadata)(nil),            // 15: buildozer.proto.v1.RuntimeMetadata
-	(*Runtime)(nil),                    // 16: buildozer.proto.v1.Runtime
-	(*ListRuntimesRequest)(nil),        // 17: buildozer.proto.v1.ListRuntimesRequest
-	(*ListRuntimesResponse)(nil),       // 18: buildozer.proto.v1.ListRuntimesResponse
-	(*GetRuntimeRequest)(nil),          // 19: buildozer.proto.v1.GetRuntimeRequest
-	(*GetRuntimeResponse)(nil),         // 20: buildozer.proto.v1.GetRuntimeResponse
-	(*Version)(nil),                    // 21: buildozer.proto.v1.Version
-	(*Hash)(nil),                       // 22: buildozer.proto.v1.Hash
-	(*ResourceUsage)(nil),              // 23: buildozer.proto.v1.ResourceUsage
-	(*Signature)(nil),                  // 24: buildozer.proto.v1.Signature
+	(RuntimePlatform)(0),               // 0: buildozer.proto.v1.RuntimePlatform
+	(RuntimeToolchain)(0),              // 1: buildozer.proto.v1.RuntimeToolchain
+	(CppLanguage)(0),                   // 2: buildozer.proto.v1.CppLanguage
+	(CppCompiler)(0),                   // 3: buildozer.proto.v1.CppCompiler
+	(CpuArchitecture)(0),               // 4: buildozer.proto.v1.CpuArchitecture
+	(CRuntime)(0),                      // 5: buildozer.proto.v1.CRuntime
+	(CppAbi)(0),                        // 6: buildozer.proto.v1.CppAbi
+	(CppStdlib)(0),                     // 7: buildozer.proto.v1.CppStdlib
+	(*CppToolchain)(nil),               // 8: buildozer.proto.v1.CppToolchain
+	(*GoToolchain)(nil),                // 9: buildozer.proto.v1.GoToolchain
+	(*RustToolchain)(nil),              // 10: buildozer.proto.v1.RustToolchain
+	(*DockerfileRecipe)(nil),           // 11: buildozer.proto.v1.DockerfileRecipe
+	(*RuntimeRecipe)(nil),              // 12: buildozer.proto.v1.RuntimeRecipe
+	(*ResourceLimit)(nil),              // 13: buildozer.proto.v1.ResourceLimit
+	(*RuntimeLoad)(nil),                // 14: buildozer.proto.v1.RuntimeLoad
+	(*DockerRuntimeMetadata)(nil),      // 15: buildozer.proto.v1.DockerRuntimeMetadata
+	(*LinuxNativeRuntimeMetadata)(nil), // 16: buildozer.proto.v1.LinuxNativeRuntimeMetadata
+	(*RuntimeMetadata)(nil),            // 17: buildozer.proto.v1.RuntimeMetadata
+	(*Runtime)(nil),                    // 18: buildozer.proto.v1.Runtime
+	(*ListRuntimesRequest)(nil),        // 19: buildozer.proto.v1.ListRuntimesRequest
+	(*ListRuntimesResponse)(nil),       // 20: buildozer.proto.v1.ListRuntimesResponse
+	(*GetRuntimeRequest)(nil),          // 21: buildozer.proto.v1.GetRuntimeRequest
+	(*GetRuntimeResponse)(nil),         // 22: buildozer.proto.v1.GetRuntimeResponse
+	(*MatchRuntimesRequest)(nil),       // 23: buildozer.proto.v1.MatchRuntimesRequest
+	(*MatchRuntimesResponse)(nil),      // 24: buildozer.proto.v1.MatchRuntimesResponse
+	(*StringArray)(nil),                // 25: buildozer.proto.v1.StringArray
+	(*RuntimeMatchQuery)(nil),          // 26: buildozer.proto.v1.RuntimeMatchQuery
+	nil,                                // 27: buildozer.proto.v1.RuntimeMatchQuery.ParamsEntry
+	(*Version)(nil),                    // 28: buildozer.proto.v1.Version
+	(*Hash)(nil),                       // 29: buildozer.proto.v1.Hash
+	(*ResourceUsage)(nil),              // 30: buildozer.proto.v1.ResourceUsage
+	(*Signature)(nil),                  // 31: buildozer.proto.v1.Signature
+	(*RequesterInfo)(nil),              // 32: buildozer.proto.v1.RequesterInfo
 }
 var file_buildozer_proto_v1_runtime_proto_depIdxs = []int32{
-	0,  // 0: buildozer.proto.v1.CppToolchain.language:type_name -> buildozer.proto.v1.CppLanguage
-	1,  // 1: buildozer.proto.v1.CppToolchain.compiler:type_name -> buildozer.proto.v1.CppCompiler
-	21, // 2: buildozer.proto.v1.CppToolchain.compiler_version:type_name -> buildozer.proto.v1.Version
-	2,  // 3: buildozer.proto.v1.CppToolchain.architecture:type_name -> buildozer.proto.v1.CpuArchitecture
-	3,  // 4: buildozer.proto.v1.CppToolchain.c_runtime:type_name -> buildozer.proto.v1.CRuntime
-	21, // 5: buildozer.proto.v1.CppToolchain.c_runtime_version:type_name -> buildozer.proto.v1.Version
-	4,  // 6: buildozer.proto.v1.CppToolchain.cpp_abi:type_name -> buildozer.proto.v1.CppAbi
-	5,  // 7: buildozer.proto.v1.CppToolchain.cpp_stdlib:type_name -> buildozer.proto.v1.CppStdlib
-	21, // 8: buildozer.proto.v1.GoToolchain.go_version:type_name -> buildozer.proto.v1.Version
-	21, // 9: buildozer.proto.v1.RustToolchain.rust_version:type_name -> buildozer.proto.v1.Version
-	9,  // 10: buildozer.proto.v1.RuntimeRecipe.dockerfile:type_name -> buildozer.proto.v1.DockerfileRecipe
-	22, // 11: buildozer.proto.v1.RuntimeRecipe.content_hash:type_name -> buildozer.proto.v1.Hash
-	23, // 12: buildozer.proto.v1.RuntimeLoad.resource_usage:type_name -> buildozer.proto.v1.ResourceUsage
-	24, // 13: buildozer.proto.v1.DockerRuntimeMetadata.image_digest:type_name -> buildozer.proto.v1.Signature
-	9,  // 14: buildozer.proto.v1.DockerRuntimeMetadata.recipe:type_name -> buildozer.proto.v1.DockerfileRecipe
-	14, // 15: buildozer.proto.v1.DockerRuntimeMetadata.linux_native_equivalent:type_name -> buildozer.proto.v1.LinuxNativeRuntimeMetadata
-	3,  // 16: buildozer.proto.v1.LinuxNativeRuntimeMetadata.c_library:type_name -> buildozer.proto.v1.CRuntime
-	21, // 17: buildozer.proto.v1.LinuxNativeRuntimeMetadata.c_library_version:type_name -> buildozer.proto.v1.Version
-	2,  // 18: buildozer.proto.v1.LinuxNativeRuntimeMetadata.cpu_architecture:type_name -> buildozer.proto.v1.CpuArchitecture
-	21, // 19: buildozer.proto.v1.LinuxNativeRuntimeMetadata.linux_distribution_version:type_name -> buildozer.proto.v1.Version
-	13, // 20: buildozer.proto.v1.RuntimeMetadata.docker:type_name -> buildozer.proto.v1.DockerRuntimeMetadata
-	14, // 21: buildozer.proto.v1.RuntimeMetadata.linux_native:type_name -> buildozer.proto.v1.LinuxNativeRuntimeMetadata
-	6,  // 22: buildozer.proto.v1.Runtime.cpp:type_name -> buildozer.proto.v1.CppToolchain
-	7,  // 23: buildozer.proto.v1.Runtime.go:type_name -> buildozer.proto.v1.GoToolchain
-	8,  // 24: buildozer.proto.v1.Runtime.rust:type_name -> buildozer.proto.v1.RustToolchain
-	10, // 25: buildozer.proto.v1.Runtime.recipe:type_name -> buildozer.proto.v1.RuntimeRecipe
-	11, // 26: buildozer.proto.v1.Runtime.resource_limit:type_name -> buildozer.proto.v1.ResourceLimit
-	24, // 27: buildozer.proto.v1.Runtime.docker_image_digest:type_name -> buildozer.proto.v1.Signature
-	12, // 28: buildozer.proto.v1.Runtime.load:type_name -> buildozer.proto.v1.RuntimeLoad
-	16, // 29: buildozer.proto.v1.ListRuntimesResponse.runtimes:type_name -> buildozer.proto.v1.Runtime
-	16, // 30: buildozer.proto.v1.GetRuntimeResponse.runtime:type_name -> buildozer.proto.v1.Runtime
-	17, // 31: buildozer.proto.v1.RuntimeService.ListRuntimes:input_type -> buildozer.proto.v1.ListRuntimesRequest
-	19, // 32: buildozer.proto.v1.RuntimeService.GetRuntime:input_type -> buildozer.proto.v1.GetRuntimeRequest
-	18, // 33: buildozer.proto.v1.RuntimeService.ListRuntimes:output_type -> buildozer.proto.v1.ListRuntimesResponse
-	20, // 34: buildozer.proto.v1.RuntimeService.GetRuntime:output_type -> buildozer.proto.v1.GetRuntimeResponse
-	33, // [33:35] is the sub-list for method output_type
-	31, // [31:33] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	2,  // 0: buildozer.proto.v1.CppToolchain.language:type_name -> buildozer.proto.v1.CppLanguage
+	3,  // 1: buildozer.proto.v1.CppToolchain.compiler:type_name -> buildozer.proto.v1.CppCompiler
+	28, // 2: buildozer.proto.v1.CppToolchain.compiler_version:type_name -> buildozer.proto.v1.Version
+	4,  // 3: buildozer.proto.v1.CppToolchain.architecture:type_name -> buildozer.proto.v1.CpuArchitecture
+	5,  // 4: buildozer.proto.v1.CppToolchain.c_runtime:type_name -> buildozer.proto.v1.CRuntime
+	28, // 5: buildozer.proto.v1.CppToolchain.c_runtime_version:type_name -> buildozer.proto.v1.Version
+	6,  // 6: buildozer.proto.v1.CppToolchain.cpp_abi:type_name -> buildozer.proto.v1.CppAbi
+	7,  // 7: buildozer.proto.v1.CppToolchain.cpp_stdlib:type_name -> buildozer.proto.v1.CppStdlib
+	28, // 8: buildozer.proto.v1.GoToolchain.go_version:type_name -> buildozer.proto.v1.Version
+	28, // 9: buildozer.proto.v1.RustToolchain.rust_version:type_name -> buildozer.proto.v1.Version
+	11, // 10: buildozer.proto.v1.RuntimeRecipe.dockerfile:type_name -> buildozer.proto.v1.DockerfileRecipe
+	29, // 11: buildozer.proto.v1.RuntimeRecipe.content_hash:type_name -> buildozer.proto.v1.Hash
+	30, // 12: buildozer.proto.v1.RuntimeLoad.resource_usage:type_name -> buildozer.proto.v1.ResourceUsage
+	31, // 13: buildozer.proto.v1.DockerRuntimeMetadata.image_digest:type_name -> buildozer.proto.v1.Signature
+	11, // 14: buildozer.proto.v1.DockerRuntimeMetadata.recipe:type_name -> buildozer.proto.v1.DockerfileRecipe
+	16, // 15: buildozer.proto.v1.DockerRuntimeMetadata.native_linux_equivalent:type_name -> buildozer.proto.v1.LinuxNativeRuntimeMetadata
+	5,  // 16: buildozer.proto.v1.LinuxNativeRuntimeMetadata.c_library:type_name -> buildozer.proto.v1.CRuntime
+	28, // 17: buildozer.proto.v1.LinuxNativeRuntimeMetadata.c_library_version:type_name -> buildozer.proto.v1.Version
+	4,  // 18: buildozer.proto.v1.LinuxNativeRuntimeMetadata.cpu_architecture:type_name -> buildozer.proto.v1.CpuArchitecture
+	28, // 19: buildozer.proto.v1.LinuxNativeRuntimeMetadata.linux_distribution_version:type_name -> buildozer.proto.v1.Version
+	15, // 20: buildozer.proto.v1.RuntimeMetadata.docker:type_name -> buildozer.proto.v1.DockerRuntimeMetadata
+	16, // 21: buildozer.proto.v1.RuntimeMetadata.native_linux:type_name -> buildozer.proto.v1.LinuxNativeRuntimeMetadata
+	0,  // 22: buildozer.proto.v1.Runtime.platform:type_name -> buildozer.proto.v1.RuntimePlatform
+	1,  // 23: buildozer.proto.v1.Runtime.toolchain:type_name -> buildozer.proto.v1.RuntimeToolchain
+	8,  // 24: buildozer.proto.v1.Runtime.cpp:type_name -> buildozer.proto.v1.CppToolchain
+	9,  // 25: buildozer.proto.v1.Runtime.go:type_name -> buildozer.proto.v1.GoToolchain
+	10, // 26: buildozer.proto.v1.Runtime.rust:type_name -> buildozer.proto.v1.RustToolchain
+	12, // 27: buildozer.proto.v1.Runtime.recipe:type_name -> buildozer.proto.v1.RuntimeRecipe
+	13, // 28: buildozer.proto.v1.Runtime.resource_limit:type_name -> buildozer.proto.v1.ResourceLimit
+	31, // 29: buildozer.proto.v1.Runtime.docker_image_digest:type_name -> buildozer.proto.v1.Signature
+	14, // 30: buildozer.proto.v1.Runtime.load:type_name -> buildozer.proto.v1.RuntimeLoad
+	32, // 31: buildozer.proto.v1.ListRuntimesRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	18, // 32: buildozer.proto.v1.ListRuntimesResponse.runtimes:type_name -> buildozer.proto.v1.Runtime
+	32, // 33: buildozer.proto.v1.GetRuntimeRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	18, // 34: buildozer.proto.v1.GetRuntimeResponse.runtime:type_name -> buildozer.proto.v1.Runtime
+	26, // 35: buildozer.proto.v1.MatchRuntimesRequest.query:type_name -> buildozer.proto.v1.RuntimeMatchQuery
+	32, // 36: buildozer.proto.v1.MatchRuntimesRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
+	18, // 37: buildozer.proto.v1.MatchRuntimesResponse.runtimes:type_name -> buildozer.proto.v1.Runtime
+	0,  // 38: buildozer.proto.v1.RuntimeMatchQuery.platforms:type_name -> buildozer.proto.v1.RuntimePlatform
+	1,  // 39: buildozer.proto.v1.RuntimeMatchQuery.toolchains:type_name -> buildozer.proto.v1.RuntimeToolchain
+	27, // 40: buildozer.proto.v1.RuntimeMatchQuery.params:type_name -> buildozer.proto.v1.RuntimeMatchQuery.ParamsEntry
+	25, // 41: buildozer.proto.v1.RuntimeMatchQuery.ParamsEntry.value:type_name -> buildozer.proto.v1.StringArray
+	19, // 42: buildozer.proto.v1.RuntimeService.ListRuntimes:input_type -> buildozer.proto.v1.ListRuntimesRequest
+	21, // 43: buildozer.proto.v1.RuntimeService.GetRuntime:input_type -> buildozer.proto.v1.GetRuntimeRequest
+	23, // 44: buildozer.proto.v1.RuntimeService.Match:input_type -> buildozer.proto.v1.MatchRuntimesRequest
+	20, // 45: buildozer.proto.v1.RuntimeService.ListRuntimes:output_type -> buildozer.proto.v1.ListRuntimesResponse
+	22, // 46: buildozer.proto.v1.RuntimeService.GetRuntime:output_type -> buildozer.proto.v1.GetRuntimeResponse
+	24, // 47: buildozer.proto.v1.RuntimeService.Match:output_type -> buildozer.proto.v1.MatchRuntimesResponse
+	45, // [45:48] is the sub-list for method output_type
+	42, // [42:45] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_buildozer_proto_v1_runtime_proto_init() }
@@ -1701,7 +2165,7 @@ func file_buildozer_proto_v1_runtime_proto_init() {
 	file_buildozer_proto_v1_runtime_proto_msgTypes[7].OneofWrappers = []any{}
 	file_buildozer_proto_v1_runtime_proto_msgTypes[9].OneofWrappers = []any{
 		(*RuntimeMetadata_Docker)(nil),
-		(*RuntimeMetadata_LinuxNative)(nil),
+		(*RuntimeMetadata_NativeLinux)(nil),
 	}
 	file_buildozer_proto_v1_runtime_proto_msgTypes[10].OneofWrappers = []any{
 		(*Runtime_Cpp)(nil),
@@ -1710,13 +2174,14 @@ func file_buildozer_proto_v1_runtime_proto_init() {
 	}
 	file_buildozer_proto_v1_runtime_proto_msgTypes[11].OneofWrappers = []any{}
 	file_buildozer_proto_v1_runtime_proto_msgTypes[14].OneofWrappers = []any{}
+	file_buildozer_proto_v1_runtime_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buildozer_proto_v1_runtime_proto_rawDesc), len(file_buildozer_proto_v1_runtime_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   15,
+			NumEnums:      8,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

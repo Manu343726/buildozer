@@ -1,0 +1,57 @@
+---
+# Buildozer Configuration for CMake Example Project
+# This config demonstrates how to use Buildozer drivers with a real CMake project
+
+# Daemon configuration
+daemon:
+  host: "127.0.0.1"
+  port: 6789
+
+# Cache configuration
+cache:
+  dir: "~/.cache/buildozer"
+  max_size_gb: 100
+  retention_days: 30
+
+# C/C++ Driver Defaults for this project
+# These demonstrate full version specification
+drivers:
+  gcc:
+    # GCC compiler version (full semantic version)
+    compiler_version: "10.2.1"
+    # C runtime
+    c_runtime: "glibc"
+    # C runtime version
+    c_runtime_version: "2.31"
+    # Target architecture
+    architecture: "x86_64"
+
+  g++:
+    # G++ compiler version (same as gcc)
+    compiler_version: "10.2.1"
+    # C runtime
+    c_runtime: "glibc"
+    # C runtime version
+    c_runtime_version: "2.31"
+    # C++ standard library
+    cpp_stdlib: "libstdc++"
+    # Target architecture
+    architecture: "x86_64"
+
+  ar:
+    # GCC compiler version (full semantic version)
+    compiler_version: "10.2.1"
+    # C runtime
+    c_runtime: "glibc"
+    # C runtime version
+    c_runtime_version: "2.31"
+    # Target architecture
+    architecture: "x86_64"
+
+# Logging configuration
+logging:
+  global_level: "info"
+  sinks:
+    - name: "stdout"
+      type: "stdout"
+      level: "info"

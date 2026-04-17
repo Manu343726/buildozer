@@ -125,7 +125,7 @@ message IntrospectionListPeersRequest {
 // IntrospectionListPeersResponse returns filtered peer list
 message IntrospectionListPeersResponse {
   // List of known peers
-  repeated PeerInfo peers = 1;
+  repeated Peer peers = 1;
 }
 
 // GetPeerInfoRequest queries information about a specific peer
@@ -139,7 +139,7 @@ message GetPeerInfoRequest {
 // GetPeerInfoResponse returns detailed peer information
 message GetPeerInfoResponse {
   // Peer information
-  PeerInfo peer_info = 1;
+  Peer peer_info = 1;
 }
 
 // QueryLogsRequest retrieves structured logs

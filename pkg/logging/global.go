@@ -94,14 +94,23 @@ func GetRegistry() *Registry {
 }
 
 // GetLogger returns a logger from the global registry
-func GetLogger(name string) *Logger {
-	return GetRegistry().GetLogger(name)
+// If daemonID is provided, adds it as an attribute to all logs from this logger
+func GetLogger(name string, daemonID ...string) *Logger {
+	logger := GetRegistry().GetLogger(name)
+	if len(daemonID) > 0 && daemonID[0] != "" {
+		logger = logger.With("daemon", daemonID[0])
+	}
+	return logger
 }
 
-// Log returns the main "buildozer" logger
-// This is the root logger for the application and is set as the default slog logger
-func Log() *Logger {
-	return GetLogger("buildozer")
+// Log returns the root logger from the global registry
+// If daemonID is provided, adds it as an attribute to all logs from this logger
+func Log(daemonID ...string) *Logger {
+	logger := GetRegistry().GetLogger("buildozer")
+	if len(daemonID) > 0 && daemonID[0] != "" {
+		logger = logger.With("daemon", daemonID[0])
+	}
+	return logger
 }
 
 // SetLoggerLevel sets the level for a logger globally

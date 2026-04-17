@@ -428,7 +428,7 @@ func TestRegistry_DetachSink(t *testing.T) {
 // TestLogger_WithAttrs tests logger attributes accumulation
 func TestLogger_WithAttrs(t *testing.T) {
 	var buf bytes.Buffer
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -463,7 +463,7 @@ func TestLogger_WithAttrs(t *testing.T) {
 // TestLogger_WithGroup tests logger groups
 func TestLogger_WithGroup(t *testing.T) {
 	var buf bytes.Buffer
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -495,7 +495,7 @@ func TestLogger_WithGroup(t *testing.T) {
 // TestLogger_Hierarchy tests logger hierarchy with accumulated attributes
 func TestLogger_Hierarchy(t *testing.T) {
 	var buf bytes.Buffer
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",

@@ -13,8 +13,8 @@ func TestLoggerWithAttrs(t *testing.T) {
 	// Create a buffer to capture output
 	var buf bytes.Buffer
 
-	// Create an ordered text handler
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	// Create a colored text handler without colors for testing
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -77,7 +77,7 @@ func TestLoggerWithAttrs(t *testing.T) {
 // TestLoggerWithGroup verifies that WithGroup creates a group context
 func TestLoggerWithGroup(t *testing.T) {
 	var buf bytes.Buffer
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",
@@ -105,7 +105,7 @@ func TestLoggerWithGroup(t *testing.T) {
 // TestLoggerHierarchy verifies that WithAttrs accumulates correctly through hierarchy
 func TestLoggerHierarchy(t *testing.T) {
 	var buf bytes.Buffer
-	handler := sinks.NewOrderedTextHandler(&buf, nil)
+	handler := sinks.NewColoredTextHandler(&buf, nil, sinks.ColorModeDisabled)
 	sink := &Sink{
 		Name:    "test",
 		Type:    "memory",

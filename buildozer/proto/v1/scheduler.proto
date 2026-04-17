@@ -1,0 +1,246 @@
+syntax = "proto3";
+
+package buildozer.proto.v1;
+
+import "buildozer/proto/v1/job.proto";
+import "buildozer/proto/v1/vocabulary.proto";
+
+option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1";
+
+// SchedulerService handles distributed job scheduling with quorum-based consensus
+// All compatible peers participate in scheduling decisions
+service SchedulerService {
+  // ProposeScheduling is called by source daemon to propose a job to peers
+  // Peers vote on whether they can accept the job
+  rpc ProposeScheduling(SchedulingProposal) returns (SchedulingDecision);
+
+  // NotifyJobProgress informs peers that a job is making progress
+  // Used to prevent timeout-based job failure when job is actively running
+  rpc NotifyJobProgress(JobProgressNotification) returns (ProgressAcknowledgement);
+
+  // NotifyJobCompletion informs peers that a job has completed
+  // Triggers scheduler to attempt extracting queued jobs for execution
+  rpc NotifyJobCompletion(JobCompletionNotification) returns (CompletionAcknowledgement);
+
+  // CheckResourceAvailability queries if a peer can accept more jobs
+  rpc CheckResourceAvailability(ResourceAvailabilityRequest) returns (ResourceAvailabilityResponse);
+}
+
+// SchedulingProposal is sent by source daemon to propose a job for scheduling
+message SchedulingProposal {
+  // The job to be scheduled
+  Job job = 1;
+
+  // Source daemon ID (the daemon submitting the job)
+  string source_daemon_id = 2;
+
+  // Current UTC timestamp of proposal (unix milliseconds)
+  TimeStamp timestamp = 3;
+
+  // Proposal ID (UUID, unique per scheduling attempt)
+  // Used to prevent duplicate scheduling decisions
+  string proposal_id = 4;
+
+  // Resource requirements predicted by source daemon
+  // Helps peers decide if they have capacity
+  optional ResourceRequirements resource_requirements = 5;
+
+  // Quorum mode: how many peers must vote yes for scheduling to succeed
+  enum QuorumMode {
+    // At least one compatible peer must accept
+    QUORUM_MODE_ANY = 0;
+    // Majority of compatible peers must vote yes
+    QUORUM_MODE_MAJORITY = 1;
+    // All compatible peers must vote yes
+    QUORUM_MODE_UNANIMOUS = 2;
+  }
+  QuorumMode quorum_mode = 6;
+
+  // Local execution weight (0-100)
+  // Probability multiplier for preferring source daemon to execute the job
+  // 100 = always prefer source, 0 = random selection
+  uint32 local_execution_weight = 7;
+}
+
+// SchedulingDecision is returned by a peer in response to SchedulingProposal
+message SchedulingDecision {
+  // Proposal ID being responded to
+  string proposal_id = 1;
+
+  // Responding peer ID
+  string peer_id = 2;
+
+  // Can this peer accept the job?
+  bool can_accept = 3;
+
+  // Reason if unable to accept (diagnostic)
+  string rejection_reason = 4;
+
+  // Peer's current resource availability
+  ResourceAvailability current_resources = 5;
+
+  // Peer's confidence in ability to execute (0-100)
+  // 100 = fully confident, lower values indicate high load or other concerns
+  uint32 confidence_percent = 6;
+
+  // Timestamp when decision was made
+  TimeStamp timestamp = 7;
+}
+
+// JobProgressNotification informs peers that a job is actively running
+// Must be sent at least periodically to prevent timeout
+message JobProgressNotification {
+  // Job ID being reported
+  string job_id = 1;
+
+  // Peer ID executing the job
+  string executing_peer_id = 2;
+
+  // Current progress (0-100 percent)
+  uint32 progress_percent = 3;
+
+  // Timestamp of this progress update (unix milliseconds)
+  TimeStamp timestamp = 4;
+
+  // Time until next expected progress update (seconds)
+  // If not heard from within this time + tolerance, job is considered timed out
+  uint32 next_update_deadline_seconds = 5;
+
+  // Estimated time until completion (seconds)
+  optional uint32 estimated_remaining_seconds = 6;
+
+  // Log output from job execution
+  optional string log_output = 7;
+}
+
+// ProgressAcknowledgement acknowledges receipt of progress notification
+message ProgressAcknowledgement {
+  // Job ID being acknowledged
+  string job_id = 1;
+
+  // Acknowledging peer ID
+  string peer_id = 2;
+
+  // Timestamp of acknowledgement
+  TimeStamp timestamp = 3;
+
+  // Any error if progress couldn't be recorded
+  optional string error = 4;
+}
+
+// JobCompletionNotification informs peers that a job has finished (success or failure)
+message JobCompletionNotification {
+  // Job ID that completed
+  string job_id = 1;
+
+  // Peer ID that executed the job
+  string executing_peer_id = 2;
+
+  // Job result (success, failure, timeout)
+  JobResult result = 3;
+
+  // Timestamp of completion notification
+  TimeStamp timestamp = 4;
+
+  // If true, scheduler should attempt to extract and schedule waiting jobs
+  bool should_trigger_scheduling = 5;
+}
+
+// CompletionAcknowledgement acknowledges receipt of completion notification
+message CompletionAcknowledgement {
+  // Job ID being acknowledged
+  string job_id = 1;
+
+  // Acknowledging peer ID
+  string peer_id = 2;
+
+  // Timestamp of acknowledgement
+  TimeStamp timestamp = 3;
+
+  // Number of queued jobs that will be attempted to schedule
+  uint32 queued_jobs_count = 4;
+
+  // Any error if completion couldn't be recorded
+  optional string error = 5;
+}
+
+// ResourceRequirements specifies resource constraints for a job
+message ResourceRequirements {
+  // Estimated CPU cores needed (0 = unspecified, use runtime default)
+  optional uint32 estimated_cpu_cores = 1;
+
+  // Estimated memory required in MB (0 = unspecified, use runtime default)
+  optional uint32 estimated_memory_mb = 2;
+
+  // Total input data size in bytes to transfer
+  optional uint64 total_input_bytes = 3;
+
+  // Expected output data size in bytes to transfer back
+  optional uint64 expected_output_bytes = 4;
+
+  // Estimated execution time in seconds (0 = unspecified)
+  optional uint32 estimated_execution_seconds = 5;
+}
+
+// ResourceAvailability describes peer's available resources
+message ResourceAvailability {
+  // Peer ID
+  string peer_id = 1;
+
+  // Total available CPU cores that can be used for jobs
+  uint32 total_cpu_cores = 2;
+
+  // Currently available CPU cores (not in use)
+  uint32 available_cpu_cores = 3;
+
+  // Total available memory in MB
+  uint32 total_memory_mb = 4;
+
+  // Currently available memory in MB
+  uint32 available_memory_mb = 5;
+
+  // Maximum concurrent jobs this peer can execute
+  uint32 max_concurrent_jobs = 6;
+
+  // Currently running jobs
+  uint32 running_jobs_count = 7;
+
+  // Queued jobs waiting to run
+  uint32 queued_jobs_count = 8;
+
+  // Total disk cache available in MB (may be shared)
+  uint32 total_cache_mb = 9;
+
+  // Currently used disk cache in MB
+  uint32 used_cache_mb = 10;
+
+  // Timestamp of this resource snapshot
+  TimeStamp timestamp = 11;
+}
+
+// ResourceAvailabilityRequest queries peer's available resources
+message ResourceAvailabilityRequest {
+  // Requesting peer ID
+  string requester_peer_id = 1;
+
+  // Timestamp of request
+  TimeStamp timestamp = 2;
+}
+
+// ResourceAvailabilityResponse provides peer's current resource state
+message ResourceAvailabilityResponse {
+  // Current resource availability
+  ResourceAvailability availability = 1;
+
+  // Whether peer is currently accepting new jobs
+  bool is_accepting_jobs = 2;
+
+  // Any reason if not accepting jobs (e.g., "maintenance", "overloaded")
+  optional string not_accepting_reason = 3;
+
+  // List of compatible runtimes this peer can execute
+  repeated string compatible_runtime_ids = 4;
+
+  // Timestamp of response
+  TimeStamp timestamp = 5;
+}

@@ -1,0 +1,129 @@
+{
+  "version": 6,
+  "vendor": {
+    "buildozer": {
+      "description": "Buildozer-specific preset configurations"
+    }
+  },
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "description": "Configure for debug build using system compilers",
+      "hidden": false,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Configure for release build using system compilers",
+      "hidden": false,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "buildozer-debug",
+      "displayName": "Buildozer Debug",
+      "description": "Configure for debug build using Buildozer gcc/g++/ar drivers",
+      "hidden": false,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/buildozer_debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "${sourceDir}/../../bin/gcc",
+        "CMAKE_CXX_COMPILER": "${sourceDir}/../../bin/g++",
+        "CMAKE_AR": "${sourceDir}/../../bin/ar",
+        "CMAKE_MAKE_PROGRAM": "/usr/bin/make",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "environment": {
+        "PATH": "${sourceDir}/../../bin:$PATH"
+      }
+    },
+    {
+      "name": "buildozer-release",
+      "displayName": "Buildozer Release",
+      "description": "Configure for release build using Buildozer gcc/g++/ar drivers",
+      "hidden": false,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/buildozer_release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "${sourceDir}/../../bin/gcc",
+        "CMAKE_CXX_COMPILER": "${sourceDir}/../../bin/g++",
+        "CMAKE_AR": "${sourceDir}/../../bin/ar",
+        "CMAKE_MAKE_PROGRAM": "/usr/bin/make",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "environment": {
+        "PATH": "${sourceDir}/../../bin:$PATH"
+      }
+    },
+    {
+      "name": "buildozer-asan",
+      "displayName": "Buildozer AddressSanitizer",
+      "description": "Configure for AddressSanitizer debugging using Buildozer gcc/g++/ar drivers",
+      "hidden": false,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "${sourceDir}/../../bin/gcc",
+        "CMAKE_CXX_COMPILER": "${sourceDir}/../../bin/g++",
+        "CMAKE_AR": "${sourceDir}/../../bin/ar",
+        "CMAKE_MAKE_PROGRAM": "/usr/bin/make",
+        "CMAKE_C_FLAGS": "-g -O0 -fsanitize=address -fno-omit-frame-pointer",
+        "CMAKE_CXX_FLAGS": "-g -O0 -fsanitize=address -fno-omit-frame-pointer",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "environment": {
+        "PATH": "${sourceDir}/../../bin:$PATH",
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "buildozer-debug",
+      "configurePreset": "buildozer-debug",
+      "description": "Build debug configuration using Buildozer drivers",
+      "jobs": 4,
+      "targets": ["all"]
+    },
+    {
+      "name": "buildozer-release",
+      "configurePreset": "buildozer-release",
+      "description": "Build release configuration using Buildozer drivers",
+      "jobs": 4,
+      "targets": ["all"]
+    },
+    {
+      "name": "buildozer-asan",
+      "configurePreset": "buildozer-asan",
+      "description": "Build with AddressSanitizer using Buildozer drivers",
+      "jobs": 4,
+      "targets": ["all"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "buildozer-debug",
+      "configurePreset": "buildozer-debug",
+      "description": "Test debug build"
+    },
+    {
+      "name": "buildozer-release",
+      "configurePreset": "buildozer-release",
+      "description": "Test release build"
+    }
+  ]
+}

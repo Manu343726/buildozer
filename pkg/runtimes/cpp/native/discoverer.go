@@ -5,6 +5,7 @@ import (
 
 	"github.com/Manu343726/buildozer/pkg/logging"
 	"github.com/Manu343726/buildozer/pkg/runtime"
+	"github.com/Manu343726/buildozer/pkg/sandbox"
 )
 
 // CppDiscoverer discovers and registers available C/C++ runtimes on the system.
@@ -47,11 +48,17 @@ func (d *CppDiscoverer) Discover(ctx context.Context, registry *runtime.Registry
 	for _, toolchain := range toolchains {
 		d.Debug("registering toolchain", "compiler", toolchain.Compiler, "language", toolchain.Language, "version", toolchain.CompilerVersion, "arch", toolchain.Architecture)
 
-		runtime := NewNativeCppRuntime(&toolchain, d.workDir)
-		if err := registry.Register(runtime); err != nil {
+		cppRuntime := NewNativeCppRuntime(&toolchain, d.workDir)
+
+		// Wrap the C++ runtime with TempDir sandbox to handle file materialization
+		// This allows the C++ runtime to work with reference data only without copying
+		params := sandbox.SandboxParams{Logger: d.Logger}
+		wrappedRuntime := sandbox.MustApply(cppRuntime, params, sandbox.TempDir())
+
+		if err := registry.Register(wrappedRuntime); err != nil {
 			d.Errorf("failed to register runtime: %w", err)
 		} else {
-			d.Info("registered runtime", "id", runtime.RuntimeID())
+			d.Info("registered runtime with tempdir sandbox", "id", wrappedRuntime.RuntimeID())
 		}
 	}
 

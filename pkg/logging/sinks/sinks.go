@@ -6,40 +6,78 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"time"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// StdoutSink creates a handler that writes to stdout
+// ANSI color codes for log levels and components
+const (
+	colorBlue    = "\033[34m"
+	colorGreen   = "\033[32m"
+	colorYellow  = "\033[33m"
+	colorRed     = "\033[31m"
+	colorCyan    = "\033[36m" // For timestamp and logger name
+	colorMagenta = "\033[35m" // For attributes
+	colorReset   = "\033[0m"
+)
+
+// ColorMode controls whether log output includes ANSI color codes
+type ColorMode int
+
+const (
+	ColorModeDisabled ColorMode = iota
+	ColorModeEnabled
+)
+
+// StdoutSink creates a handler that writes to stdout with colored output
 func StdoutSink(opts *slog.HandlerOptions) slog.Handler {
-	if opts == nil {
-		opts = &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		}
-	}
-	return NewOrderedTextHandler(os.Stdout, opts)
+	return StdoutSinkWithOmitLogger(opts, false)
 }
 
-// StderrSink creates a handler that writes to stderr
-func StderrSink(opts *slog.HandlerOptions) slog.Handler {
+// StdoutSinkWithOmitLogger creates a handler that writes to stdout with optional omit logger name behavior
+func StdoutSinkWithOmitLogger(opts *slog.HandlerOptions, omitLoggerNameIfSourceEnabled bool) slog.Handler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{
-			Level: slog.LevelWarn,
+			Level:     slog.LevelInfo,
+			AddSource: true, // Include source location by default
 		}
+	} else if !opts.AddSource {
+		opts.AddSource = true // Always enable AddSource for stdout sink
 	}
-	return NewOrderedTextHandler(os.Stderr, opts)
+	return NewColoredTextHandlerWithOmitLogger(os.Stdout, opts, ColorModeEnabled, omitLoggerNameIfSourceEnabled)
+}
+
+// StderrSink creates a handler that writes to stderr with colored output
+func StderrSink(opts *slog.HandlerOptions) slog.Handler {
+	return StderrSinkWithOmitLogger(opts, false)
+}
+
+// StderrSinkWithOmitLogger creates a handler that writes to stderr with optional omit logger name behavior
+func StderrSinkWithOmitLogger(opts *slog.HandlerOptions, omitLoggerNameIfSourceEnabled bool) slog.Handler {
+	if opts == nil {
+		opts = &slog.HandlerOptions{
+			Level:     slog.LevelWarn,
+			AddSource: true, // Include source location by default
+		}
+	} else if !opts.AddSource {
+		opts.AddSource = true // Always enable AddSource for stderr sink
+	}
+	return NewColoredTextHandlerWithOmitLogger(os.Stderr, opts, ColorModeEnabled, omitLoggerNameIfSourceEnabled)
 }
 
 // FileSinkConfig holds configuration for file sinks
 type FileSinkConfig struct {
-	Path                  string // File path
-	MaxSizeB              int64  // Max file size in bytes (default: 100MB)
-	MaxFiles              int    // Max number of rotated files (default: 5)
-	MaxAgeDays            int    // Max age of log files in days (default: 0 = no limit)
-	JSONFormat            bool   // Use JSON format instead of text
-	IncludeSourceLocation bool   // Include source location in logs (file:line)
-	HandlerOpts           *slog.HandlerOptions
+	Path                          string // File path
+	MaxSizeB                      int64  // Max file size in bytes (default: 100MB)
+	MaxFiles                      int    // Max number of rotated files (default: 5)
+	MaxAgeDays                    int    // Max age of log files in days (default: 0 = no limit)
+	JSONFormat                    bool   // Use JSON format instead of text
+	IncludeSourceLocation         bool   // Include source location in logs (file:line)
+	OmitLoggerNameIfSourceEnabled bool   // Omit logger name if source location is enabled
+	HandlerOpts                   *slog.HandlerOptions
 }
 
 // FileSink creates a rotating file sink using lumberjack
@@ -94,7 +132,8 @@ func FileSink(config FileSinkConfig) (slog.Handler, error) {
 	if config.JSONFormat {
 		handler = slog.NewJSONHandler(lumber, handlerOpts)
 	} else {
-		handler = NewOrderedTextHandler(lumber, handlerOpts)
+		// File output doesn't use colors
+		handler = NewColoredTextHandlerWithOmitLogger(lumber, handlerOpts, ColorModeDisabled, config.OmitLoggerNameIfSourceEnabled)
 	}
 
 	return handler, nil
@@ -134,32 +173,91 @@ func TextFileSink(path string, maxSizeMB int, maxAgeDays int) (slog.Handler, err
 	})
 }
 
-// ============ Ordered Text Handler ============
+// ============ Colored Text Handler ============
 
-// OrderedTextHandler wraps a TextHandler and reorders attributes to:
-// time, level, logger, msg, other attributes
-type OrderedTextHandler struct {
-	underlying io.Writer
-	opts       *slog.HandlerOptions
-	attrs      []slog.Attr // Accumulated attributes
-	group      string      // Current group
+// ColoredTextHandler writes log entries as formatted text with optional colored level output.
+// Format: [timestamp][level][logger][source] message attribute=value attribute2=value2 ...
+// Timestamp format: dd/mm/yy hh:mm:ss.ms
+// Level colors: DEBUG=blue, INFO=green, WARN=yellow, ERROR=red
+// Source location (file:line) in green, printed only if AddSource is enabled in HandlerOptions
+type ColoredTextHandler struct {
+	underlying                    io.Writer
+	opts                          *slog.HandlerOptions
+	attrs                         []slog.Attr // Accumulated attributes
+	group                         string      // Current group
+	colorMode                     ColorMode   // Whether to colorize level output
+	omitLoggerNameIfSourceEnabled bool        // Omit logger name if source location is enabled
 }
 
-// NewOrderedTextHandler creates a new handler with custom attribute ordering
-func NewOrderedTextHandler(w io.Writer, opts *slog.HandlerOptions) *OrderedTextHandler {
+// NewColoredTextHandler creates a new handler with formatted output and optional coloring
+func NewColoredTextHandler(w io.Writer, opts *slog.HandlerOptions, colorMode ColorMode) *ColoredTextHandler {
+	return NewColoredTextHandlerWithOmitLogger(w, opts, colorMode, false)
+}
+
+// NewColoredTextHandlerWithOmitLogger creates a new handler with optional omitLoggerName behavior
+func NewColoredTextHandlerWithOmitLogger(w io.Writer, opts *slog.HandlerOptions, colorMode ColorMode, omitLoggerNameIfSourceEnabled bool) *ColoredTextHandler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		}
 	}
-	return &OrderedTextHandler{
-		underlying: w,
-		opts:       opts,
-		attrs:      []slog.Attr{},
+	return &ColoredTextHandler{
+		underlying:                    w,
+		opts:                          opts,
+		attrs:                         []slog.Attr{},
+		colorMode:                     colorMode,
+		omitLoggerNameIfSourceEnabled: omitLoggerNameIfSourceEnabled,
 	}
 }
 
-func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) error {
+// getLevelColor returns the ANSI color code for the given log level
+func getLevelColor(level slog.Level) string {
+	switch {
+	case level < slog.LevelInfo: // DEBUG
+		return colorBlue
+	case level < slog.LevelWarn: // INFO
+		return colorGreen
+	case level < slog.LevelError: // WARN
+		return colorYellow
+	default: // ERROR and above
+		return colorRed
+	}
+}
+
+// getLevelString returns the uppercase string representation of the log level
+func getLevelString(level slog.Level) string {
+	switch {
+	case level < slog.LevelInfo:
+		return "DEBUG"
+	case level < slog.LevelWarn:
+		return "INFO"
+	case level < slog.LevelError:
+		return "WARN"
+	default:
+		return "ERROR"
+	}
+}
+
+// getRelativeSourcePath returns a relative source path based on buildozer directory structure
+// Returns paths like: pkg/drivers/cpp/job.go, internal/gen/proto.go, cmd/buildozer-client/main.go
+func getRelativeSourcePath(fullPath string) string {
+	// Check for /pkg/ directory (public packages)
+	if idx := strings.Index(fullPath, "/pkg/"); idx >= 0 {
+		return fullPath[idx+1:] // +1 to skip the leading /
+	}
+	// Check for /internal/ directory (private packages)
+	if idx := strings.Index(fullPath, "/internal/"); idx >= 0 {
+		return fullPath[idx+1:]
+	}
+	// Check for /cmd/ directory (CLI tools)
+	if idx := strings.Index(fullPath, "/cmd/"); idx >= 0 {
+		return fullPath[idx+1:]
+	}
+	// Fallback to just the filename if not found in standard locations
+	return filepath.Base(fullPath)
+}
+
+func (h *ColoredTextHandler) Handle(ctx context.Context, record slog.Record) error {
 	// Check if should log at this level
 	if h.opts.Level != nil && record.Level < h.opts.Level.Level() {
 		return nil
@@ -167,10 +265,21 @@ func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) err
 
 	// Collect all attributes: accumulated + record attributes
 	var loggerName string
+	var sourceLocation string
 	var otherAttrs []slog.Attr
 
 	// Add accumulated attributes first
 	otherAttrs = append(otherAttrs, h.attrs...)
+
+	// Extract source location from record PC if AddSource is enabled
+	if h.opts != nil && h.opts.AddSource && record.PC != 0 {
+		fs := runtime.CallersFrames([]uintptr{record.PC})
+		f, _ := fs.Next()
+		if f.File != "" {
+			relativePath := getRelativeSourcePath(f.File)
+			sourceLocation = fmt.Sprintf("%s:%d", relativePath, f.Line)
+		}
+	}
 
 	// Add record attributes
 	record.Attrs(func(a slog.Attr) bool {
@@ -182,17 +291,65 @@ func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) err
 		return true
 	})
 
-	// Build output with desired order: time, level, logger, msg, other attributes
-	output := fmt.Sprintf("time=%s level=%s", record.Time.Format(time.RFC3339Nano), record.Level)
+	// Format timestamp as dd/mm/yy hh:mm:ss.ms
+	timestamp := record.Time.Format("02/01/06 15:04:05.000")
 
-	if loggerName != "" {
-		output += fmt.Sprintf(" logger=%s", loggerName)
+	// Get level string and color
+	levelStr := getLevelString(record.Level)
+	levelColor := ""
+	timestampColor := ""
+	sourceColor := ""
+	attrColor := ""
+	resetColor := ""
+	if h.colorMode == ColorModeEnabled {
+		levelColor = getLevelColor(record.Level)
+		timestampColor = colorCyan
+		sourceColor = colorGreen // Source location in green
+		attrColor = colorMagenta
+		resetColor = colorReset
 	}
 
-	output += fmt.Sprintf(" msg=%q", record.Message)
+	// Build output with format: [timestamp][level][logger][source] message attr=value ...
+	// Timestamp and logger name in cyan, level in its own color, source location in green, attributes in magenta
+	var output string
+	if h.colorMode == ColorModeEnabled {
+		output = fmt.Sprintf("[%s%s%s][%s%s%s]", timestampColor, timestamp, resetColor, levelColor, levelStr, resetColor)
+	} else {
+		output = fmt.Sprintf("[%s][%s]", timestamp, levelStr)
+	}
 
+	// Add logger name if present (colored in cyan like timestamp)
+	// Skip if omitLoggerNameIfSourceEnabled is true and source location is present
+	if loggerName != "" {
+		shouldOmit := h.omitLoggerNameIfSourceEnabled && sourceLocation != ""
+		if !shouldOmit {
+			if h.colorMode == ColorModeEnabled {
+				output += fmt.Sprintf("[%s%s%s]", timestampColor, loggerName, resetColor)
+			} else {
+				output += fmt.Sprintf("[%s]", loggerName)
+			}
+		}
+	}
+
+	// Add source location if present (colored in green)
+	if sourceLocation != "" {
+		if h.colorMode == ColorModeEnabled {
+			output += fmt.Sprintf("[%s%s%s]", sourceColor, sourceLocation, resetColor)
+		} else {
+			output += fmt.Sprintf("[%s]", sourceLocation)
+		}
+	}
+
+	// Add message
+	output += fmt.Sprintf(" %s", record.Message)
+
+	// Add attributes (colored in magenta)
 	for _, attr := range otherAttrs {
-		output += fmt.Sprintf(" %s=%v", attr.Key, attr.Value.Any())
+		if h.colorMode == ColorModeEnabled {
+			output += fmt.Sprintf(" %s%s=%v%s", attrColor, attr.Key, attr.Value.Any(), resetColor)
+		} else {
+			output += fmt.Sprintf(" %s=%v", attr.Key, attr.Value.Any())
+		}
 	}
 
 	output += "\n"
@@ -200,27 +357,31 @@ func (h *OrderedTextHandler) Handle(ctx context.Context, record slog.Record) err
 	return err
 }
 
-func (h *OrderedTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+func (h *ColoredTextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	// Create new handler with accumulated attributes
 	newAttrs := append([]slog.Attr{}, h.attrs...)
 	newAttrs = append(newAttrs, attrs...)
-	return &OrderedTextHandler{
-		underlying: h.underlying,
-		opts:       h.opts,
-		attrs:      newAttrs,
-		group:      h.group,
+	return &ColoredTextHandler{
+		underlying:                    h.underlying,
+		opts:                          h.opts,
+		attrs:                         newAttrs,
+		group:                         h.group,
+		colorMode:                     h.colorMode,
+		omitLoggerNameIfSourceEnabled: h.omitLoggerNameIfSourceEnabled,
 	}
 }
 
-func (h *OrderedTextHandler) WithGroup(name string) slog.Handler {
-	return &OrderedTextHandler{
-		underlying: h.underlying,
-		opts:       h.opts,
-		attrs:      h.attrs,
-		group:      name,
+func (h *ColoredTextHandler) WithGroup(name string) slog.Handler {
+	return &ColoredTextHandler{
+		underlying:                    h.underlying,
+		opts:                          h.opts,
+		attrs:                         h.attrs,
+		group:                         name,
+		colorMode:                     h.colorMode,
+		omitLoggerNameIfSourceEnabled: h.omitLoggerNameIfSourceEnabled,
 	}
 }
 
-func (h *OrderedTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
+func (h *ColoredTextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.opts.Level == nil || level >= h.opts.Level.Level()
 }

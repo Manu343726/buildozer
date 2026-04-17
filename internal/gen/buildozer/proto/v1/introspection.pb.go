@@ -408,7 +408,7 @@ func (x *IntrospectionListPeersRequest) GetRequesterInfo() *RequesterInfo {
 type IntrospectionListPeersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// List of known peers
-	Peers         []*PeerInfo `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	Peers         []*Peer `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -443,7 +443,7 @@ func (*IntrospectionListPeersResponse) Descriptor() ([]byte, []int) {
 	return file_buildozer_proto_v1_introspection_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *IntrospectionListPeersResponse) GetPeers() []*PeerInfo {
+func (x *IntrospectionListPeersResponse) GetPeers() []*Peer {
 	if x != nil {
 		return x.Peers
 	}
@@ -509,7 +509,7 @@ func (x *GetPeerInfoRequest) GetRequesterInfo() *RequesterInfo {
 type GetPeerInfoResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Peer information
-	PeerInfo      *PeerInfo `protobuf:"bytes,1,opt,name=peer_info,json=peerInfo,proto3" json:"peer_info,omitempty"`
+	PeerInfo      *Peer `protobuf:"bytes,1,opt,name=peer_info,json=peerInfo,proto3" json:"peer_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -544,7 +544,7 @@ func (*GetPeerInfoResponse) Descriptor() ([]byte, []int) {
 	return file_buildozer_proto_v1_introspection_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *GetPeerInfoResponse) GetPeerInfo() *PeerInfo {
+func (x *GetPeerInfoResponse) GetPeerInfo() *Peer {
 	if x != nil {
 		return x.PeerInfo
 	}
@@ -1627,14 +1627,14 @@ const file_buildozer_proto_v1_introspection_proto_rawDesc = "" +
 	"\x15current_cache_percent\x18\x03 \x01(\v2\x1e.buildozer.proto.v1.PercentageR\x13currentCachePercent\"\xb2\x01\n" +
 	"\x1dIntrospectionListPeersRequest\x12G\n" +
 	"\x11filter_by_runtime\x18\x01 \x03(\v2\x1b.buildozer.proto.v1.RuntimeR\x0ffilterByRuntime\x12H\n" +
-	"\x0erequester_info\x18\x02 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"T\n" +
-	"\x1eIntrospectionListPeersResponse\x122\n" +
-	"\x05peers\x18\x01 \x03(\v2\x1c.buildozer.proto.v1.PeerInfoR\x05peers\"w\n" +
+	"\x0erequester_info\x18\x02 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"P\n" +
+	"\x1eIntrospectionListPeersResponse\x12.\n" +
+	"\x05peers\x18\x01 \x03(\v2\x18.buildozer.proto.v1.PeerR\x05peers\"w\n" +
 	"\x12GetPeerInfoRequest\x12\x17\n" +
 	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12H\n" +
-	"\x0erequester_info\x18\x02 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"P\n" +
-	"\x13GetPeerInfoResponse\x129\n" +
-	"\tpeer_info\x18\x01 \x01(\v2\x1c.buildozer.proto.v1.PeerInfoR\bpeerInfo\"\xcd\x02\n" +
+	"\x0erequester_info\x18\x02 \x01(\v2!.buildozer.proto.v1.RequesterInfoR\rrequesterInfo\"L\n" +
+	"\x13GetPeerInfoResponse\x125\n" +
+	"\tpeer_info\x18\x01 \x01(\v2\x18.buildozer.proto.v1.PeerR\bpeerInfo\"\xcd\x02\n" +
 	"\x10QueryLogsRequest\x12\x16\n" +
 	"\x06levels\x18\x01 \x03(\tR\x06levels\x12)\n" +
 	"\x10component_filter\x18\x02 \x01(\tR\x0fcomponentFilter\x12\x12\n" +
@@ -1769,7 +1769,7 @@ var file_buildozer_proto_v1_introspection_proto_goTypes = []any{
 	(*TimeStamp)(nil),                      // 25: buildozer.proto.v1.TimeStamp
 	(*Runtime)(nil),                        // 26: buildozer.proto.v1.Runtime
 	(*Percentage)(nil),                     // 27: buildozer.proto.v1.Percentage
-	(*PeerInfo)(nil),                       // 28: buildozer.proto.v1.PeerInfo
+	(*Peer)(nil),                           // 28: buildozer.proto.v1.Peer
 	(*Hash)(nil),                           // 29: buildozer.proto.v1.Hash
 	(*Size)(nil),                           // 30: buildozer.proto.v1.Size
 	(*RetentionPolicy)(nil),                // 31: buildozer.proto.v1.RetentionPolicy
@@ -1789,9 +1789,9 @@ var file_buildozer_proto_v1_introspection_proto_depIdxs = []int32{
 	27, // 7: buildozer.proto.v1.CurrentLoad.current_cache_percent:type_name -> buildozer.proto.v1.Percentage
 	26, // 8: buildozer.proto.v1.IntrospectionListPeersRequest.filter_by_runtime:type_name -> buildozer.proto.v1.Runtime
 	24, // 9: buildozer.proto.v1.IntrospectionListPeersRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	28, // 10: buildozer.proto.v1.IntrospectionListPeersResponse.peers:type_name -> buildozer.proto.v1.PeerInfo
+	28, // 10: buildozer.proto.v1.IntrospectionListPeersResponse.peers:type_name -> buildozer.proto.v1.Peer
 	24, // 11: buildozer.proto.v1.GetPeerInfoRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo
-	28, // 12: buildozer.proto.v1.GetPeerInfoResponse.peer_info:type_name -> buildozer.proto.v1.PeerInfo
+	28, // 12: buildozer.proto.v1.GetPeerInfoResponse.peer_info:type_name -> buildozer.proto.v1.Peer
 	25, // 13: buildozer.proto.v1.QueryLogsRequest.since:type_name -> buildozer.proto.v1.TimeStamp
 	25, // 14: buildozer.proto.v1.QueryLogsRequest.until:type_name -> buildozer.proto.v1.TimeStamp
 	24, // 15: buildozer.proto.v1.QueryLogsRequest.requester_info:type_name -> buildozer.proto.v1.RequesterInfo

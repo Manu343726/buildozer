@@ -15,6 +15,7 @@ func ParseCommandLine(args []string) *ParsedArgs {
 		IncludeDirs:   []string{},
 		Defines:       []string{},
 		Libraries:     []string{},
+		LibraryFiles:  []string{},
 		LibraryDirs:   []string{},
 		CompilerFlags: []string{},
 		LinkerFlags:   []string{},
@@ -81,7 +82,7 @@ func ParseCommandLine(args []string) *ParsedArgs {
 				parsed.LinkerFlags = append(parsed.LinkerFlags, arg)
 			}
 		default:
-			// Input file (source or object)
+			// Input file (source, object, or library)
 			if strings.HasSuffix(arg, ".c") || strings.HasSuffix(arg, ".cpp") ||
 				strings.HasSuffix(arg, ".cc") || strings.HasSuffix(arg, ".cxx") ||
 				strings.HasSuffix(arg, ".C") || strings.HasSuffix(arg, ".c++") {
@@ -90,8 +91,21 @@ func ParseCommandLine(args []string) *ParsedArgs {
 			} else if strings.HasSuffix(arg, ".o") {
 				// Object file
 				parsed.ObjectFiles = append(parsed.ObjectFiles, arg)
+			} else if strings.HasSuffix(arg, ".a") || strings.HasSuffix(arg, ".so") ||
+				strings.HasSuffix(arg, ".lib") || strings.HasSuffix(arg, ".dll") {
+				// Library file with full path - add to LibraryFiles, not Libraries
+				// Libraries contains named libraries from -l flags
+				parsed.LibraryFiles = append(parsed.LibraryFiles, arg)
 			}
 		}
+	}
+
+	// Post-process to detect link-only operations
+	// If we have no source files but have object files, and no -c flag, this is a link-only job
+	if parsed.Mode != ModeCompileOnly && // Not explicitly compile-only
+		len(parsed.SourceFiles) == 0 && // No source files
+		len(parsed.ObjectFiles) > 0 { // But we have object files
+		parsed.Mode = ModeLink
 	}
 
 	return parsed

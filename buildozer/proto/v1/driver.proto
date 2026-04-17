@@ -11,17 +11,15 @@ option go_package = "github.com/Manu343726/buildozer/internal/gen/buildozer/prot
 // JobService is the API used by driver CLIs (gcc, g++, make) to submit jobs to a client
 // This is the primary entry point for external clients/drivers to interact with buildozer
 service JobService {
-  // SubmitJob submits a job for execution in the network
-  // The job is validated and queued for execution
-  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+  // SubmitJob submits a job for execution and streams all status updates
+  // Returns a stream starting with submission confirmation, then all status updates.
+  // The daemon waits for the client to connect before scheduling the job.
+  // This prevents the race condition where the job completes before the client connects to the stream.
+  rpc SubmitJob(SubmitJobRequest) returns (stream SubmitJobResponse);
 
   // GetJobStatus queries the current status of a submitted job (single query)
   // Returns the latest known status without blocking
   rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse);
-
-  // WatchJobStatus streams real-time job status updates
-  // Streams status changes as the job progresses through execution phases
-  rpc WatchJobStatus(WatchJobStatusRequest) returns (stream WatchJobStatusResponse);
 
   // CancelJob cancels a job and optionally its dependents
   // Cancellation is broadcast to all peers; dependent jobs in the DAG are also cancelled
@@ -39,9 +37,19 @@ message SubmitJobRequest {
   RequesterInfo requester_info = 3;
 }
 
-// SubmitJobResponse confirms job submission
+// SubmitJobResponse is streamed back, first with submission confirmation, then with status updates
 message SubmitJobResponse {
-  // Submitted job status
+  oneof response {
+    // First message: submission confirmation
+    SubmissionConfirmation confirmation = 1;
+    // Subsequent messages: status updates
+    StatusUpdate status_update = 2;
+  }
+}
+
+// SubmissionConfirmation confirms initial job submission
+message SubmissionConfirmation {
+  // Initial job status
   JobStatus job_status = 1;
 
   // Job accepted by the receiving client?
@@ -49,6 +57,15 @@ message SubmitJobResponse {
 
   // If rejected, error explanation
   string error_message = 3;
+}
+
+// StatusUpdate is a job status update streamed after submission
+message StatusUpdate {
+  // Updated job status
+  JobStatus job_status = 1;
+
+  // Timestamp of the update
+  buildozer.proto.v1.TimeStamp updated_at = 2;
 }
 
 // JobStatus represents the current state of a submitted job

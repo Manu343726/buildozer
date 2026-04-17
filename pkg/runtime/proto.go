@@ -8,71 +8,180 @@ import (
 	v1 "github.com/Manu343726/buildozer/internal/gen/buildozer/proto/v1"
 )
 
+// RuntimePlatform identifies the runtime platform and operating system (native_linux, docker_linux, native_windows, etc.)
+type RuntimePlatform int
+
+const (
+	RuntimePlatformNativeLinux RuntimePlatform = iota
+	RuntimePlatformDockerLinux
+	// RuntimePlatformNativeWindows, etc. can be added in the future
+)
+
+// String returns the string representation of RuntimePlatform
+func (rp RuntimePlatform) String() string {
+	switch rp {
+	case RuntimePlatformNativeLinux:
+		return "native_linux"
+	case RuntimePlatformDockerLinux:
+		return "docker_linux"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseRuntimePlatform converts a string to RuntimePlatform
+func ParseRuntimePlatform(s string) (RuntimePlatform, error) {
+	switch s {
+	case "native_linux":
+		return RuntimePlatformNativeLinux, nil
+	case "docker_linux":
+		return RuntimePlatformDockerLinux, nil
+	default:
+		return RuntimePlatformNativeLinux, fmt.Errorf("unknown runtime platform: %q", s)
+	}
+}
+
+// RuntimeToolchain identifies the toolchain/language family (c, cpp, go, rust, etc.)
+// Note: AR is NOT a separate toolchain - it's part of the C toolchain and uses C runtimes
+type RuntimeToolchain int
+
+const (
+	RuntimeToolchainC RuntimeToolchain = iota
+	RuntimeToolchainCpp
+	// RuntimeToolchainGo, RuntimeToolchainRust, etc. can be added in the future
+)
+
+// String returns the string representation of RuntimeToolchain
+func (rt RuntimeToolchain) String() string {
+	switch rt {
+	case RuntimeToolchainC:
+		return "c"
+	case RuntimeToolchainCpp:
+		return "cpp"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseRuntimeToolchain converts a string to RuntimeToolchain
+func ParseRuntimeToolchain(s string) (RuntimeToolchain, error) {
+	switch s {
+	case "c":
+		return RuntimeToolchainC, nil
+	case "cpp":
+		return RuntimeToolchainCpp, nil
+	default:
+		return RuntimeToolchainC, fmt.Errorf("unknown runtime toolchain: %q", s)
+	}
+}
+
+// RuntimeParser is an interface for parsing runtime-specific IDs.
+// Implementations handle the format-specific parsing for different runtime toolchains.
+type RuntimeParser interface {
+	// Parse converts a runtime ID string (without the platform/toolchain prefix) into a *v1.Runtime proto.
+	// idParts contains the dash-separated parts after the platform-toolchain prefix (e.g., "gcc", "10.2.1", ...)
+	Parse(idParts []string) (*v1.Runtime, error)
+}
+
+// runtimeParsers maps runtime toolchain strings (e.g., "native_linux-c", "docker_linux-go") to their parser implementations
+// This allows extending with new toolchains and platforms without modifying this package
+var runtimeParsers = make(map[string]RuntimeParser)
+
+// RegisterRuntimeParser registers a parser for a specific runtime toolchain and platform
+// toolchainKey should be in format "platform-toolchain" (e.g., "native_linux-c", "docker_linux-go")
+func RegisterRuntimeParser(toolchainKey string, parser RuntimeParser) {
+	runtimeParsers[toolchainKey] = parser
+}
+
 // ParseRuntimeID parses a runtime ID string into a *v1.Runtime proto.
-// The runtime ID format for native C/C++ runtimes is:
+// It determines the runtime platform and toolchain, then delegates to the appropriate parser.
 //
-//	native-<lang>-<compiler>-<version>-<cruntime>-<cruntime_version>-<arch>           (C)
-//	native-<lang>-<compiler>-<version>-<cruntime>-<cruntime_version>-<stdlib>-<arch>  (C++)
+// ID format stages:
+// 1. Platform: "native_linux", "docker_linux", "native_windows", etc.
+// 2. Toolchain: "c", "cpp", "go", "rust", etc.
+// 3. Rest: toolchain-specific format parsed by the registered RuntimeParser
 //
-// Examples:
+// Examples of valid IDs:
 //
-//	native-c-gcc-10.2.1-glibc-2.31-x86_64
-//	native-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64
-//	native-cpp-clang-14.0.0-glibc-2.31-libc++-aarch64
+//	native_linux-c-gcc-10.2.1-glibc-2.31-x86_64
+//	native_linux-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64
+//	docker_linux-go-1.18
+//
+// Note: AR jobs run on C runtimes, not separate ar runtimes
 func ParseRuntimeID(id string) (*v1.Runtime, error) {
 	if id == "" {
 		return nil, fmt.Errorf("empty runtime ID")
 	}
 
 	parts := strings.Split(id, "-")
-	if len(parts) < 7 {
-		return nil, fmt.Errorf("invalid runtime ID %q: expected at least 7 dash-separated parts", id)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("invalid runtime ID %q: expected at least 4 dash-separated parts (platform_os-toolchain-...)", id)
 	}
 
-	// parts[0] = "native" (or other type prefix in the future)
-	isNative := parts[0] == "native"
+	// Stage 1: Determine runtime platform (native_linux, docker_linux, etc.)
+	// Handle platform names that contain underscores (e.g., "native_linux", "docker_linux")
+	var runtimePlatform RuntimePlatform
+	var toolchainStartIdx int
 
-	// parts[1] = language ("c" or "cpp")
-	lang := parseLanguage(parts[1])
-
-	// parts[2] = compiler ("gcc" or "clang")
-	compiler := parseCompiler(parts[2])
-
-	// parts[3] = compiler version (e.g. "10.2.1")
-	compilerVersion := parseVersion(parts[3])
-
-	// parts[4] = C runtime ("glibc" or "musl")
-	cRuntime := parseCRuntime(parts[4])
-
-	// parts[5] = C runtime version (e.g. "2.31")
-	cRuntimeVersion := parseVersion(parts[5])
-
-	// For C: parts[6] = architecture
-	// For C++: parts[6] = stdlib, parts[7] = architecture
-	var stdlib v1.CppStdlib
-	var arch v1.CpuArchitecture
-
-	if lang == v1.CppLanguage_CPP_LANGUAGE_CPP && len(parts) >= 8 {
-		stdlib = parseStdlib(parts[6])
-		arch = parseArchitecture(parts[7])
+	// Check for two-part platform names (e.g., "native_linux", "docker_linux")
+	if len(parts) >= 4 && (parts[0] == "native" || parts[0] == "docker") {
+		platformStr := parts[0] + "_" + parts[1]
+		p, err := ParseRuntimePlatform(platformStr)
+		if err == nil {
+			runtimePlatform = p
+			toolchainStartIdx = 2
+		} else {
+			// Fallback to single-part platform
+			p, err := ParseRuntimePlatform(parts[0])
+			if err != nil {
+				return nil, err
+			}
+			runtimePlatform = p
+			toolchainStartIdx = 1
+		}
 	} else {
-		arch = parseArchitecture(parts[6])
+		p, err := ParseRuntimePlatform(parts[0])
+		if err != nil {
+			return nil, err
+		}
+		runtimePlatform = p
+		toolchainStartIdx = 1
 	}
 
-	rt := &v1.Runtime{
-		Id:       id,
-		IsNative: isNative,
-		Toolchain: &v1.Runtime_Cpp{
-			Cpp: &v1.CppToolchain{
-				Language:        lang,
-				Compiler:        compiler,
-				CompilerVersion: compilerVersion,
-				Architecture:    arch,
-				CRuntime:        cRuntime,
-				CRuntimeVersion: cRuntimeVersion,
-				CppStdlib:       stdlib,
-			},
-		},
+	// Stage 2: Determine runtime toolchain (c, cpp, go, rust, etc.)
+	if toolchainStartIdx >= len(parts) {
+		return nil, fmt.Errorf("invalid runtime ID %q: missing toolchain after platform", id)
+	}
+	runtimeToolchain, err := ParseRuntimeToolchain(parts[toolchainStartIdx])
+	if err != nil {
+		return nil, err
+	}
+
+	// Stage 3: Delegate to platform-toolchain-specific parser
+	// Look up parser by platform-toolchain combination
+	parserKey := fmt.Sprintf("%s-%s", runtimePlatform.String(), runtimeToolchain.String())
+	parser, ok := runtimeParsers[parserKey]
+	if !ok {
+		return nil, fmt.Errorf("no parser registered for %s", parserKey)
+	}
+
+	// Pass remaining parts (without platform and toolchain) to the parser
+	remainingParts := parts[toolchainStartIdx+1:]
+	rt, err := parser.Parse(remainingParts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse runtime ID %q: %w", id, err)
+	}
+
+	// Set common fields
+	rt.Id = id
+	// Convert RuntimePlatform (Go type) to v1.RuntimePlatform (proto enum)
+	switch runtimePlatform {
+	case RuntimePlatformNativeLinux:
+		rt.Platform = v1.RuntimePlatform_RUNTIME_PLATFORM_NATIVE_LINUX
+	case RuntimePlatformDockerLinux:
+		rt.Platform = v1.RuntimePlatform_RUNTIME_PLATFORM_DOCKER_LINUX
+	default:
+		rt.Platform = v1.RuntimePlatform_RUNTIME_PLATFORM_UNSPECIFIED
 	}
 
 	return rt, nil
@@ -80,15 +189,16 @@ func ParseRuntimeID(id string) (*v1.Runtime, error) {
 
 // RuntimeToID generates a runtime ID string from a *v1.Runtime proto.
 // This is the inverse of ParseRuntimeID.
+// Generates IDs like: native_linux-c-gcc-10.2.1-glibc-2.31-x86_64
 func RuntimeToID(rt *v1.Runtime) string {
 	cpp := rt.GetCpp()
 	if cpp == nil {
 		return rt.GetId()
 	}
 
-	prefix := "native"
-	if !rt.IsNative {
-		prefix = "docker"
+	platform := "native_linux"
+	if rt.Platform == v1.RuntimePlatform_RUNTIME_PLATFORM_DOCKER_LINUX {
+		platform = "docker_linux"
 	}
 
 	lang := languageToString(cpp.Language)
@@ -98,8 +208,8 @@ func RuntimeToID(rt *v1.Runtime) string {
 	crtVersion := versionToString(cpp.CRuntimeVersion)
 	arch := architectureToString(cpp.Architecture)
 
-	// Build ID: prefix-lang-compiler-version-cruntime-cruntime_version[-stdlib]-arch
-	id := fmt.Sprintf("%s-%s-%s-%s-%s-%s", prefix, lang, compiler, version, crt, crtVersion)
+	// Build ID: platform-toolchain-compiler-version-cruntime-cruntime_version[-stdlib]-arch
+	id := fmt.Sprintf("%s-%s-%s-%s-%s-%s", platform, lang, compiler, version, crt, crtVersion)
 
 	if cpp.Language == v1.CppLanguage_CPP_LANGUAGE_CPP {
 		id = fmt.Sprintf("%s-%s", id, stdlibToString(cpp.CppStdlib))

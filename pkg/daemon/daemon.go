@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
-	"github.com/Manu343726/buildozer/pkg/discovery"
 	"github.com/Manu343726/buildozer/pkg/logging"
+	"github.com/Manu343726/buildozer/pkg/peers"
 	"github.com/Manu343726/buildozer/pkg/runtimes"
+	"github.com/Manu343726/buildozer/pkg/scheduler"
 )
 
 // httpServer encapsulates the low-level HTTP/Connect server infrastructure.
@@ -22,18 +24,22 @@ type httpServer struct {
 	server *http.Server
 	mux    *http.ServeMux
 
-	mu      sync.RWMutex
-	running bool
-	ctx     context.Context
-	cancel  context.CancelFunc
+	mu           sync.RWMutex
+	running      bool
+	ctx          context.Context
+	cancel       context.CancelFunc
+	startupErr   chan error    // Channel to report startup errors
+	startupReady chan struct{} // Signal that server is ready/failed to bind
 }
 
 // newHTTPServer creates a new HTTP server instance.
-func newHTTPServer(config DaemonConfig) *httpServer {
+func newHTTPServer(config DaemonConfig, daemonID string) *httpServer {
 	return &httpServer{
-		Logger: Log().Child("httpServer").With("host", config.Host, "port", config.Port),
-		config: config,
-		mux:    http.NewServeMux(),
+		Logger:       logging.Log(daemonID).Child("httpServer").With("host", config.Host, "port", config.Port),
+		config:       config,
+		mux:          http.NewServeMux(),
+		startupErr:   make(chan error, 1),
+		startupReady: make(chan struct{}, 1),
 	}
 }
 
@@ -47,6 +53,7 @@ func (hs *httpServer) registerHandler(path string, handler http.Handler) {
 }
 
 // start initializes and starts the HTTP server.
+// It waits for the server to either successfully bind or fail, returning any startup error.
 func (hs *httpServer) start() error {
 	hs.mu.Lock()
 	defer hs.mu.Unlock()
@@ -69,10 +76,53 @@ func (hs *httpServer) start() error {
 		hs.Info("HTTP server starting", "addr", addr)
 		if err := hs.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			hs.Error("HTTP server error", "error", err)
+			// Send error to startup error channel so caller knows about it
+			select {
+			case hs.startupErr <- err:
+			default:
+			}
+		}
+		// Signal that startup sequence is done (either success or failure)
+		select {
+		case hs.startupReady <- struct{}{}:
+		default:
 		}
 	}()
 
-	return nil
+	// Wait for server to either bind successfully or fail
+	// Give it a small timeout to detect binding errors
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	select {
+	case err := <-hs.startupErr:
+		// Server failed to bind
+		hs.running = false
+		return hs.Errorf("failed to start HTTP server: %w", err)
+	case <-hs.startupReady:
+		// Server is ready (or startup sequence completed)
+		// Check if an error was sent
+		select {
+		case err := <-hs.startupErr:
+			hs.running = false
+			return hs.Errorf("failed to start HTTP server: %w", err)
+		default:
+			// No error, server is running
+			hs.Info("HTTP server started successfully", "addr", addr)
+			return nil
+		}
+	case <-ctx.Done():
+		// Timeout waiting for startup - assume server started successfully if we didn't get an error
+		select {
+		case err := <-hs.startupErr:
+			hs.running = false
+			return hs.Errorf("failed to start HTTP server: %w", err)
+		default:
+			// No error reported, assume startup succeeded
+			hs.Info("HTTP server started", "addr", addr)
+			return nil
+		}
+	}
 }
 
 // stop gracefully shuts down the HTTP server.
@@ -175,19 +225,23 @@ func DefaultDaemonLoggingConfig() logging.LoggingConfig {
 		LoggingDir:  "~/.cache/buildozer/logs", // Daemon logs go to user cache
 		Sinks: []logging.SinkConfig{
 			{
-				Name:  "stdout",
-				Type:  "stdout",
-				Level: "debug",
+				Name:                          "stdout",
+				Type:                          "stdout",
+				Level:                         "debug",
+				IncludeSourceLocation:         true, // Include source location by default
+				OmitLoggerNameIfSourceEnabled: true, // Omit logger name when source is enabled
 			},
 			{
-				Name:       "daemon_file",
-				Type:       "file",
-				Level:      "debug",
-				Filename:   "buildozer-daemon.log",
-				MaxSizeB:   100 * 1024 * 1024, // 100MB
-				MaxFiles:   10,
-				MaxAgeDays: 30,
-				JSONFormat: false,
+				Name:                          "daemon_file",
+				Type:                          "file",
+				Level:                         "debug",
+				Filename:                      "buildozer-daemon.log",
+				MaxSizeB:                      100 * 1024 * 1024, // 100MB
+				MaxFiles:                      10,
+				MaxAgeDays:                    30,
+				JSONFormat:                    false,
+				IncludeSourceLocation:         true, // Include source location by default
+				OmitLoggerNameIfSourceEnabled: true, // Omit logger name when source is enabled
 			},
 		},
 		Loggers: []logging.LoggerConfig{
@@ -221,17 +275,21 @@ func DefaultConfig() DaemonConfig {
 // - Running the HTTP/Connect server
 // - Coordinating graceful shutdown
 // - Managing peer discovery via mDNS
+// - Coordinating distributed job scheduling
 //
 // This is the main entry point for starting a buildozer daemon.
 type Daemon struct {
 	*logging.Logger // Embedded logger for daemon-level logging
 
-	config     DaemonConfig
-	httpServer *httpServer
-	discoverer *discovery.MDNSDiscoverer
-	logging    logging.ConfigManager
-	runtimes   *runtimes.Manager
-	jobManager *JobManager
+	daemonID    string // Unique identifier for this daemon instance
+	config      DaemonConfig
+	httpServer  *httpServer
+	discoverer  *peers.MulticastDiscoverer
+	peerManager *peers.Manager
+	logging     logging.ConfigManager
+	runtimes    runtimes.Manager
+	jobManager  *JobManager
+	scheduler   *scheduler.Scheduler // Scheduler for job placement and remote execution
 }
 
 // NewDaemon creates a new Daemon with all standard services configured.
@@ -267,8 +325,12 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 		return nil, fmt.Errorf("failed to initialize logging config manager")
 	}
 
-	// Create the HTTP server
-	httpSrv := newHTTPServer(config)
+	// Compute daemon ID early so all components can use it
+	advertisedHost := getAdvertisedHost(config.Host)
+	daemonID := fmt.Sprintf("%s:%d", advertisedHost, config.Port)
+
+	// Create the HTTP server with daemon ID
+	httpSrv := newHTTPServer(config, daemonID)
 
 	// Register health check endpoint
 	httpSrv.registerHandler("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -279,24 +341,49 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 	// Register logging service
 	loggingPath, loggingHandler := logging.RegisterLoggingService(loggingConfigMgr)
 	httpSrv.registerHandler(loggingPath, loggingHandler)
-	Log().Debug("Logging service registered", "path", loggingPath)
+	logging.Log(daemonID).Debug("Logging service registered", "path", loggingPath)
 
-	// Create and register runtime service
-	runtimeMgr := runtimes.NewManager()
-	runtimePath, runtimeHandler := runtimes.RegisterService(runtimeMgr)
+	// Create peer manager early (will be shared with services and discoverer)
+	peerManager := peers.NewManager()
+
+	// Create local runtime manager with local daemon ID
+	localRuntimeMgr := runtimes.NewLocalRuntimesManager(daemonID)
+
+	// Create remote runtime manager for discovering peer runtimes
+	// The remote manager wraps remote runtimes with RPC implementations
+	remoteRuntimeMgr := runtimes.NewRemoteRuntimesManager(peerManager)
+
+	// Create aggregated manager combining local and remote runtimes
+	aggregatedRuntimeMgr := runtimes.NewAggregatedRuntimesManager(localRuntimeMgr, remoteRuntimeMgr)
+
+	// Register runtime service with aggregated manager for network-wide runtime discovery
+	runtimePath, runtimeHandler := runtimes.RegisterService(aggregatedRuntimeMgr)
 	httpSrv.registerHandler(runtimePath, runtimeHandler)
-	Log().Debug("Runtime service registered", "path", runtimePath)
+	logging.Log(daemonID).Debug("Runtime service registered", "path", runtimePath)
 
-	// Create and register job service
-	jobManager := NewJobManager("local-daemon", runtimeMgr)
-	jobPath, jobHandler := RegisterJobService(jobManager)
+	// Create and register job service (use local runtime manager for execution)
+	jobManager := NewJobManager(daemonID, localRuntimeMgr)
+	jobPath, jobHandler := RegisterJobService(daemonID, jobManager)
 	httpSrv.registerHandler(jobPath, jobHandler)
-	Log().Debug("Job service registered", "path", jobPath)
+	logging.Log(daemonID).Debug("Job service registered", "path", jobPath)
 
-	// Create mDNS discoverer with advertised host (not listen address)
-	advertisedHost := getAdvertisedHost(config.Host)
-	daemonID := fmt.Sprintf("%s:%d", advertisedHost, config.Port)
-	discoverer := discovery.NewMDNSDiscoverer(daemonID, advertisedHost, config.Port, config.MDNSIntervalSecs)
+	// Create scheduler for distributed job scheduling
+	// The scheduler manages job placement decisions and remote job execution
+	schedulerImpl := createScheduler(daemonID, peerManager, localRuntimeMgr)
+	if schedulerImpl != nil {
+		jobManager.SetScheduler(schedulerImpl)
+		logging.Log(daemonID).Debug("Scheduler integrated with job manager")
+	}
+
+	// Register scheduler service for peer-to-peer scheduling coordination
+	schedulerPath, schedulerHandler := createSchedulerService(daemonID, schedulerImpl, peerManager, localRuntimeMgr)
+	httpSrv.registerHandler(schedulerPath, schedulerHandler)
+	logging.Log(daemonID).Debug("Scheduler service registered", "path", schedulerPath)
+
+	// Create multicast discoverer with RPC URI
+	// Inject peer manager and local runtime manager for announcement
+	rpcURI := fmt.Sprintf("%s:%d", advertisedHost, config.Port)
+	discoverer := peers.NewMulticastDiscoverer(daemonID, rpcURI, config.MDNSIntervalSecs, peerManager, localRuntimeMgr)
 
 	// Register discovery service (will be initialized after we create the Daemon struct below,
 	// but we create the discoverer object now so it's available in the service handler)
@@ -304,22 +391,29 @@ func NewDaemon(config DaemonConfig) (*Daemon, error) {
 
 	// TODO: Register other services
 	// - Cache service
-	// - Queue/Scheduler service
 
 	d := &Daemon{
-		Logger:     Log(),
-		config:     config,
-		httpServer: httpSrv,
-		discoverer: discoverer,
-		logging:    loggingConfigMgr,
-		runtimes:   runtimeMgr,
-		jobManager: jobManager,
+		Logger:      logging.Log(daemonID),
+		daemonID:    daemonID,
+		config:      config,
+		httpServer:  httpSrv,
+		discoverer:  discoverer,
+		peerManager: peerManager,
+		logging:     loggingConfigMgr,
+		runtimes:    localRuntimeMgr,
+		jobManager:  jobManager,
+		scheduler:   schedulerImpl,
 	}
 
 	// Register discovery service now that we have the daemon instance
-	discoveryPath, discoveryHandler := RegisterDiscoveryService(d)
+	discoveryPath, discoveryHandler := RegisterDiscoveryService(daemonID, d)
 	httpSrv.registerHandler(discoveryPath, discoveryHandler)
-	Log().Debug("Discovery service registered", "path", discoveryPath)
+	logging.Log(daemonID).Debug("Discovery service registered", "path", discoveryPath)
+
+	// Register introspection service for daemon state queries
+	introspectionPath, introspectionHandler := RegisterIntrospectionService(daemonID, d)
+	httpSrv.registerHandler(introspectionPath, introspectionHandler)
+	logging.Log(daemonID).Debug("Introspection service registered", "path", introspectionPath)
 
 	return d, nil
 }
@@ -341,13 +435,34 @@ func (d *Daemon) Start() error {
 		d.Info("runtime discovery complete", "count", len(runtimes), "notes", notes)
 	}
 
-	// Start mDNS discovery if enabled
+	// Get full proto runtime objects for the peer manager
+	protoRuntimes, _, _ := d.runtimes.ListRuntimes(ctx)
+
+	// Parse daemon address to get host and port
+	advertisedHost := getAdvertisedHost(d.config.Host)
+	localPeer := &peers.PeerInfo{
+		ID:       d.daemonID,
+		Host:     advertisedHost,
+		Port:     d.config.Port,
+		Runtimes: protoRuntimes,
+		IsAlive:  true,
+		Endpoint: fmt.Sprintf("%s:%d", advertisedHost, d.config.Port),
+		IsLocal:  true,
+	}
+	d.peerManager.SetLocalPeer(localPeer)
+	d.Info("local peer info set in peer manager", "peer_id", d.daemonID, "runtime_count", len(protoRuntimes))
+
+	// Start UDP multicast discovery if enabled
 	if d.config.EnableMDNS {
-		d.Info("starting mDNS peer discovery")
+		d.Info("starting UDP multicast peer discovery", "interval_secs", d.config.MDNSIntervalSecs)
 		if err := d.discoverer.Start(ctx); err != nil {
-			d.Error("failed to start mDNS discoverer", "error", err)
-			// Don't fail daemon startup if mDNS fails
+			d.Error("failed to start multicast discoverer", "error", err)
+			// Stop the daemon if multicast discovery fails
+			d.Stop(ctx)
+			return d.Errorf("failed to start daemon: multicast discovery failed: %w", err)
 		}
+	} else {
+		d.Info("UDP multicast peer discovery disabled in config")
 	}
 
 	if err := d.httpServer.start(); err != nil {
@@ -405,14 +520,46 @@ func (d *Daemon) RegisterServiceHandler(path string, handler http.Handler) {
 
 // Discoverer returns the mDNS discoverer used by the daemon.
 // This can be used to query discovered peers.
-func (d *Daemon) Discoverer() *discovery.MDNSDiscoverer {
+func (d *Daemon) Discoverer() *peers.MulticastDiscoverer {
 	return d.discoverer
 }
 
 // GetDiscoveredPeers returns all peers discovered via mDNS.
-func (d *Daemon) GetDiscoveredPeers() []*discovery.PeerInfo {
+func (d *Daemon) GetDiscoveredPeers() []*peers.PeerInfo {
 	if d.discoverer == nil {
-		return []*discovery.PeerInfo{}
+		return []*peers.PeerInfo{}
 	}
 	return d.discoverer.GetDiscoveredPeers()
+}
+
+// createScheduler creates a new local scheduler instance
+// Uses a type-switch pattern to avoid direct imports of the scheduler package
+func createScheduler(daemonID string, peerManager *peers.Manager, runtimeManager runtimes.Manager) *scheduler.Scheduler {
+	// Create the scheduler for job placement decisions and remote execution
+	config := &scheduler.SchedulerConfig{
+		Heuristic:      scheduler.NewSimpleLocalFirstHeuristic(),
+		RuntimeManager: runtimeManager,
+		PeerManager:    peerManager,
+		LocalDaemonID:  daemonID,
+	}
+
+	sched, err := scheduler.NewScheduler(config)
+	if err != nil {
+		logging.Log(daemonID).Error("Failed to create scheduler", "error", err)
+		return nil
+	}
+
+	return sched
+}
+
+// createSchedulerService creates and returns the scheduler service handler
+func createSchedulerService(daemonID string, sched *scheduler.Scheduler, peerManager *peers.Manager, runtimeManager runtimes.Manager) (string, http.Handler) {
+	// Placeholder implementation - will be properly implemented when scheduler package is fully integrated
+	// This is to allow the build to succeed before full integration
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, "Scheduler service not yet available")
+	})
+	return "/buildozer.proto.v1.SchedulerService/", mux
 }

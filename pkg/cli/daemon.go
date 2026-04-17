@@ -120,15 +120,13 @@ func (dc *DaemonCommands) Start() error {
 	}
 
 	// Wait for all daemons to start or report errors
-	go wg.Wait()
+	wg.Wait()
+	close(errChan)
 
-	// Check for startup errors (non-blocking)
-	select {
-	case err := <-errChan:
+	// Check for startup errors - exit directly to prevent cobra from printing usage
+	for err := range errChan {
 		dc.Error("Daemon startup error", "error", err)
-		return err
-	default:
-		// All daemons started successfully
+		os.Exit(1)
 	}
 
 	dc.Info("Daemons started successfully", "count", len(dc.daemons))

@@ -1,0 +1,115 @@
+---
+# Buildozer Configuration File
+# This file configures the default behavior of buildozer drivers (gcc, g++, etc.)
+#
+# USAGE:
+#   1. Copy this file to your workspace root as .buildozer (already done)
+#   2. Modify driver settings below to match your preferred defaults
+#   3. The drivers will automatically discover this file when run from the workspace
+#
+# EXAMPLE - Using with gcc driver:
+#   buildozer/bin/gcc --buildozer-runtime native-c-gcc-10.2.1-musl-unknown-x86_64 -c main.c -o main.o
+#
+# NOTE: Until automatic runtime resolution from config is implemented, you must provide
+#       an explicit runtime using --buildozer-runtime flag. The driver settings below
+#       (compiler_version, c_runtime, architecture) will be used to assist in runtime selection
+#       once the feature is fully implemented.
+
+# Standalone mode - set to true to compile locally instead of distributing to peers
+standalone: false
+
+# Daemon configuration (ignored when standalone is true)
+daemon:
+  host: "127.0.0.1"
+  port: 6789
+  max_concurrent_jobs: 4
+  max_ram_mb: 8192
+  enable_mDNS: true
+
+# Cache configuration
+cache:
+  dir: "~/.cache/buildozer"
+  max_size_gb: 100
+  retention_days: 30
+
+# Peer discovery configuration
+peer_discovery:
+  enabled: true
+  mDNS_interval_seconds: 300  # 5 minutes by default
+
+# C/C++ Driver Defaults
+# IMPORTANT: Always specify the FULL versions to ensure reproducible, deterministic builds.
+# - compiler_version: Complete compiler version (e.g., "10.2.1" not "10")
+# - c_runtime: C runtime type (e.g., "glibc" or "musl")
+# - c_runtime_version: C runtime version (e.g., "2.31" for glibc, "1.2.3" for musl)
+# - architecture: Target architecture (e.g., "x86_64", "aarch64", "armv7")
+# - cpp_stdlib: For g++/C++, the C++ standard library ("libstdc++" or "libc++")
+#
+# Example runtime ID that these settings resolve to:
+#   native_linux-c-gcc-10.2.1-glibc-2.31-x86_64
+#   native_linux-cpp-gcc-10.2.1-glibc-2.31-libstdc++-x86_64
+#
+# Note that compiler drivers set compiler and language implicitly.
+#
+drivers:
+  gcc:
+    # GCC compiler with full semantic version
+    compiler_version: "10.2.1"
+    # C runtime: glibc or musl
+    c_runtime: "glibc"
+    # C runtime version (e.g., glibc 2.31, musl 1.2.3)
+    c_runtime_version: "2.31"
+    # Target architecture
+    architecture: "x86_64"
+
+  g++:
+    # G++ compiler with full semantic version (same as gcc)
+    compiler_version: "10.2.1"
+    # C runtime: glibc or musl
+    c_runtime: "glibc"
+    # C runtime version
+    c_runtime_version: "2.31"
+    # C++ standard library
+    cpp_stdlib: "libstdc++"
+    # Target architecture
+    architecture: "x86_64"
+
+  ar:
+    # AR (static library archiver) configuration
+    # NOTE: AR is part of the C/C++ toolchain but is ABI-agnostic and compiler-agnostic.
+    #       It doesn't care which compiler produced the object files, only that they're
+    #       compatible with a specific C runtime and architecture (ABI).
+    #       This makes AR configuration portable: the same config works with any project,
+    #       regardless of which compiler (gcc/clang) that project uses.
+    #
+    # Required fields (ABI compatibility):
+    # - c_runtime: C runtime type ("glibc" or "musl")
+    # - c_runtime_version: C runtime version (e.g., "2.31" for glibc, "1.2.3" for musl)
+    # - architecture: Target architecture (x86_64, aarch64, arm)
+    #
+    # The scheduler will match these requirements against available runtimes and select
+    # any runtime that can produce archives compatible with these ABI requirements.
+    # This allows a single AR config to work across projects using gcc, clang, or any mix.
+    #
+    # Example: This config works with both:
+    #   - Object files compiled with gcc-10.2.1-glibc-2.31
+    #   - Object files compiled with clang-14.0.0-glibc-2.31
+    #   - Mixed: foo.o from gcc, bar.o from clang
+    #
+    c_runtime: "glibc"
+    c_runtime_version: "2.31"
+    architecture: "x86_64"
+
+# Logging configuration (can be overridden by BUILDOZER_* environment variables)
+logging:
+  global_level: "debug"
+  logging_dir: "~/.cache/buildozer/logs"  # Directory for daemon logs and driver rotating log files
+  sinks:
+    - name: "stdout"
+      type: "stdout"
+      level: "info"
+  loggers:
+    - name: "buildozer"
+      level: "debug"
+      sinks:
+        - "stdout"

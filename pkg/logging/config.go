@@ -51,6 +51,10 @@ type SinkConfig struct {
 
 	// Include source location (file:line) in log output (default: false)
 	IncludeSourceLocation bool `json:"include_source_location,omitempty" yaml:"include_source_location,omitempty"`
+
+	// Omit logger name if source location is enabled (default: true)
+	// Only applies when IncludeSourceLocation is true
+	OmitLoggerNameIfSourceEnabled bool `json:"omit_logger_name_if_source_enabled,omitempty" yaml:"omit_logger_name_if_source_enabled,omitempty"`
 }
 
 // LoggerConfig holds configuration for a single logger
@@ -69,22 +73,25 @@ type LoggingConfig struct {
 }
 
 // DefaultLoggingConfig returns the default logging configuration for CLI client
-// It includes only stdout sink for interactive CLI usage and sets default logging directory
+// The buildozer logger captures all messages at debug level.
+// The stdout sink filters based on CLI flag, while file sink is always debug.
 func DefaultLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		GlobalLevel: "debug",
 		LoggingDir:  "~/.cache/buildozer/logs", // Default to user cache directory
 		Sinks: []SinkConfig{
 			{
-				Name:  "stdout",
-				Type:  "stdout",
-				Level: "debug",
+				Name:                          "stdout",
+				Type:                          "stdout",
+				Level:                         "warn", // Default to warn, changed by CLI flag
+				IncludeSourceLocation:         true,   // Include source location by default
+				OmitLoggerNameIfSourceEnabled: true,   // Omit logger name by default when source is enabled
 			},
 		},
 		Loggers: []LoggerConfig{
 			{
 				Name:  "buildozer",
-				Level: "debug",
+				Level: "debug", // Logger captures all debug messages
 				Sinks: []string{"stdout"},
 			},
 		},
@@ -153,10 +160,10 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 
 	switch config.Type {
 	case "stdout":
-		handler = sinks.StdoutSink(handlerOpts)
+		handler = sinks.StdoutSinkWithOmitLogger(handlerOpts, config.OmitLoggerNameIfSourceEnabled)
 
 	case "stderr":
-		handler = sinks.StderrSink(handlerOpts)
+		handler = sinks.StderrSinkWithOmitLogger(handlerOpts, config.OmitLoggerNameIfSourceEnabled)
 
 	case "file":
 		if config.Filename == "" {
@@ -167,13 +174,14 @@ func (f *Factory) CreateSink(config SinkConfig) (*Sink, error) {
 		fullPath := filepath.Join(f.registry.loggingDir, config.Filename)
 
 		handler, err = sinks.FileSink(sinks.FileSinkConfig{
-			Path:                  fullPath,
-			MaxSizeB:              config.MaxSizeB,
-			MaxFiles:              config.MaxFiles,
-			MaxAgeDays:            config.MaxAgeDays,
-			JSONFormat:            config.JSONFormat,
-			IncludeSourceLocation: config.IncludeSourceLocation,
-			HandlerOpts:           handlerOpts,
+			Path:                          fullPath,
+			MaxSizeB:                      config.MaxSizeB,
+			MaxFiles:                      config.MaxFiles,
+			MaxAgeDays:                    config.MaxAgeDays,
+			JSONFormat:                    config.JSONFormat,
+			IncludeSourceLocation:         config.IncludeSourceLocation,
+			OmitLoggerNameIfSourceEnabled: config.OmitLoggerNameIfSourceEnabled,
+			HandlerOpts:                   handlerOpts,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create file sink %q: %w", config.Name, err)
